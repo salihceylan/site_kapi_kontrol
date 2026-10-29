@@ -17,7 +17,6 @@ import {
   parsePatchInput,
   parseResidentQuery,
   parseVersionQuery,
-  quotaExceeded,
   resolveTarget,
   tooLarge,
   usageBody,
@@ -40,7 +39,6 @@ describe('sınırlar (ortam değişkenleri)', () => {
   it('varsayılanlar sözleşmedeki gibi: 10 MiB, 200 MiB, 2 GiB boş alan, 2000 belge, Office açık, 30 gün, 8 eşzamanlı yükleme, 14 gün yetim karantinası', () => {
     assert.deepEqual(limits, {
       maxFileBytes: 10485760,
-      siteQuotaBytes: 209715200,
       minFreeBytes: 2147483648,
       maxPerSite: 2000,
       allowOffice: true,
@@ -67,7 +65,7 @@ describe('sınırlar (ortam değişkenleri)', () => {
     });
     assert.equal(custom.orphanQuarantineDays, 30);
     assert.equal(custom.maxFileBytes, 5242880);
-    assert.equal(custom.siteQuotaBytes, 104857600);
+    assert.equal(custom.siteQuotaBytes, undefined, 'sunucu depolama kotası kalktı (yalnız-Drive)');
     assert.equal(custom.minFreeBytes, 0);
     assert.equal(custom.maxPerSite, 50);
     assert.equal(custom.retentionDays, 7);
@@ -148,11 +146,7 @@ describe('hata kodları (sözleşme A9)', () => {
     assert.equal(large.statusCode, 413);
     assert.match(large.message, /En fazla 10 MB yükleyebilirsiniz/);
     assert.equal(large.extra.max_bytes, 10485760);
-    const quota = quotaExceeded(199 * 1048576, 200 * 1048576);
-    assert.equal(quota.code, 'DOCUMENT_QUOTA_EXCEEDED');
-    assert.match(quota.message, /199 MB \/ 200 MB/);
-    assert.match(quota.message, /kalıcı olarak silin/);
-    assert.deepEqual(quota.extra, { used_bytes: 199 * 1048576, quota_bytes: 200 * 1048576 });
+    assert.equal(common.quotaExceeded, undefined, 'belge kota hatası kalktı (yalnız-Drive)');
     assert.equal(common.documentLimitReached(2000).extra.document_limit, 2000);
     assert.equal(common.documentInUse(3).extra.attachments_count, 3);
   });
@@ -274,7 +268,7 @@ describe('yanıt eşleyicileri', () => {
   it('DocumentSummary alanları sözleşmedeki gibi; kurul yanıtında uploaded_by_name ANAHTARI da yoktur', () => {
     const manager = mapSummaryRow(row);
     assert.deepEqual(Object.keys(manager), ['id', 'title', 'category', 'audience', 'target_type', 'target_labels', 'status', 'version_count', 'download_count', 'current_version', 'created_at', 'updated_at', 'deleted_at', 'days_until_purge', 'uploaded_by_name']);
-    assert.deepEqual(manager.current_version, { version_no: 2, file_name: 'tutanak.pdf', mime_type: 'application/pdf', size_bytes: 2048, completed_at: '2026-10-17T10:30:00.000Z' });
+    assert.deepEqual(manager.current_version, { version_no: 2, file_name: 'tutanak.pdf', mime_type: 'application/pdf', size_bytes: 2048, completed_at: '2026-10-17T10:30:00.000Z', storage: 'server' });
     assert.equal(manager.download_count, 7);
     const board = mapSummaryRow(row, { canSeeUploader: false });
     assert.ok(!('uploaded_by_name' in board));
@@ -283,14 +277,17 @@ describe('yanıt eşleyicileri', () => {
 
   it('sakin satırı: is_updated (v > 1), updated_at = güncel sürümün tamamlanma zamanı; ayrıntıda description', () => {
     const resident = mapResidentRow({ ...row, site_code: '1000000001', site_name: 'Gül', description: 'açıklama' }, { withDescription: true });
-    assert.deepEqual(Object.keys(resident), ['id', 'site_code', 'site_name', 'title', 'category', 'description', 'file_name', 'mime_type', 'size_bytes', 'version_no', 'is_updated', 'updated_at']);
+    assert.deepEqual(Object.keys(resident), ['id', 'site_code', 'site_name', 'title', 'category', 'description', 'file_name', 'mime_type', 'size_bytes', 'storage', 'version_no', 'is_updated', 'updated_at']);
     assert.equal(resident.is_updated, true);
     assert.equal(resident.updated_at, '2026-10-17T10:30:00.000Z');
     assert.equal(mapResidentRow({ ...row, cv_version_no: 1, site_code: 1, description: null }).is_updated, false);
   });
 
   it('usage gövdesi kota / sayı sınırlarını verilen limitlerden alır', () => {
-    assert.deepEqual(usageBody({ used_bytes: '1048576', document_count: 3 }, limits), { used_bytes: 1048576, quota_bytes: 209715200, document_count: 3, document_limit: 2000 });
-    assert.deepEqual(usageBody(undefined, limits), { used_bytes: 0, quota_bytes: 209715200, document_count: 0, document_limit: 2000 });
+    assert.deepEqual(usageBody({ document_count: 3 }, limits), { document_count: 3, document_limit: 2000 });
+    assert.deepEqual(usageBody(undefined, limits), { document_count: 0, document_limit: 2000 });
+    assert.equal(common.storageState('t', 'stored'), 'drive');
+    assert.equal(common.storageState(true, 'pending'), 'server');
+    assert.equal(common.storageState(false, 'pending'), 'transferring');
   });
 });

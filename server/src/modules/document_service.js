@@ -26,7 +26,6 @@ import {
   parsePatchInput,
   parseVersionInput,
   pendingLimitReached,
-  quotaExceeded,
   siteNotFound,
   uploadAlreadyCompleted,
   uploadExpired,
@@ -171,6 +170,7 @@ const summarySelect = (daysParam, extra = '') => `
     END AS days_until_purge,
     cv.version_no AS cv_version_no, cv.display_name AS cv_display_name, cv.mime_type AS cv_mime_type,
     cv.size_bytes AS cv_size_bytes, cv.completed_at AS cv_completed_at,
+    cv.server_copy AS cv_server_copy, df.status AS cv_drive_status,
     CASE d.target_type
       WHEN 'blocks' THEN ARRAY(SELECT b.block_name::TEXT FROM site_blocks b WHERE b.site_code = d.site_code AND b.id = ANY(d.target_block_ids) ORDER BY b.sort_order, b.id)
       WHEN 'apartments' THEN ARRAY(
@@ -182,19 +182,14 @@ const summarySelect = (daysParam, extra = '') => `
     u.full_name AS uploaded_by_name${extra}
   FROM documents d
   LEFT JOIN document_versions cv ON cv.document_id = d.id AND cv.version_no = d.current_version_no AND cv.status = 'ready'
+  LEFT JOIN drive_files df ON df.id = cv.drive_file_id AND df.site_code = d.site_code
   LEFT JOIN users u ON u.user_code = cv.uploaded_by
 `;
 
-async function readUsage(db, siteCode, excludeVersionId = null) {
-  const result = await db.query(
-    `
-      SELECT
-        (SELECT COALESCE(SUM(size_bytes), 0)::BIGINT FROM document_versions WHERE site_code = $1 AND ($2::BIGINT IS NULL OR id <> $2::BIGINT)) AS used_bytes,
-        (SELECT COUNT(*)::INTEGER FROM documents WHERE site_code = $1) AS document_count
-    `,
-    [siteCode, excludeVersionId],
-  );
-  return result.rows?.[0] ?? { used_bytes: 0, document_count: 0 };
+// Depolama kotası YOK (dosyalar sitenin Drive'ındadır): yalnız belge sayısı okunur.
+async function readUsage(db, siteCode) {
+  const result = await db.query(`SELECT (SELECT COUNT(*)::INTEGER FROM documents WHERE site_code = $1) AS document_count`, [siteCode]);
+  return result.rows?.[0] ?? { document_count: 0 };
 }
 
 /** Tek belge özeti (yok / başka sitenin kaydı -> null). */
@@ -403,14 +398,11 @@ const versionBody = (row) => ({
   status: row.status,
 });
 
-/** Kota + sayı + bekleyen sınırı (aynı advisory kilidi altında çağrılır). */
-async function assertCapacity(client, { siteCode, userCode, size, limits, excludeVersionId = null, newDocument = false }) {
-  const usage = await readUsage(client, siteCode, excludeVersionId);
+/** Belge sayısı + bekleyen sınırı (aynı advisory kilidi altında çağrılır). Depolama kotası yok: dosyalar sitenin Drive'ındadır. */
+async function assertCapacity(client, { siteCode, userCode, limits, excludeVersionId = null, newDocument = false }) {
+  const usage = await readUsage(client, siteCode);
   if (newDocument && Number(usage.document_count) >= limits.maxPerSite) {
     throw documentLimitReached(limits.maxPerSite);
-  }
-  if (Number(usage.used_bytes) + size > limits.siteQuotaBytes) {
-    throw quotaExceeded(usage.used_bytes, limits.siteQuotaBytes);
   }
   const pending = await client.query(
     `
@@ -475,9 +467,9 @@ export async function createDocument({ siteCode, actor, body, limits }) {
       `
         INSERT INTO document_versions (
           document_id, site_code, version_no, status, storage_key, display_name, mime_type,
-          declared_size_bytes, size_bytes, note, uploaded_by
+          declared_size_bytes, size_bytes, note, uploaded_by, server_copy
         )
-        VALUES ($1, $2, 1, 'uploading', $3, $4, $5, $6, $6, $7, $8)
+        VALUES ($1, $2, 1, 'uploading', $3, $4, $5, $6, $6, $7, $8, FALSE)
       `,
       [id, siteCode, newStorageKey(siteCode), declared.displayName, declared.mimeType, input.file.size, input.note, userCode],
     );
@@ -553,7 +545,7 @@ export async function addVersion({ siteCode, rawId, actor, body, limits }) {
         `
           UPDATE document_versions
           SET storage_key = $2, display_name = $3, mime_type = $4, declared_size_bytes = $5, size_bytes = $5, note = $6,
-              uploaded_by = $7, created_at = NOW()
+              uploaded_by = $7, created_at = NOW(), server_copy = FALSE, drive_file_id = NULL
           WHERE id = $1
         `,
         [replacing.id, key, declared.displayName, declared.mimeType, input.file.size, input.note, userCode],
@@ -569,9 +561,9 @@ export async function addVersion({ siteCode, rawId, actor, body, limits }) {
         `
           INSERT INTO document_versions (
             document_id, site_code, version_no, status, storage_key, display_name, mime_type,
-            declared_size_bytes, size_bytes, note, uploaded_by
+            declared_size_bytes, size_bytes, note, uploaded_by, server_copy
           )
-          VALUES ($1, $2, $3, 'uploading', $4, $5, $6, $7, $7, $8, $9)
+          VALUES ($1, $2, $3, 'uploading', $4, $5, $6, $7, $7, $8, $9, FALSE)
         `,
         [id, siteCode, versionNo, key, declared.displayName, declared.mimeType, input.file.size, input.note, userCode],
       );
@@ -651,7 +643,7 @@ export async function findUploadTarget({ siteCode, rawId, rawVersionNo, actor, l
  * Sürüm satırı artık yoksa (yenilendi / bakım süpürdü) ya da belge silindiyse hata fırlatır: çağıran son dosyayı siler.
  * @returns {Promise<{ document: object, warnings: object[] }>}
  */
-export async function completeUpload({ siteCode, target, actor, size, sha256, kind, limits }) {
+export async function completeUpload({ siteCode, target, actor, size, sha256, kind, limits, driveFileId = null }) {
   const info = KIND_INFO[kind];
   const completed = await withDocumentTransaction(siteCode, async (client) => {
     await lockActiveUser(client, actor);
@@ -687,10 +679,10 @@ export async function completeUpload({ siteCode, target, actor, size, sha256, ki
     await client.query(
       `
         UPDATE document_versions
-        SET status = 'ready', size_bytes = $2, sha256 = $3, mime_type = $4, display_name = $5, completed_at = NOW()
+        SET status = 'ready', size_bytes = $2, sha256 = $3, mime_type = $4, display_name = $5, completed_at = NOW(), drive_file_id = $6::BIGINT
         WHERE id = $1
       `,
-      [vrow.id, size, sha256, info.mime, baseName],
+      [vrow.id, size, sha256, info.mime, baseName, driveFileId],
     );
     const first = row.status === 'pending';
     await client.query(
@@ -1024,9 +1016,11 @@ export async function resolveManagerDownload({ siteCode, rawId, versionNo, kind 
   const found = await db.query(
     `
       SELECT d.id, d.status, d.audience, d.current_version_no,
-             v.id AS version_id, v.version_no, v.storage_key, v.size_bytes, v.display_name, v.mime_type
+             v.id AS version_id, v.version_no, v.storage_key, v.size_bytes, v.display_name, v.mime_type,
+             v.server_copy, v.drive_file_id, df.status AS drive_status
       FROM documents d
       INNER JOIN document_versions v ON v.document_id = d.id AND v.status = 'ready' AND v.version_no = COALESCE($3::INTEGER, d.current_version_no)
+      LEFT JOIN drive_files df ON df.id = v.drive_file_id AND df.site_code = d.site_code
       WHERE d.id = $1 AND d.site_code = $2 AND d.status <> 'pending'
       LIMIT 1
     `,
@@ -1042,6 +1036,10 @@ export async function resolveManagerDownload({ siteCode, rawId, versionNo, kind 
     }
   }
   return {
+    siteCode: Number(siteCode),
+    serverCopy: row.server_copy !== false,
+    driveFileId: row.drive_file_id === null || row.drive_file_id === undefined ? null : Number(row.drive_file_id),
+    driveStatus: row.drive_status ?? null,
     documentId: id,
     versionId: Number(row.version_id),
     versionNo: Number(row.version_no),

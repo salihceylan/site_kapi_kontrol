@@ -55,7 +55,7 @@ function intEnv(env, name, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } 
 
 /**
  * Ortam değişkenleriyle ayarlanabilir sınırlar (geçersiz değer varsayılana döner; uyarı yalnız ad ile, değer yazılmaz).
- *  DOCUMENTS_MAX_FILE_BYTES (10 MiB; 25 MiB üstü YOK SAYILIR), DOCUMENTS_SITE_QUOTA_BYTES (200 MiB), DOCUMENTS_MIN_FREE_BYTES (2 GiB),
+ *  DOCUMENTS_MAX_FILE_BYTES (10 MiB; 25 MiB üstü YOK SAYILIR; Drive aktarımı 10 MiB ile sınırlıdır, varsayılanı aşmayın), DOCUMENTS_MIN_FREE_BYTES (2 GiB; yalnız aktarım TAMPONU için boş disk eşiği),
  *  DOCUMENTS_MAX_PER_SITE (2000), DOCUMENTS_ALLOW_OFFICE (1), DOCUMENTS_RETENTION_DAYS (30), DOCUMENTS_UPLOAD_CONCURRENCY (8),
  *  DOCUMENTS_ORPHAN_QUARANTINE_DAYS (14; yetim dosyalar silinmeden önce bu kadar gün karantinada bekler).
  */
@@ -63,7 +63,6 @@ export function documentLimits(env = process.env) {
   const officeRaw = String(env?.DOCUMENTS_ALLOW_OFFICE ?? '').trim().toLowerCase();
   return {
     maxFileBytes: intEnv(env, 'DOCUMENTS_MAX_FILE_BYTES', 10485760, { min: 1024, max: MAX_FILE_BYTES_CEILING }),
-    siteQuotaBytes: intEnv(env, 'DOCUMENTS_SITE_QUOTA_BYTES', 209715200, { min: 1048576 }),
     minFreeBytes: intEnv(env, 'DOCUMENTS_MIN_FREE_BYTES', 2147483648, { min: 0 }),
     maxPerSite: intEnv(env, 'DOCUMENTS_MAX_PER_SITE', 2000, { min: 1 }),
     allowOffice: !['0', 'false', 'no', 'off'].includes(officeRaw),
@@ -117,13 +116,6 @@ export const activeContent = (reason = 'script') =>
   new PlatformError(415, 'DOCUMENT_ACTIVE_CONTENT', ACTIVE_CONTENT_MESSAGES[reason] ?? ACTIVE_CONTENT_MESSAGES.script, { reason });
 export const invalidContentType = () =>
   new PlatformError(415, 'INVALID_CONTENT_TYPE', 'İçerik türü application/octet-stream olmalıdır.');
-export const quotaExceeded = (used, quota) =>
-  new PlatformError(
-    409,
-    'DOCUMENT_QUOTA_EXCEEDED',
-    `Site belge alanı doldu (${formatMb(used)} MB / ${formatMb(quota)} MB). Eski belgeleri kalıcı olarak silin.`,
-    { used_bytes: Number(used), quota_bytes: Number(quota) },
-  );
 export const documentLimitReached = (limit) =>
   new PlatformError(409, 'DOCUMENT_LIMIT', `Bir sitede en fazla ${limit} belge tutulabilir. Eski belgeleri kalıcı olarak silin.`, {
     document_limit: Number(limit),
@@ -467,6 +459,7 @@ export function mapSummaryRow(row, { canSeeUploader = true } = {}) {
             mime_type: row.cv_mime_type,
             size_bytes: Number(row.cv_size_bytes ?? 0),
             completed_at: toIso(row.cv_completed_at),
+            storage: storageState(row.cv_server_copy, row.cv_drive_status),
           },
     created_at: toIso(row.created_at),
     updated_at: toIso(row.updated_at),
@@ -494,16 +487,22 @@ export function mapResidentRow(row, { withDescription = false } = {}) {
   item.file_name = row.cv_display_name;
   item.mime_type = row.cv_mime_type;
   item.size_bytes = Number(row.cv_size_bytes ?? 0);
+  item.storage = storageState(row.cv_server_copy, row.cv_drive_status);
   item.version_no = Number(row.cv_version_no);
   item.is_updated = Number(row.cv_version_no) > 1;
   item.updated_at = toIso(row.cv_completed_at ?? row.updated_at);
   return item;
 }
 
+/** Sürüm saklama durumu: Drive kaydı teyitliyse 'drive'; yoksa sunucuda kopya varsa 'server' (eski belge, okunur); aksi 'transferring' (aktarılıyor, açılamaz). */
+export function storageState(serverCopy, driveStatus) {
+  if (driveStatus === 'stored') return 'drive';
+  return serverCopy === false ? 'transferring' : 'server';
+}
+
+/** Liste yanıtının `usage` gövdesi: kullanıcıya depolama kotası GÖSTERİLMEZ (dosyalar sitenin Drive'ındadır); yalnız belge sayısı ve üst sınırı. */
 export function usageBody(row, limits) {
   return {
-    used_bytes: Number(row?.used_bytes ?? 0),
-    quota_bytes: limits.siteQuotaBytes,
     document_count: Number(row?.document_count ?? 0),
     document_limit: limits.maxPerSite,
   };

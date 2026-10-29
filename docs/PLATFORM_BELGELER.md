@@ -6,6 +6,14 @@
 > savunma amaçlı kod yolunu anlatır ve fiilen tetiklenmez. Tablo adları (`documents`, `document_versions`, `announcement_attachments`), uç yolları, kurallar ve davranış DEĞİŞMEDİ;
 > ayrıntı: `docs/PLATFORM_MODUL_SISTEMI.md` ("Belgeler ayrı modül DEĞİLDİR"). Yeni kod/menü adı: "Dosya Deposu".
 
+> **2026-10-29 DEĞİŞİKLİK (migration 116): YALNIZ-DRIVE modeli.** Belge dosyaları sitenin Google Drive'ında saklanır; bu belgedeki "sunucu diskinde kalıcı depo", "site kotası (`DOCUMENTS_SITE_QUOTA_BYTES`,
+> 200 MB)" ve `DOCUMENT_QUOTA_EXCEEDED` anlatımları (Bölüm A) belgeler için GEÇERSİZDİR (gider belgesi eki ayrı boru hattıdır, değişmedi). Drive bağlı olmayan siteye yükleme 409 `DRIVE_REQUIRED`
+> ("Dosya yüklemek için önce Google Drive'ı bağlayın"). Sunucu diski yalnız anlık aktarım tamponudur: PUT gövdesi `_tmp`'ye alınır, doğrulanır, `driveService.upload` ile SHA-256 doğrulamalı Drive'a verilir
+> (kuyruklu), geçici dosya Drive kabulünden sonra silinir. `document_versions.drive_file_id` (drive_files.id) + `server_copy` (eski sürümler TRUE: dosya hâlâ sunucuda ve okunur). İndirme: `server_copy`
+> ise diskten; değilse ve Drive kaydı `stored` ise sunucu üzerinden Drive'dan akıtılır (yetki aynı, paylaşım bağlantısı YOK); aktarılıyorsa 409 `DOCUMENT_TRANSFERRING`. Liste/ayrıntıda
+> `current_version.storage` (`drive` | `server` | `transferring`); `usage` yalnız belge sayısı/sınırı taşır. Drive'a kalıcı silinen belgenin kopyası SİLİNMEZ (K6). AÇIK İŞ: eski sunucu belgelerinin
+> Drive bağlanınca kuyrukla otomatik taşınması ve teyit sonrası sunucu kopyasının silinmesi bu sürümde YOK.
+
 Bu belge sunucu (`server/`), uygulama (`lib/`, `android/`, `ios/`) ve operasyon (`deploy/`) için BAĞLAYICIDIR. Öncül belgeler: `docs/PLATFORM_MODUL_SISTEMI.md` (modül kataloğu, `MODULE_DISABLED`, hata biçimi), `docs/PLATFORM_DUYURU.md` (hedefleme, alıcı anlık görüntüsü, e-posta kuyruğu, tercihler, **"Faz 3a inceleme kararları 1–26"**), `docs/PLATFORM_KISILER.md` (kişi/daire/ilişki, kilit sırası), `docs/PLATFORM_FINANS.md` (modül kapısı kalıbı), `docs/PLATFORM_SATISA_HAZIRLIK.md` (**§0 ortak kurallar**, §1.4 yasal belge/rıza, §1.5 veri dışa aktarma, §1.6 hesap silme). Kalıplar (yetki yardımcıları, `PlatformError`, audit, hız sınırı, strict-mock testler, gerçek-PG betiği, iki bağımsız inceleme turu) aynen örnek alınır. Tarih: 2026-10-16.
 
 | Bölüm | Konu | Durum |
