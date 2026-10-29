@@ -93,8 +93,51 @@ VARSAYILAN: dict = {
         "sablon_min_ornek": 3,
         "siniflar": SINIFLAR,
         "karakter_boyut": 28,
+        "alternatif_k": 3,  # her karakter icin konsensusa verilen en iyi aday sayisi (yalniz onnx)
     },
     "plaka": {"regex": TR_PLAKA_REGEX, "min_guven": 0.6, "duzeltme": True},
+    # Okuma hassasiyeti paketi. Kamera satirinda "profil" (gunduz|gece|oto) ve "roi" ([x, y, w, h] oran 0-1) ezer.
+    "on_isleme": {
+        "etkin": True,
+        "profil": "oto",  # gunduz | gece | oto (kare parlakligindan secer)
+        "gece_parlaklik_esik": 70,  # oto: kirpilan karenin ortalama gri degeri bunun altindaysa gece
+        "tespit_oncesi": "gece",  # hep | gece | yok: tespitten once kareye CLAHE+golge dengeleme
+        "otsu_min_ayrim": 0.55,  # Otsu sinif ayrim orani (0-1) bunun altindaysa adaptif esige dus
+        "profiller": {
+            "gunduz": {"clahe_clip": 2.0, "clahe_kare": 8, "golge_denge": True, "golge_cekirdek_oran": 0.9,
+                       "gamma": 1.0, "yuzdelik_kirp": [0.0, 100.0], "adaptif_blok": 31, "adaptif_c": 8},
+            "gece": {"clahe_clip": 3.5, "clahe_kare": 6, "golge_denge": True, "golge_cekirdek_oran": 0.9,
+                     "gamma": 0.85, "yuzdelik_kirp": [1.0, 99.0], "adaptif_blok": 25, "adaptif_c": 6},
+        },
+    },
+    # Cok-kare konsensus: plaka KARAKTER bazinda oylanir; tek kare yanlislari elenir.
+    "konsensus": {
+        "etkin": True,
+        "kare_pencere": 5,  # oylamaya girecek son kare sayisi (3-5)
+        "kare_min": 3,  # en az bu kadar ayni uzunlukta okuma yoksa sonuc yok (tetik_kare_sayisi >= kare_min olmali)
+        "pencere_sn": 4.0,  # bundan eski okumalar oya girmez
+        "gozlem_min_guven": 0.35,  # kare okumasi bunun altindaysa oya katilmaz
+        "pozisyon_min_oy": 0.5,  # her pozisyonda kazanan karakterin oy orani bunun altindaysa 'dogrulanmamis'
+        "guven_esik": 0.8,  # birlesik guven bunun altindaysa okuma 'dogrulanmamis' (kapi acilmaz)
+    },
+    # Akilli puanlama: yapi (il + 1-3 harf + 2-4 rakam), il kodu, konuma gore karisiklik duzeltme.
+    "puanlama": {
+        "format_puan": 50.0,
+        "il_puan": 20.0,
+        "yerel_il_kodlari": [],  # ornek ["34"]: sitenin ili; esit puanda tercih edilir
+        "yerel_il_bonus": 3.0,
+        "karakter_agirlik": 30.0,  # ortalama karakter skoru (0-1) x agirlik
+        "duzeltme_ceza": 4.0,  # her karisiklik duzeltmesi icin dusulen puan
+        "karisiklik_carpani": 0.85,  # duzeltilen karakterin skoruna uygulanir
+        "duzeltme_guven_carpani": 0.92,  # her duzeltme icin birlesik guvene
+        "il_alternatif": 3,  # il rakamlari icin denenen aday sayisi
+        "rakama": {"O": "0", "Q": "0", "D": "0", "I": "1", "L": "1", "B": "8", "S": "5", "Z": "2", "G": "6"},
+        "harfe": {"0": "O", "1": "I", "8": "B", "5": "S", "2": "Z", "6": "G"},
+    },
+    # Canli izleme sekmesi
+    # Agda kamera kesfi (ONVIF WS-Discovery) - ayar penceresi 'Agda kamera ara'
+    "kesif": {"sure_sn": 3.5, "zaman_asimi_sn": 4.0, "rtsp_port": 554},
+    "izleme": {"fps": 6, "rozet_sn": 4.0, "kare_genislik": 640, "fps_ema": 0.3, "min_roi": 0.05},
     "dogrulama": {"teyit_kare": 2, "teyit_pencere_sn": 4.0, "tekillestirme_sn": 5.0},
     "karar": {
         # tum_yerler_bos | en_az_bir_yer_bos  (plan 5, soru 3)
@@ -173,6 +216,14 @@ def _tam_sayi(v) -> bool:
         return False
 
 
+def _roi_gecerli(r) -> bool:
+    try:
+        x, y, w, h = (float(v) for v in r)
+    except (TypeError, ValueError):
+        return False
+    return 0 <= x < 1 and 0 <= y < 1 and w > 0 and h > 0 and x + w <= 1.0001 and y + h <= 1.0001
+
+
 def dogrula(ayar: dict) -> list[str]:
     """Insan-okur uyarilar dondurur (bos liste = sorun yok)."""
     u: list[str] = []
@@ -189,6 +240,11 @@ def dogrula(ayar: dict) -> list[str]:
             u.append(f"Kamera {kid}: kapi_id '{k['kapi_id']}' tanimli degil")
         if k.get("mod", "akis") not in ("akis", "tetik"):
             u.append(f"Kamera {kid}: mod 'akis' veya 'tetik' olmali")
+        if k.get("profil", "oto") not in ("gunduz", "gece", "oto"):
+            u.append(f"Kamera {kid}: profil 'gunduz', 'gece' veya 'oto' olmali")
+        r = k.get("roi")
+        if r is not None and not _roi_gecerli(r):
+            u.append(f"Kamera {kid}: roi [x, y, w, h] 0-1 oran olmali (x+w<=1, y+h<=1)")
     s = ayar.get("sunucu", {})
     if s.get("etkin") and not (s.get("adres") and s.get("cihaz_anahtari")):
         u.append("Sunucu etkin ama adres/cihaz_anahtari eksik")

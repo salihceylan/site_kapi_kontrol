@@ -28,6 +28,7 @@ class TanimaSonucu:
     guvenler: list = field(default_factory=list)
     dogrulanmis: bool = False
     kaynak: str = ""
+    alternatifler: list = field(default_factory=list)  # pozisyon basina {karakter: olasilik} (konsensus icin; bos olabilir)
 
     @property
     def guven(self) -> float:
@@ -37,9 +38,10 @@ class TanimaSonucu:
 class Segmentleyici:
     """Perspektifi duzeltilmis gri plaka -> sirali karakter goruntuleri (egitimle AYNI normalizasyon)."""
 
-    def __init__(self, p: dict, boyut: int = 28):
+    def __init__(self, p: dict, boyut: int = 28, onisleyici=None):
         self.p = p
         self.boyut = int(boyut)
+        self.on = onisleyici  # None: eski davranis (3x3 bulanik + Otsu); verilirse CLAHE/golge/adaptif esik
 
     def normalize(self, ikili: np.ndarray, kutu: tuple) -> np.ndarray:
         x, y, w, h = kutu
@@ -49,16 +51,19 @@ class Segmentleyici:
         tuval[(kenar - h) // 2:(kenar - h) // 2 + h, (kenar - w) // 2:(kenar - w) // 2 + w] = parca
         return cv2.resize(tuval, (self.boyut, self.boyut), interpolation=cv2.INTER_AREA)
 
-    def bol(self, plaka: np.ndarray) -> list:
+    def bol(self, plaka: np.ndarray, profil: str | None = None) -> list:
         p = self.p
         H, W = plaka.shape[:2]
         sol = int(W * p["sol_kirp_oran"])
         kenar = int(H * p["kenar_kirp_oran"])
         govde = plaka[kenar:H - kenar, sol:W]
-        govde = cv2.GaussianBlur(govde, (3, 3), 0)
-        _, ikili = cv2.threshold(govde, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-        if np.count_nonzero(ikili) > ikili.size * 0.5:  # karakter her zaman azinlik
-            ikili = 255 - ikili
+        if self.on is not None and self.on.etkin:
+            ikili = self.on.ikili(govde, self.on.profil_coz(profil, govde))
+        else:
+            govde = cv2.GaussianBlur(govde, (3, 3), 0)
+            _, ikili = cv2.threshold(govde, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+            if np.count_nonzero(ikili) > ikili.size * 0.5:  # karakter her zaman azinlik
+                ikili = 255 - ikili
         n, _, ist, _ = cv2.connectedComponentsWithStats(ikili, connectivity=8)
         gh = govde.shape[0]
         kutular = []
@@ -140,7 +145,8 @@ class OnnxTanima(Tanima):
         import onnxruntime as ort  # gec yukleme: modelsiz kurulumda gerekmez
         self.siniflar = p["siniflar"]
         self.boyut = int(p["karakter_boyut"])
-        self.oturum = ort.InferenceSession(str(model), providers=["CPUExecutionProvider"])
+        self.alternatif_k = int(p.get("alternatif_k", 3))
+        self.oturum =ort.InferenceSession(str(model), providers=["CPUExecutionProvider"])
         girdi = self.oturum.get_inputs()[0]
         self.girdi_adi = girdi.name
         self.nhwc = len(girdi.shape) == 4 and girdi.shape[-1] == 1
@@ -160,8 +166,13 @@ class OnnxTanima(Tanima):
         e = np.exp(cikis - cikis.max(axis=1, keepdims=True))
         olasilik = e / e.sum(axis=1, keepdims=True)
         idx = olasilik.argmax(axis=1)
+        k = max(1, int(self.alternatif_k))
+        alt = []
+        for r in range(olasilik.shape[0]):
+            sirali = np.argsort(-olasilik[r])[:k]
+            alt.append({self.siniflar[int(j)]: float(olasilik[r, j]) for j in sirali if olasilik[r, j] >= 0.02})
         return TanimaSonucu("".join(self.siniflar[i] for i in idx),
-                            [float(olasilik[r, i]) for r, i in enumerate(idx)], self.dogrulanmis, self.ad)
+                            [float(olasilik[r, i]) for r, i in enumerate(idx)], self.dogrulanmis, self.ad, alt)
 
 
 class KalibrasyonSarmalayici(Tanima):

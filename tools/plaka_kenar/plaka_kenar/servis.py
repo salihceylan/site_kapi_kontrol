@@ -55,6 +55,7 @@ class Servis:
         self.dinleyiciler: list = []
         self.kam_durum: dict = {}  # id -> {durum, son_kare, son_okuma}
         self.kapi_durum: dict = {}
+        self.son_kare: dict = {}  # id -> (kare, zaman)
         self._akislar: list = []
         self._dur = threading.Event()
         self._kayitli = False
@@ -80,6 +81,7 @@ class Servis:
     def kare_isle(self, kam: dict, kare, t: float) -> None:
         d = self.kam_durum.setdefault(kam["id"], {"durum": "bagli", "son_kare": 0, "son_okuma": 0})
         d["son_kare"] = t
+        self.son_kare[kam["id"]] = (kare, t)  # canli izleme sekmesi (yalniz en son kare, diske yazilmaz)
         for okuma in self.boru.isle(kam, kare, t):
             d["son_okuma"] = t
             self.okuma_isle(okuma, kam, kare)
