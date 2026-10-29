@@ -14,8 +14,9 @@ import 'package:site_kapi_kontrol/ui/views/document_admin_list.dart';
 import 'package:site_kapi_kontrol/ui/widgets/drive_storage_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
-/// Yönetici "Dosya Deposu" ekranının gövdesi (Platform Faz 3b-A + D1, tek modül `drive_storage`): site seçici + Belgeler listesi
-/// ([DocumentAdminList]) + (yazma yetkisi varsa) sitenin Google Drive bağlantısı ([DriveStorageCard]).
+/// Yönetici "Dosya Deposu" ekranının gövdesi (Platform Faz 3b-A + D1, tek modül `drive_storage`): site seçici + (yazma
+/// yetkisi varsa) sitenin Google Drive bağlantısı ([DriveStorageCard], ÜSTTE) + Belgeler listesi ([DocumentAdminList];
+/// sunucu depolama kotası çubuğu Drive kartının ALTINDA).
 ///
 /// - [manageAllSites] true (süper kullanıcı): tüm onaylı siteler listelenir ve yazma yetkisi vardır.
 /// - [sites]: açıkça verilen siteler (`GET /app/my-modules`: `drive_storage` modülü AÇIK olan yönetilen siteler
@@ -283,6 +284,16 @@ class DocumentAdminViewState extends State<DocumentAdminView> {
           ),
           const SizedBox(height: AppSpace.md),
         ],
+        // Google Drive bağlantısı Belgeler ile aynı modülün parçasıdır: yalnız yönetim (yazma) yetkisinde; kurul üyesi görmez.
+        // Görünüş sırası: Drive kartı ÜSTTE; sunucu depolama kotası ("42 MB / 200 MB" çubuğu) ve belge listesi ALTTA.
+        if (site.canWrite) ...[
+          DriveStorageCard(
+            key: ValueKey<String>('documents_drive_${site.code}'),
+            authService: widget.authService,
+            siteCode: site.code,
+          ),
+          const SizedBox(height: AppSpace.xl),
+        ],
         DocumentAdminList(
           key: _listKey,
           scope: scope,
@@ -291,15 +302,6 @@ class DocumentAdminViewState extends State<DocumentAdminView> {
           sharer: widget.sharer,
           onOpenModules: widget.onOpenModules,
         ),
-        // Google Drive bağlantısı Belgeler ile aynı modülün parçasıdır: yalnız yönetim (yazma) yetkisinde; kurul üyesi görmez.
-        if (site.canWrite) ...[
-          const SizedBox(height: AppSpace.xl),
-          DriveStorageCard(
-            key: ValueKey<String>('documents_drive_${site.code}'),
-            authService: widget.authService,
-            siteCode: site.code,
-          ),
-        ],
       ],
     );
   }
