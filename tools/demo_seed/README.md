@@ -15,7 +15,8 @@ DEGISMEZ; arac uygulamanin kendi servislerini ve tablo kisitlarini kullanir. Her
 | `cleanup.mjs` | `--list`, `--batch <id> --yes`: kayitli satirlari siler (SUPERUSER gerekir), diskteki belge dosyalarini siler, degistirilen satirlari eski haline getirir; arac batch'i varken tohum / yeniden yapilandirma batch'ini, yeniden yapilandirma batch'i varken tohum batch'ini reddeder (`--force`) |
 | `make_pdf.py` | `--creds creds.json --out hesaplar.pdf` : A4 PDF (yonetim kadrosu + gorevliler + daire daire sakinler; yeniden yapilandirilmis JSON'da Malik / Daire admini (sari satir) / aile uyeleri). `pip install reportlab` |
 | `run_remote.sh` | Sunucuda: pg_dump yedegi -> yedekten gecici DB -> tohum + cleanup provasi -> `--prod` ile canli |
-| `lib/target_guard.mjs` | HEDEF KORUMASI (asagida): dort arac da baslarken `DATABASE_URL` hedefini dogrular; yerel (loopback + izinli ad) degilse `--allow-target <ad>` ister |
+| `golden_site.mjs` | ALTIN VERI SETI 2 ORNEK SITESI (asagidaki bolum): 1 blok, 6 daire, karma malik / kiraci; Dalga B finans kurallarini uygulamanin servisleriyle yazar ve elle hesaplanmis beklenen degerlerle karsilastirir: `--dry-run`, `--creds-out`, `--no-verify`, `--force`, `--batch-id demo-golden2-...` |
+| `lib/target_guard.mjs` | HEDEF KORUMASI (asagida): bes arac da baslarken `DATABASE_URL` hedefini dogrular; yerel (loopback + izinli ad) degilse `--allow-target <ad>` ister |
 | `restructure_families.mjs` | Tohumlanmis sitenin dairelerini YENI DAIRE YONETIMI modeline gore duzenler (asagidaki bolum): `--prev-creds`, `--creds-out`, `--dry-run`, `--seed`, `--force`, `--ensure-composition` (her haneye en az 1 cocuk + 1 yasli ekler) |
 | `run_remote_restructure.sh` | Sunucuda: yedek -> gecici DB provasi (yeniden yapilandirma + cleanup, icerik ozeti karsilastirmasi) -> `--prod` ile canli; `--force`, `--extra "<bayraklar>"` / `EXTRA_ARGS` ile `restructure_families.mjs`'e ek bayrak iletir |
 =======
@@ -159,6 +160,37 @@ DATABASE_URL=postgres://... node cleanup.mjs --batch demo-vehicles-YYYYMMDDHHMMS
 * **Bilinen sinir**: tohumun ilk 12 araci (eski uretec, rastgele il kodlu, not "Ana arac") bu aracla DEGISTIRILMEZ; yalniz eksik dairelere yeni, gercekci plakali arac eklenir.
 * **Test**: `node tools/demo_seed/test/local_vehicles_test.mjs --port <gecici PG>` (saf plaka testleri + seed + restructure + add_vehicles + dogrulamalar + ikinci calistirma + PNG + cleanup sirasi; `server/node_modules` yoksa `DEMO_SEED_SERVER_DIR`).
 
+## Altin veri seti 2 ornek sitesi (`golden_site.mjs`)
+
+Dalga B finans kurallarinin (K1-K5, K16, K17) ELLE hesaplanmis beklenen degerli KUCUK ornek sitesi: `Altın Veri Sitesi 2`, 1 blok (`A Blok`), 6 daire (3'u kiracili, 3'u malik oturan). Senaryo, beklenen degerler ve adim adim elle hesap
+`server/test/fixtures/finance_golden_site_2.js` icindedir; ayni kaynak uc yerde kullanilir: saf test (`server/test/finance_golden_dataset_2.test.js`, veritabani yok), gercek PostgreSQL betigi
+(`server/scripts/qa_finance_golden2_pg.mjs`) ve bu demo tohumu. Calistirici: `server/scripts/lib/golden2_runner.mjs` (uygulamanin kendi servislerini cagirir; HTTP yok).
+
+Senaryo (sabit saat 2026-10-20; defter tarihleri mutlak): devir alacagi (A-5, -500,00 TL) -> aylik aidat 2026-09 / 2026-10 (KATEGORI tabani: 1+1 1.200, 2+1 1.500, 3+1 1.800 TL) -> iki hesapli tahsilatlar (Kasa) ->
+asansor bakim payi (DAIRE BASI SABIT 250 TL) ve cati onarimi (ARSA PAYI, 10.000,03 TL, ev sahibi hesabi / Fon, kurus artigi en buyuk kalanlara) -> gecikmis kiraci borcu adaylari (K17) -> A-2 devir + geri alma (K1) ->
+A-4 "kiraci vermezse malik oder": hesap secimsiz odeme 400 `FUND_CHOICE_REQUIRED` (K3), bayat toplam 409, devir, malik odemesi (Banka), geri alma 409 `LIABILITY_TRANSFER_OWNER_PAID` -> A-3 onayli alacak iadesi (K4) -> Ekim 2026
+gecikme tazminati plani (devir / devir alacagi / iadenin tabana etkisi).
+
+```bash
+cd tools/demo_seed
+# Yerel PostgreSQL (hedef kurallari icin «Hedef korumasi»): once --dry-run (hicbir sey yazmaz)
+DATABASE_URL=postgres://kullanici:parola@127.0.0.1:5432/site_kapi_yerel node golden_site.mjs --dry-run
+# Gercek calistirma: makbuz gizli anahtari gerekir (server/.env: FINANCE_RECEIPT_SECRET >= 16 karakter ya da JWT_SECRET); parolalar yalniz --creds-out ile yazilir
+DATABASE_URL=postgres://... node golden_site.mjs --creds-out out/golden2-creds.json
+# Geri alma (bagimsiz batch: tohum / yeniden yapilandirma / arac batch'lerinden once ya da sonra)
+DATABASE_URL=postgres://... node cleanup.mjs --list
+DATABASE_URL=postgres://... node cleanup.mjs --batch demo-golden2-YYYYMMDDHHMMSS --yes
+```
+
+* **Korumalar**: hedef korumasi dort demo araciyla ayni (yerel + izinli ad, aksi halde `--allow-target <ad>`; cikis 2); ayni adli site varsa DURUR (cikis 4, `--force` ile ikinci site); makbuz anahtari yoksa DURUR (cikis 3).
+* **Dogrulama**: yazma sonrasi `GOLDEN2_EXPECTED` (elle hesap) ile 14 bolum karsilastirilir; sapma varsa cikis 1 (veri yazilmis kalir, `cleanup.mjs` ile geri alinir). `--no-verify` ile kapanir. Gozlem ozeti (digest) QA betigininkiyle AYNIDIR.
+* **Veri sahtedir**: kisiler `Altin Malik/Kiraci A-n`, e-postalar `@demo.invalid`; her kullanici icin rastgele parola uretilir (bcrypt), duz metin yalniz `--creds-out` dosyasinda. Yalniz YONETICI uygulamaya girebilir (site uyeligi + abonelik + temel moduller senaryodan SONRA acilir);
+  sakin hesaplari finans kayitlari icindir, daire uyeligi (kapi yetkisi) yazilmaz.
+* **Sabit saat**: uygulama bugunun tarihine bakar; vade / gecikme etiketleri bugune gore kayar, bakiyeler degismez (defter tarihleri mutlaktir; 5 yillik geri tarih siniri 2031-09'a kadar yeter).
+* **Sunucu agaci gerekir** (`--server-dir`): `server/test/fixtures` ve `server/scripts/lib` okunur; yalniz `tools/demo_seed` kopyalanan uzak makinede calismaz. Her eklenen satir `demo_seed_registry`'ye `demo-golden2-<zaman>` batch'iyle yazilir (cleanup genel kuralla siler).
+* **Test**: `cd server && node --test test/finance_golden_dataset_2.test.js` (saf, 23 kontrol); gercek PostgreSQL: `DB_HOST=127.0.0.1 DB_PORT=55432 DB_NAME=<tek kullanimlik> DB_USER=postgres DB_PASSWORD=x QA_CONFIRM_DISPOSABLE_DB=yes node scripts/qa_finance_golden2_pg.mjs`
+  (migrate sonrasi; varsayilan 2 koşu AYRI sitelerde, gozlemler birebir ayni olmali, `GOLDEN2_DIGEST=` yazar).
+
 ## Modul eslemesi ve atlama
 
 Her adim yalniz o site icin ACIK modulde calisir (`site_modules` + `catalog.js`); kapali modul ATLANIR ve rapora yazilir (modul ASLA acilmaz):
@@ -167,7 +199,7 @@ KAPSAM DISI (dokunulmaz): kapilar, kayitli cihazlar, "Daireye Katil", kartli gec
 
 ## Hedef korumasi
 
-Dort arac da (`seed.mjs`, `cleanup.mjs`, `restructure_families.mjs`, `add_vehicles.mjs`) baslarken `DATABASE_URL` hedefini `lib/target_guard.mjs` ile dogrular; izinli degilse HICBIR sey yapmadan cikis kodu 2 ile durur (parola yazilmaz). Amac: sahte veri yanlislikla canli ya da baska bir veritabanina yazilmasin (karsilastirma programi P1-19).
+Bes arac da (`seed.mjs`, `cleanup.mjs`, `restructure_families.mjs`, `add_vehicles.mjs`, `golden_site.mjs`) baslarken `DATABASE_URL` hedefini `lib/target_guard.mjs` ile dogrular; izinli degilse HICBIR sey yapmadan cikis kodu 2 ile durur (parola yazilmaz). Amac: sahte veri yanlislikla canli ya da baska bir veritabanina yazilmasin (karsilastirma programi P1-19).
 
 * **Yerel kip (varsayilan):** sunucu geri donus adresi (`127.0.0.1`, `localhost`, `::1`) VE veritabani adi izin listesinde: `site_kapi_yerel`, `site_kapi_yerel_test` ya da yerel test / prova adlari (`demo_seed_*`, `demo_restr_*`, `demo_veh_*`; yerel testler `demo_seed_test`, `demo_restr_test`, `demo_veh_test` kullanir).
 * **Acik izin:** baska her hedef (canli, uzak, baska ad) YALNIZ `--allow-target <veritabani adi>` ile acilir; ad hedefteki adla AYNEN ayni olmalidir (adsiz ya da yanlis bayrak reddedilir). `run_remote*.sh` betikleri provada gecici veritabani adini, `--prod` yolunda canli veritabani adini bu bayrakla kendisi verir; elle calistiran adi bilerek yazar. Acik izinde tek uyari satiri yazilir.
