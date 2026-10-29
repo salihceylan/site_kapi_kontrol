@@ -207,6 +207,14 @@ void main() {
     expect(service.listedDates, <String?>['2026-10-28']);
   });
 
+  testWidgets('kamera desteklenmeyen platformda (web, masaüstü) boş alan yerine kısa açıklama gösterilir', (tester) async {
+    final service = _FakeMeters(<FieldMeter>[plain(1, 'A Blok', '1')]);
+    await _pumpField(tester, service);
+    expect(find.byKey(const ValueKey<String>('meter_no_camera_note')), findsOneWidget);
+    expect(find.text('Bu cihazda fotoğrafla okuma yok; değeri elle yazın.'), findsOneWidget);
+    expect(find.byKey(_valueField), findsOneWidget, reason: 'elle giriş alanı yerinde');
+  });
+
   group('sıçrama uyarısı (K12)', () {
     testWidgets('eşik aşılınca sorulur; "Değeri düzelt" hiçbir şey kaydetmez, "Doğru, kaydet" onay bayrağıyla gönderir', (tester) async {
       final service = _FakeMeters(<FieldMeter>[jumpy(1, 'A Blok', '1'), plain(2, 'A Blok', '2')]);

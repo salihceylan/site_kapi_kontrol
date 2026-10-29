@@ -18,6 +18,7 @@ import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/meter_api.dart';
 import 'package:site_kapi_kontrol/services/meter_field_queue.dart';
 import 'package:site_kapi_kontrol/services/meter_ocr.dart';
+import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
 import 'package:site_kapi_kontrol/ui/design/status_dot.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
@@ -489,7 +490,7 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
               const Padding(padding: EdgeInsets.all(AppSpace.lg), child: Text('Bu türde etkin sayaç yok. Yönetici önce sayaçları tanımlamalıdır.')),
             if (_meters.isNotEmpty) _blockBar(),
             if (_meters.isNotEmpty) _nextBanner(context, meter, read, total),
-            if (_useCamera) Expanded(child: _cameraArea()) else const Spacer(),
+            Expanded(child: _useCamera ? _cameraArea() : _noCameraNote()),
             _confirmPanel(context, meter),
           ],
         ),
@@ -590,6 +591,15 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
           ),
         ],
       ),
+    );
+  }
+
+  /// Kamera / metin tanıma desteklenmeyen platform (web, masaüstü): kamera alanı yerine boş kalan yerde nedeni söyler.
+  Widget _noCameraNote() {
+    return const EmptyState(
+      key: ValueKey<String>('meter_no_camera_note'),
+      icon: Icons.no_photography_outlined,
+      title: 'Bu cihazda fotoğrafla okuma yok; değeri elle yazın.',
     );
   }
 
