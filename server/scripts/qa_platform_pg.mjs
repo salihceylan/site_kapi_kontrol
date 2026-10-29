@@ -10258,6 +10258,14 @@ async function sectionAccount() {
     'neighbor_posts.author_user_code': 'SAKLANIR - adli saklama karari 2026-10-27 (komsu panosu ilani serbest metindir; yazan JOIN ile Silinmis Kullanici, metin kalir)',
     'payment_notices.submitted_by': 'TOMBSTONE (dekont bildirimi; onaya kadar hesap silme ENGELLI - bkz. blockers; sonrasi degismez defter kaydina baglidir)',
     'person_invitations.accepted_user_code': 'TOMBSTONE (davet kabul eden JOIN ile Silinmis Kullanici)',
+    // Karsilastirma programi Dalga B (088 iade, 089 devir): kayit siteye aittir; talep eden / karari veren / geri alan / devri yapan UPDATE edilmez (FK SET NULL yalniz users satiri silinirse), ad JOIN ile Silinmis Kullanici
+    'finance_refunds.requested_by': 'TOMBSTONE (iade talebi siteye aittir; talep eden JOIN ile Silinmis Kullanici)',
+    'finance_refunds.resolved_by': 'TOMBSTONE (karari veren JOIN ile Silinmis Kullanici)',
+    'finance_refunds.reversed_by': 'TOMBSTONE (geri alan JOIN ile Silinmis Kullanici)',
+    'finance_liability_transfers.created_by': 'TOMBSTONE (degismez devir kaydi; yapan JOIN ile Silinmis Kullanici)',
+    // Dalga D (102 menu duzeni, 103 geri bildirim): hesap silme satiri silmez, kimliksizlestirir; FK SET NULL yalniz fiziksel silmede
+    'feedback_reports.user_code': 'TOMBSTONE (geri bildirim siteye / platforma aittir; gonderen JOIN ile Silinmis Kullanici)',
+    'site_menu_layouts.updated_by': 'TOMBSTONE (menu duzeni siteye aittir; guncelleyen JOIN ile Silinmis Kullanici)',
     // Butunluk sertlestirme (077): kimlik / abonelik kullaniciya aittir; FK ON DELETE CASCADE (kalici admin silmede birlikte gider), hesap silme (kimliksizlestirme) kodu ayrica siler
     'user_oauth_identities.user_code': 'SIL (FK CASCADE; hesap silme ayrica siler)',
     'web_push_subscriptions.user_code': 'SIL (FK CASCADE; hesap silme ayrica siler)',
