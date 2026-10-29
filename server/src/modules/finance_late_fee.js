@@ -1,7 +1,7 @@
 // Gecikme tazminatı (Faz 4b Ö2): önizleme + onaylı, ay zincirli toplu işlem; çalıştırma listesi / satırları; son çalıştırmanın iptali; sakin açıklaması.
 //
 // Sözleşme: docs/PLATFORM_FINANS_4B.md "Ö2". KARAR: OTOMATİK DEĞİL — yönetici onaylı, önizlemeli; aylık; yalnız KAPALI ve BİTMİŞ ay için; varsayılan KAPALI ve ayrıca
-// sistem düzeyinde hukuk onayı bayrağına (finance.legal_ok) bağlı. Hesap finance_late_fee_calc.js'te (saf, BigInt). Yeni kalemler `kind='charge'` + `late_fee_run_id` dolu
+// site başına hukuk onayı bayrağına (sites.legal_ok) bağlı. Hesap finance_late_fee_calc.js'te (saf, BigInt). Yeni kalemler `kind='charge'` + `late_fee_run_id` dolu
 // + `definition_name='Gecikme tazminatı'`, AÇIK dönemde, entry_date = vade = bugün. Zincir: yalnız (son aktif çalıştırma + 1 ay) / ilk çalıştırmada başlangıç ayı;
 // DB tetikleyicisi de zinciri, ayın kapalı ve bitmiş olmasını, satır toplamını koruma altına alır.
 // KİLİT SIRASI: sites KEY SHARE -> finance_post -> apartments (id sırasıyla KEY SHARE) -> users -> finans satırları.

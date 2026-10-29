@@ -1157,8 +1157,8 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/contrast_te
 | --- | --- | --- |
 | [lib/ui/pages/home_page.dart:4070](../../lib/ui/pages/home_page.dart#L4070) | <code>Future&lt;void&gt; _deleteSite(SiteRecord site) async {</code> | Rol/yönetici durumuna göre akış: süper kullanıcı yöntem seçer; diğerleri talep oluşturur; yöneticisiz sitede doğrudan kalıcı silme |
 | [lib/ui/pages/home_page.dart:4539](../../lib/ui/pages/home_page.dart#L4539) | <code>Future&lt;void&gt; _rejectDeleteSite(SiteRecord site) async {</code> | Talebi iptal (isteyen taraf) ya da reddet (karşı taraf); başlık ve düğme metni buna göre değişir |
-| [lib/ui/widgets/site_card.dart:281](../../lib/ui/widgets/site_card.dart#L281) | <code>final isUserApprovalRequired =</code> | Bekleyen silme talebinde onay sırası kimde (kullanıcıda mı karşı tarafta mı) buradan belirlenir |
-| [lib/ui/widgets/site_card.dart:236](../../lib/ui/widgets/site_card.dart#L236) | <code>label: const Text('E-Posta Koduyla Sil'),</code> | Yalnız süper kullanıcıda ve bekleyen silme yokken görünür |
+| [lib/ui/widgets/site_card.dart:314](../../lib/ui/widgets/site_card.dart#L314) | <code>final isUserApprovalRequired =</code> | Bekleyen silme talebinde onay sırası kimde (kullanıcıda mı karşı tarafta mı) buradan belirlenir |
+| [lib/ui/widgets/site_card.dart:260](../../lib/ui/widgets/site_card.dart#L260) | <code>label: const Text('E-Posta Koduyla Sil'),</code> | Yalnız süper kullanıcıda ve bekleyen silme yokken görünür |
 | [lib/ui/views/sites_view.dart:230](../../lib/ui/views/sites_view.dart#L230) | <code>deleteBusy: busyDeleteSites.contains(site.id),</code> | İşlem sürerken kart düğmeleri pasif (`_busyDeleteSites`) |
 
 **Olası nedenler**
@@ -1672,7 +1672,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/pump_at_tes
 | [lib/ui/views/sites_view.dart:162](../../lib/ui/views/sites_view.dart#L162) | <code>label: Text(addSiteLabel),</code> | "Yeni Site" (başvurusu gereken yöneticide "Site Başvurusu") yalnız canManageSites iken |
 | [lib/ui/views/sites_view.dart:233](../../lib/ui/views/sites_view.dart#L233) | <code>onEdit: canManageSites ? () =&gt; onEditSite(site) : null,</code> | Düzenle/sil/onayla/reddet bayrağa bağlıdır; `canManageApartmentUsers` ve `canAssignDoorDevices` bu görünümde okunmaz |
 | [lib/ui/views/sites_view.dart:717](../../lib/ui/views/sites_view.dart#L717) | <code>onManagePermissions: onManageDoorPermissions != null</code> | Kapı yetki düğmesi geri çağrı verilirse çizilir |
-| [lib/ui/widgets/site_card.dart:229](../../lib/ui/widgets/site_card.dart#L229) | <code>if (widget.isSuperUser &amp;&amp;</code> | Karttaki bazı eylemler yalnız süper kullanıcıya |
+| [lib/ui/widgets/site_card.dart:254](../../lib/ui/widgets/site_card.dart#L254) | <code>widget.onDeleteWithEmail != null &amp;&amp;</code> | Karttaki bazı eylemler yalnız süper kullanıcıya |
 | [lib/ui/pages/home_page.dart:2137](../../lib/ui/pages/home_page.dart#L2137) | <code>bool _canAccessMenu(SirketMenuItem item, UserRole role) {</code> | Ekrana erişim kuralı; asıl yetki kontrolü sunucudadır |
 
 **Olası nedenler**

@@ -1,4 +1,4 @@
-// Kampanya "şimdi abone olana 2 ay ücretsiz" şeması: 114. migrations/114_site_free_period.sql ile AYNI ifadeler, AYNI sırayla (test: site_free_period).
+// Kampanya "şimdi abone olana 2 ay ücretsiz" şeması: 115. migrations/115_site_free_period.sql ile AYNI ifadeler, AYNI sırayla (test: site_free_period).
 //
 // Yalnız ekleyici sütunlar (yeni tablo / FK / indeks yok); mevcut sitelere dokunulmaz (NULL = kampanyadan önce açılmış / tanımsız):
 //  - sites.subscription_started_at: aboneliğin başladığı gün (DATE),

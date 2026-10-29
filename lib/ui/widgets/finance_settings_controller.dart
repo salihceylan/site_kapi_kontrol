@@ -71,7 +71,7 @@ class FinanceSettingsController extends ChangeNotifier {
 /// Özelliğin (gecikme tazminatı / hatırlatma) kullanılabilirlik durumu.
 enum FeatureAvailability { loading, error, legalPending, disabled, ready }
 
-/// Gecikme tazminatı için durum (sistem bayrağı `finance.legal_ok` VE site ayarı).
+/// Gecikme tazminatı için durum (site hukuk bayrağı `sites.legal_ok` VE site ayarı).
 FeatureAvailability lateFeeAvailability(FinanceSettingsController c) {
   final s = c.settings;
   if (s == null) return c.error != null ? FeatureAvailability.error : FeatureAvailability.loading;

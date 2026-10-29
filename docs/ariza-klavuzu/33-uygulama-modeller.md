@@ -145,7 +145,7 @@ Sunucu JSON'u uygulamada lib/models içindeki fromJson ile modele çevrilir. Lis
 | --- | --- | --- |
 | [lib/models/door_access_log_record.dart:44](../../lib/models/door_access_log_record.dart#L44) | <code>openedAt: DateTime.tryParse(json['opened_at']?.toString() ?? '')?.toLocal(),</code> | Geçiş zamanı model katmanında yerel saate çevrilir (modeller arasında tek toLocal); yok/bozuksa null |
 | [lib/ui/helpers/ui_helpers.dart:26](../../lib/ui/helpers/ui_helpers.dart#L26) | <code>String formatDateTime(DateTime? dateTime) {</code> | Ekranda gösterirken toLocal çağrılır; null ise "-" yazar (formatDateTimeOrUnknown "Bilinmiyor" yazar) |
-| [lib/models/site_record.dart:236](../../lib/models/site_record.dart#L236) | <code>createdAt: json['created_at'] == null</code> | Tarihler tryParse: biçim bozuksa hata değil null olur, ekranda boş kalır |
+| [lib/models/site_record.dart:294](../../lib/models/site_record.dart#L294) | <code>createdAt: json['created_at'] == null</code> | Tarihler tryParse: biçim bozuksa hata değil null olur, ekranda boş kalır |
 | [lib/models/guest_pass.dart:38](../../lib/models/guest_pass.dart#L38) | <code>expiresAt: DateTime.tryParse(json['expires_at']?.toString() ?? '') ??</code> | Geçersiz expires_at şimdiki zamana düşer: link hemen "süresi dolmuş" sayılır |
 | [lib/models/local_door_access.dart:59](../../lib/models/local_door_access.dart#L59) | <code>DateTime.fromMillisecondsSinceEpoch(0),</code> | updated_at okunamazsa 1970 olur: yerel kayıt kullanılamaz sayılır |
 | [lib/models/device_connectivity_log.dart:37](../../lib/models/device_connectivity_log.dart#L37) | <code>onlineAt: json['online_at'] != null ? DateTime.tryParse(json['online_at'] as String) : nu…</code> | Bağlantı günlüğü tarihleri; "as String" ile okunur, metin değilse TypeError |
@@ -191,10 +191,10 @@ Sunucu JSON'u uygulamada lib/models içindeki fromJson ile modele çevrilir. Lis
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/models/site_record.dart:219](../../lib/models/site_record.dart#L219) | <code>featureQrEnabled: json['feature_qr_enabled'] as bool? ?? true,</code> | Alan yoksa/null ise özellik AÇIK sayılır (eski sunucu uyumu); yanlış anahtar adı sessizce açık bırakır |
-| [lib/models/site_record.dart:97](../../lib/models/site_record.dart#L97) | <code>String get accessModeLabel {</code> | Sadece Uygulama / Sadece QR / Hibrit etiketi iki bayraktan türetilir |
-| [lib/models/site_record.dart:103](../../lib/models/site_record.dart#L103) | <code>String get approvalLabel {</code> | pending/rejected dışındaki her değer "Onaylandi" görünür; approval_status boşsa "approved" varsayılır |
-| [lib/models/site_record.dart:206](../../lib/models/site_record.dart#L206) | <code>blockCount: (json['block_count'] as num?)?.toInt() ?? 1,</code> | block_count/door_count eksikse 1 gösterilir (gerçek sayı değil) |
+| [lib/models/site_record.dart:277](../../lib/models/site_record.dart#L277) | <code>featureQrEnabled: json['feature_qr_enabled'] as bool? ?? true,</code> | Alan yoksa/null ise özellik AÇIK sayılır (eski sunucu uyumu); yanlış anahtar adı sessizce açık bırakır |
+| [lib/models/site_record.dart:147](../../lib/models/site_record.dart#L147) | <code>String get accessModeLabel {</code> | Sadece Uygulama / Sadece QR / Hibrit etiketi iki bayraktan türetilir |
+| [lib/models/site_record.dart:153](../../lib/models/site_record.dart#L153) | <code>String get approvalLabel {</code> | pending/rejected dışındaki her değer "Onaylandi" görünür; approval_status boşsa "approved" varsayılır |
+| [lib/models/site_record.dart:264](../../lib/models/site_record.dart#L264) | <code>blockCount: (json['block_count'] as num?)?.toInt() ?? 1,</code> | block_count/door_count eksikse 1 gösterilir (gerçek sayı değil) |
 
 **Olası nedenler**
 - Sunucu alan adı farklı yazıldığı için model varsayılana (true) düşüyor
@@ -214,8 +214,8 @@ Sunucu JSON'u uygulamada lib/models içindeki fromJson ile modele çevrilir. Lis
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/models/site_record.dart:83](../../lib/models/site_record.dart#L83) | <code>bool get isDeletionPending =&gt;</code> | İki bekleme durumundan biriyse silme beklemede sayılır; başka metin değeri "beklemiyor" demektir |
-| [lib/models/site_record.dart:229](../../lib/models/site_record.dart#L229) | <code>deletionStatus: json['deletion_status'] as String? ?? 'none',</code> | Alan yoksa "none": silme akışı hiç başlamamış görünür |
+| [lib/models/site_record.dart:133](../../lib/models/site_record.dart#L133) | <code>bool get isDeletionPending =&gt;</code> | İki bekleme durumundan biriyse silme beklemede sayılır; başka metin değeri "beklemiyor" demektir |
+| [lib/models/site_record.dart:287](../../lib/models/site_record.dart#L287) | <code>deletionStatus: json['deletion_status'] as String? ?? 'none',</code> | Alan yoksa "none": silme akışı hiç başlamamış görünür |
 
 **Olası nedenler**
 - Sunucu yeni bir silme durum metni ekledi; modelde tanımsız olduğu için bekleyen sayılmaz
@@ -232,8 +232,8 @@ Sunucu JSON'u uygulamada lib/models içindeki fromJson ile modele çevrilir. Lis
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/models/site_record.dart:195](../../lib/models/site_record.dart#L195) | <code>final rawId = json['id'] ?? json['site_code'];</code> | Site kimliği id, yoksa site_code; ikisi de yoksa/çözülemezse 0 |
-| [lib/models/site_record.dart:186](../../lib/models/site_record.dart#L186) | <code>int get siteCode =&gt; id;</code> | siteCode ayrı alan değil, id'nin takma adıdır |
+| [lib/models/site_record.dart:253](../../lib/models/site_record.dart#L253) | <code>final rawId = json['id'] ?? json['site_code'];</code> | Site kimliği id, yoksa site_code; ikisi de yoksa/çözülemezse 0 |
+| [lib/models/site_record.dart:244](../../lib/models/site_record.dart#L244) | <code>int get siteCode =&gt; id;</code> | siteCode ayrı alan değil, id'nin takma adıdır |
 | [lib/models/door_permission_record.dart:11](../../lib/models/door_permission_record.dart#L11) | <code>int? _asIntOrNull(Object? value) {</code> | Sayı ya da sayısal metni int yapar; çözülemezse null, çağıranlar çoğunlukla 0'a düşer |
 | [lib/models/door_permission_record.dart:39](../../lib/models/door_permission_record.dart#L39) | <code>siteId: _asIntOrNull(json['site_code'] ?? json['site_id']) ?? 0,</code> | İzin modelinde site_code önce, site_id eski anahtar |
 | [lib/models/site_residents_tree_record.dart:70](../../lib/models/site_residents_tree_record.dart#L70) | <code>userCode: json['user_code'] as int? ?? 0,</code> | Sakin kimliği user_code (id değil); eksikse 0 |

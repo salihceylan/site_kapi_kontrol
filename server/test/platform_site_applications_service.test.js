@@ -143,7 +143,7 @@ function install(config = {}) {
     if (/^UPDATE devices SET site_code/.test(sql) || /^UPDATE site_doors SET assigned_device_id/.test(sql)) return ok();
     if (/^INSERT INTO site_subscriptions/.test(sql)) return ok();
     if (/^INSERT INTO site_modules/.test(sql)) return ok();
-    if (/^UPDATE sites SET subscription_started_at/.test(sql)) return ok(); // kampanya (114): "şimdi abone olana 2 ay ücretsiz"
+    if (/^UPDATE sites SET subscription_started_at/.test(sql)) return ok(); // kampanya (115): "şimdi abone olana 2 ay ücretsiz"
     if (/^UPDATE site_applications SET/.test(sql)) return ok();
     if (/^SELECT full_name, email FROM users WHERE user_code = \$1 LIMIT 1$/.test(sql)) return ok([{ full_name: 'Ayşe Başvuran', email: 'ayse@example.com' }]);
     // iptal
@@ -608,7 +608,7 @@ describe('approveSiteApplication', () => {
 
     assert.deepEqual(find(db.log, /^INSERT INTO site_subscriptions/).params, [900, 'manual_approval', 'manual_approval', 41]);
     assert.match(find(db.log, /^INSERT INTO site_subscriptions/).sql, /VALUES \(\$1, \$2, 'active', \$3, \$4\)/);
-    // kampanya (114): onayla birlikte aynı işlemde bugün + 2 ay; yalnız iki alan da boşsa (ezmez), yalnız yeni site satırı
+    // kampanya (115): onayla birlikte aynı işlemde bugün + 2 ay; yalnız iki alan da boşsa (ezmez), yalnız yeni site satırı
     const campaign = find(db.log, /^UPDATE sites SET subscription_started_at/);
     assert.deepEqual(campaign.params, [900, 2]);
     assert.match(campaign.sql, /subscription_started_at = CURRENT_DATE/);

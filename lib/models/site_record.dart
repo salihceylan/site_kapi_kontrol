@@ -82,7 +82,7 @@ class SiteRecord {
   /// Türün arayüz terimleri (`management_terms`, F9); sunucu göndermezse varsayılan (Daire / Sakin / ...).
   final ManagementTerms managementTerms;
 
-  /// Kampanya "şimdi abone olana 2 ay ücretsiz" (sunucu 114): aboneliğin başladığı gün; kampanyadan önceki sitelerde null.
+  /// Kampanya "şimdi abone olana 2 ay ücretsiz" (sunucu 115): aboneliğin başladığı gün; kampanyadan önceki sitelerde null.
   final DateTime? subscriptionStartedAt;
 
   /// Ücretsiz dönemin SON günü (o gün dahil); tanımsızsa null.

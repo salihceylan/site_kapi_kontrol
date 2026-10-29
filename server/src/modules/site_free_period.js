@@ -1,4 +1,4 @@
-// Kampanya "şimdi abone olana 2 ay ücretsiz" (114: sites.subscription_started_at + sites.free_until). Saf yardımcılar + onay anındaki tek UPDATE.
+// Kampanya "şimdi abone olana 2 ay ücretsiz" (115: sites.subscription_started_at + sites.free_until). Saf yardımcılar + onay anındaki tek UPDATE.
 //
 // Kural: site başvurusu ONAYLANIRKEN abonelik başlangıcı = bugün, ücretsiz dönem sonu = bugün + 2 ay (Europe/Istanbul takvimi; kampanya varsayılanı).
 // Süper kullanıcı site düzenlemesiyle iki tarihi değiştirebilir ya da temizleyebilir. Mevcut sitelere dokunulmaz (NULL = kampanyadan önce / tanımsız).

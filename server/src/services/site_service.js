@@ -300,7 +300,7 @@ export async function updateSiteByCode({
 }
 
 /**
- * Kampanya tarihlerini (114) günceller: her alan undefined (dokunma) | null (temizle) | "YYYY-MM-DD". Doğrulama çağıranda
+ * Kampanya tarihlerini (115) günceller: her alan undefined (dokunma) | null (temizle) | "YYYY-MM-DD". Doğrulama çağıranda
  * (parseFreePeriodBody + freePeriodOrderError). Yalnız süper kullanıcı ucundan çağrılır.
  */
 export async function updateSiteFreePeriod({ siteCode, subscriptionStartedAt, freeUntil }) {

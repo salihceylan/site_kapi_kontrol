@@ -84,7 +84,7 @@ Yeni bağımlılık YOK. Kalıplar: Modül talebi ekranı (`module_requests_view
     - Rezidans dahil her mülk tipi için site oluşturma süreci `POST /api/site-applications` başvuru onay mekanizmasına tabidir.
     - Başvuru süper kullanıcının onayına düşer, incelenir ve süper kullanıcı tarafından onaylandığında site oluşturulup yönetici yetkileri atanır.
 
-## Kampanya: "şimdi abone olana 2 ay ücretsiz" (migration `114_site_free_period.sql`; sahip kararı 2026-10-29)
+## Kampanya: "şimdi abone olana 2 ay ücretsiz" (migration `115_site_free_period.sql`; sahip kararı 2026-10-29)
 
 - `sites.subscription_started_at` ve `sites.free_until` (ikisi `DATE`, NULL serbest). `free_until` ücretsiz dönemin SON günüdür (o gün dahil ücretsiz). Mevcut sitelere dokunulmaz (NULL = kampanyadan önce).
 - Başvuru ONAYLANIRKEN (`approveSiteApplication`, aynı transaction, kurulum çekirdeğinden sonra) yalnız iki alan da boşsa: `subscription_started_at = bugün`, `free_until = bugün + 2 ay` (Europe/Istanbul takvimi; ay sonuna PG kuralıyla kırpılır). Anlık kurulum çekirdeği (`createSiteWithStructure`) DEĞİŞMEZ.

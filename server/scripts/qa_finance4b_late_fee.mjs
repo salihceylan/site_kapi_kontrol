@@ -34,6 +34,7 @@ export default async function sectionLateFee(t) {
   check('F1c: hukuk onayi bayragi SITE basina; YALNIZ super kullanici acar (yonetici 403); GET /admin/sites/:siteCode/finance-legal-gate; audit site kodunu tasir; olmayan site 404', gateMgr.status === 403 && gateOn.status === 200 && gateOn.body.legal_ok === true && gateOn.body.site_code === site.code && (await call('GET', gateUrl, SUPER)).body.legal_ok === true
     && gateAudit?.enabled === true && gateAudit?.previous === false && (await call('PUT', '/admin/sites/999999999999/finance-legal-gate', SUPER, { legal_ok: true })).status === 404
     && (await q(`SELECT COUNT(*)::int AS n FROM audit_log WHERE action = 'finance.legal_gate.updated'`)).rows[0].n >= 1, [gateMgr.status, gateOn.body]);
+  await t.legalAll(true); // hukuk onayi site basina (114): F1c sonrasi simdiki ve bundan sonra olusacak siteler (F13 buyuk site dahil) acik; eski sistem geneli bayragin kalici acikligi gibi
   const bad = [];
   for (const [label, body] of [['oran 501', { late_fee: { rate_bp: 501 } }], ['oran -1', { late_fee: { rate_bp: -1 } }], ['ondalik oran', { late_fee: { rate_bp: 12.5 } }], ['gecersiz yontem', { late_fee: { method: 'x' } }], ['ek gun 91', { late_fee: { grace_days: 91 } }],
     ['gecersiz baslangic', { late_fee: { start_period: '2026-13' } }], ['bilinmeyen alan', { late_fee: { foo: 1 } }], ['bilinmeyen kok', { foo: {} }], ['bos govde', {}], ['esik 99 kurus', { reminders: { min_overdue_minor: 99 } }],

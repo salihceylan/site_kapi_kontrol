@@ -856,6 +856,7 @@ export default async function sectionParties(t) {
   await resident(R, R5, 'owner', 'P H Malik Bes', { email: 'p.ro5@qa.example' });
   await resident(R, R5, 'resident', 'P H Sakin Bes', { email: 'p.rs5@qa.example' });
   await accountCharge(R5, 40000, 'owner');
+  await call('PUT', `/admin/sites/${R.code}/finance-legal-gate`, SUPER, { legal_ok: true }); // hukuk onayi site basina (114): hatirlatma sitesi de acik (eski sistem geneli bayragin kalici acikligi gibi)
   const rSettings = await call('GET', `${rBase}/settings`, MGR);
   const rEnable = await call('PUT', `${rBase}/settings`, MGR, { expected_settings_version: rSettings.body.settings_version, reminders: { enabled: true, min_overdue_minor: 5000, min_days_overdue: 5, min_interval_days: 14, max_consecutive: 3 } });
   if (rEnable.status !== 200) throw new Error(`hatirlatma acilamadi: ${JSON.stringify(rEnable.body)}`);
@@ -907,6 +908,7 @@ export default async function sectionParties(t) {
     }
     // kiraci hesabi son hatirlatmadan (30 gun once) SONRA kismi odedi (20 gun once): kiraci sayaci sifirlanir, gecikmis borc esigin ustunde kalir
     await q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, payer_party, method, account_party) VALUES ($1, $2, 'payment', -10000, $3, $4, 'both', 'cash', 'tenant')`, [C.code, C1, `${ago(20).slice(0, 7)}-01`, ago(20)]);
+    await call('PUT', `/admin/sites/${C.code}/finance-legal-gate`, SUPER, { legal_ok: true }); // hukuk onayi site basina (114)
     const cSettings = await call('GET', `${cBase}/settings`, MGR);
     const cEnable = await call('PUT', `${cBase}/settings`, MGR, { expected_settings_version: cSettings.body.settings_version, reminders: { enabled: true, min_overdue_minor: 5000, min_days_overdue: 5, min_interval_days: 14, max_consecutive: 2 } });
     if (cEnable.status !== 200) throw new Error(`ardisik fiksturu: ${JSON.stringify(cEnable.body)}`);

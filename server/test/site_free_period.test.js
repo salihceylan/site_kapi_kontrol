@@ -1,4 +1,4 @@
-// Kampanya "şimdi abone olana 2 ay ücretsiz" (114) testi (DB'siz): migration <-> site_free_period_schema.js aynı DDL (aynı sıra), ekleyici / idempotent,
+// Kampanya "şimdi abone olana 2 ay ücretsiz" (115) testi (DB'siz): migration <-> site_free_period_schema.js aynı DDL (aynı sıra), ekleyici / idempotent,
 // db.js bağlantısı, yalnız eksik sütun için ALTER; saf yardımcılar (durum, gün sayısı, gövde doğrulaması, sıra) ve mapSiteRow alanları.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,11 +17,11 @@ import { mapSiteRow } from '../src/utils/helpers.js';
 
 siteFreePeriodTuning.retryDelayMs = 1;
 const here = path.dirname(fileURLToPath(import.meta.url));
-const MIGRATION = readFileSync(path.join(DEFAULT_MIGRATIONS_DIR, '114_site_free_period.sql'), 'utf8').replace(/\r\n/g, '\n');
+const MIGRATION = readFileSync(path.join(DEFAULT_MIGRATIONS_DIR, '115_site_free_period.sql'), 'utf8').replace(/\r\n/g, '\n');
 const DB_SOURCE = readFileSync(path.join(here, '..', 'src', 'db.js'), 'utf8');
 const normalize = (text) => text.replace(/--.*$/gm, ' ').replace(/\s+/g, ' ').trim();
 
-describe('site_free_period_schema (114)', () => {
+describe('site_free_period_schema (115)', () => {
   it('migration, DDL ile ayni ifadeler ve ayni sirada; ekleyici ve idempotent; fiyat / sir yok', () => {
     const actual = normalize(MIGRATION);
     let cursor = 0;

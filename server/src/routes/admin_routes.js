@@ -1036,7 +1036,7 @@ adminRouter.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req
   );
   const doorCount = normalizeOptionalInteger(req.body.door_count);
   const managerUserCode = normalizeOptionalInteger(req.body.manager_user_code);
-  // Kampanya (114): abonelik baslangici + ucretsiz donem sonu ("YYYY-MM-DD" | null = temizle | yok = dokunma).
+  // Kampanya (115): abonelik baslangici + ucretsiz donem sonu ("YYYY-MM-DD" | null = temizle | yok = dokunma).
   const freePeriod = parseFreePeriodBody(req.body);
   if (freePeriod.error) {
     return res.status(400).json({ error: freePeriod.error });

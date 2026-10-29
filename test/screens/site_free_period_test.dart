@@ -1,4 +1,4 @@
-// Kampanya "şimdi abone olana 2 ay ücretsiz" (sunucu 114), istemci tarafı: SiteRecord alanları + site kartı.
+// Kampanya "şimdi abone olana 2 ay ücretsiz" (sunucu 115), istemci tarafı: SiteRecord alanları + site kartı.
 // Süper kullanıcı: başlıkta rozet (sürüyorsa yeşil "Ücretsiz dönem: GG.AA.YYYY tarihine kadar", bittiyse gri "Ücretsiz dönem bitti").
 // Site yöneticisi: rozet yok, küçük bilgi satırı. Eski sunucu (alan yok) hiçbir şey göstermez. Fiyat rakamı yoktur.
 // Kural 6: tüm ölçü / tema hücrelerinde taşma yok.

@@ -2065,9 +2065,6 @@ export async function ensureDbSchema() {
     // 112 (Drive saglik gostergesi + kota izleme + aktarim dogrulamasi, P2-2 / P2-17 / P2-18): 060'tan (site_drive_connections, drive_files, drive_pending_uploads) SONRA; dev blokta DEGIL; katalog kontrolu + her adim
     // kendi otomatik onayli ifadesi (drive_health_schema.js = migrations/112). Her sey varsa hicbir ifade / kilit yok; yalniz ekleyici sutunlar, mevcut satirlara dokunmaz.
     await ensureDriveHealthSchema(client);
-    // 114 (kampanya "simdi abone olana 2 ay ucretsiz": sites.subscription_started_at + sites.free_until): sites'tan SONRA; dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli
-    // ifadesi (site_free_period_schema.js = migrations/114). Her sey varsa hicbir ifade / kilit yok; yalniz ekleyici DATE sutunlari, mevcut sitelere dokunmaz (NULL = kampanyadan once).
-    await ensureSiteFreePeriodSchema(client);
     // 100 (is takibi kategorileri + fotograf yeniden kullanim indeksi): 042 (work_items) ve 047 (work_item_attachments) SONRASI; dev blokta DEGIL; katalog kontrolu + her adim kendi
     // otomatik onayli ifadesi (work_categories_schema.js = migrations/100). Her sey varsa hicbir ifade / kilit yok; varsayilan dort kategori her site icin ilk kullanimda tohumlanir (veri adimi yok).
     await ensureWorkCategoriesSchema(client);
@@ -2082,6 +2079,9 @@ export async function ensureDbSchema() {
     // 114 (site basina hukuk onayi bayragi, satis hazirligi): sites'tan SONRA; dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (site_legal_gate_schema.js = migrations/114).
     // Mevcut siteler ACIK kalir (sutun DEFAULT TRUE ile eklenir), YENI siteler KAPALI baslar (varsayilan FALSE). Her sey yerindeyse hicbir ifade / kilit yok; mevcut degerler asla yeniden yazilmaz.
     await ensureSiteLegalGateSchema(client);
+    // 115 (kampanya "simdi abone olana 2 ay ucretsiz": sites.subscription_started_at + sites.free_until): sites'tan SONRA; dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli
+    // ifadesi (site_free_period_schema.js = migrations/115). Her sey varsa hicbir ifade / kilit yok; yalniz ekleyici DATE sutunlari, mevcut sitelere dokunmaz (NULL = kampanyadan once).
+    await ensureSiteFreePeriodSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

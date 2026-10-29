@@ -859,7 +859,7 @@ export async function approveSiteApplication({ applicationId, note, actor }) {
     });
     const siteCode = Number(created.site.id);
 
-    // 6b. Kampanya "şimdi abone olana 2 ay ücretsiz" (114): abonelik başlangıcı = bugün, ücretsiz dönem sonu = bugün + 2 ay (varsayılan; süper kullanıcı sonradan düzenler).
+    // 6b. Kampanya "şimdi abone olana 2 ay ücretsiz" (115): abonelik başlangıcı = bugün, ücretsiz dönem sonu = bugün + 2 ay (varsayılan; süper kullanıcı sonradan düzenler).
     // Aynı işlemde yazılır; ortak kurulum çekirdeğine (anlık kurulum) dokunmaz.
     await applyApprovalFreePeriod(client, siteCode);
 
