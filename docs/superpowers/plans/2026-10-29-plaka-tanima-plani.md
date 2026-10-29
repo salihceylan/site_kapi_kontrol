@@ -27,8 +27,9 @@ Durum: PLANLAMA aşaması — kod yazılmadı. Sahibin 3 açık sorusuna cevap b
 - **A3 Güvenlik ekranı:** canlı olay şeridi; tanımsız araçta tek tuş "Misafir olarak aç / Açma"; sakine "aracınız giriş yaptı" bildirimi; çıkışı olmayan giriş / girişi olmayan çıkış raporu; kara liste.
 - **A4 Saha (kullanıcı):** montaj (durma noktasına 2-4 m, hafif yukarıdan, IR aydınlatma), eşik kalibrasyonu, karakter CNN'i için birkaç yüz etiketli kare toplama (eğitim yerel/Colab; üründe yalnız ONNX gider).
 
-## 5. Sahibin CEVAPSIZ 3 sorusu (başlamadan sor/varsayım yazma)
-1. Giriş ve çıkışta ayrı bariyer mi var; SmartKeyPass cihazı bariyer(ler)e bağlı mı, bağlanacak mı?
+## 5. Sahip cevapları ve kalan sorular
+- **CEVAPLANDI (2026-10-29, soru 1):** Giriş ve çıkışta AYRI kamera olacak; ama topoloji sabitlenmez — YÖNETİCİ SEÇER. Tasarım: **"Geçiş noktası" (kapı) modeli** — her kapı bir kayıt: ad + yön modu (yalnız giriş | yalnız çıkış | çift yön) + bağlı kamera(lar) + bağlı SmartKeyPass cihazı. Site birden çok kapı tanımlayabilir; A1'deki kamera-kapı eşlemesi bu modelden türetilir. "Bilinmeyen durumlar" bu esneklikle karşılanır (örn. tek kameralı çift yön kapı: yön, içeride-mi durumundan çıkarılır).
+Kalan sorular:
 2. Tanımsız araçta varsayılan davranış: kesin açmama mı, güvenlik onayına düşürme mi?
 3. İlk sürümde misafir-plaka akışı olsun mu, yoksa önce yalnız kayıtlı araç geçişi mi?
 
