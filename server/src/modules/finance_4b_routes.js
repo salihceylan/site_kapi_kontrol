@@ -6,7 +6,7 @@
 //                  GET/POST accounts/:id/reconciliations | POST accounts/assign-payments/preview, /commit
 //                  GET/POST transfers | POST transfers/:id/void
 //   Sakin          GET /app/my-finance/receipts, /app/my-finance/receipts/:id
-//   Sistem         GET/PUT /admin/finance-legal-gate (yalnız süper kullanıcı)
+//   Sistem         GET/PUT /admin/sites/:siteCode/finance-legal-gate (yalnız süper kullanıcı; SİTE başına hukuk onayı bayrağı, migration 114)
 //
 // Yetki (finance_access.js): yazma = yönetici/süper; okuma = + kurul (salt okunur); STAFF/sakin 403; başka site 403; `finance` kapalıysa 403 MODULE_DISABLED.
 // Önizleme / doğrulama uçları POST olduğundan `write: true` sayılır (kurul 403) — yalnız `receipts/verify` kurula açıktır (okuma). Hata gövdesi { error, code }.
@@ -16,7 +16,8 @@ import express from 'express';
 import { authRequired, requireSuperUser } from '../middlewares/auth_middleware.js';
 import { createRuleLimiter } from '../middlewares/rate_limiters.js';
 import { resolveFinanceAccess } from './finance_access.js';
-import { redactFinanceForBoard } from './finance_common.js';
+import { invalidBody, redactFinanceForBoard } from './finance_common.js';
+import { parsePositiveId } from './people_common.js';
 import { BASE, bodyOf, canSeeManagerFields, financeReadLimiter, financeResidentLimiter, financeWriteLimiter, managerHandler } from './finance_routes.js';
 import {
   commitAssignPayments,
@@ -66,7 +67,7 @@ import { getNatureSuggestion, setExpenseNature } from './finance_expense_nature.
 import { kickFinanceReminderQueue } from './finance_reminder_queue.js';
 import { addExclusion, cancelReminderRun, getReminderRun, listExclusions, listReminderRuns, previewReminders, removeExclusion, sendReminders } from './finance_reminders.js';
 import { getMyLateFeeExplanation, listLateFeeRunLines, listLateFeeRuns, postLateFee, previewLateFee, voidLateFeeRun } from './finance_late_fee.js';
-import { getSettings, readLegalOk, setLegalGate, updateSettings } from './finance_settings.js';
+import { getSettings, setLegalGate, updateSettings } from './finance_settings.js';
 import { HOUR_MS, ipKey, respondError, userKey } from './route_helpers.js';
 import { recordAudit } from './audit_service.js';
 import { withEquipmentBreakdown } from './equipment_service.js';
@@ -520,18 +521,34 @@ finance4bRouter.get('/app/my-finance/receipts/:id', authRequired, financeResiden
   }
 });
 
-// --- Sistem: hukuk onayı bayrağı (yalnız süper kullanıcı) ---------------------------------------------------------------------------------
+// --- Site: hukuk onayı bayrağı (yalnız süper kullanıcı) -----------------------------------------------------------------------------------
+// Satış hazırlığı: bayrak SİTE başınadır (sites.legal_ok). Mevcut siteler açık, yeni siteler kapalı başlar; avukat onayından sonra süper kullanıcı açar.
 
-finance4bRouter.get('/admin/finance-legal-gate', authRequired, requireSuperUser, async (_req, res) => {
+function legalGateSiteCode(req) {
+  const siteCode = parsePositiveId(String(req.params.siteCode ?? ''));
+  if (siteCode === null) {
+    throw invalidBody('Site kodu geçersiz.');
+  }
+  return siteCode;
+}
+
+finance4bRouter.get('/admin/sites/:siteCode/finance-legal-gate', authRequired, requireSuperUser, financeReadLimiter, async (req, res) => {
   try {
-    return res.status(200).json({ legal_ok: await readLegalOk() });
+    res.set('Cache-Control', 'no-store');
+    const siteCode = legalGateSiteCode(req);
+    const found = await pool.query('SELECT legal_ok FROM sites WHERE site_code = $1', [siteCode]);
+    if (!found.rows?.[0]) {
+      return res.status(404).json({ error: 'Site bulunamadı.', code: 'SITE_NOT_FOUND' });
+    }
+    return res.status(200).json({ site_code: siteCode, legal_ok: found.rows[0].legal_ok === true });
   } catch (error) {
     return respondError(res, 'finance_legal_gate_get', error, 'Hukuk onayı bilgisi yüklenemedi.');
   }
 });
-finance4bRouter.put('/admin/finance-legal-gate', authRequired, requireSuperUser, async (req, res) => {
+finance4bRouter.put('/admin/sites/:siteCode/finance-legal-gate', authRequired, requireSuperUser, financeWriteLimiter, async (req, res) => {
   try {
-    return res.status(200).json(await setLegalGate({ enabled: bodyOf(req).legal_ok, actor: req.authUser }));
+    res.set('Cache-Control', 'no-store');
+    return res.status(200).json(await setLegalGate({ siteCode: legalGateSiteCode(req), enabled: bodyOf(req).legal_ok, actor: req.authUser }));
   } catch (error) {
     return respondError(res, 'finance_legal_gate_put', error, 'Hukuk onayı kaydedilemedi.');
   }

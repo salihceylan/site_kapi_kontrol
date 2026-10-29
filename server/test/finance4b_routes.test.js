@@ -172,7 +172,7 @@ const MANAGER_ROUTES = [
 ];
 const OTHER_ROUTES = [
   'GET /app/my-finance/entries/:entryId/late-fee', 'GET /app/my-finance/apartments/:id/statement', 'GET /app/my-finance/receipts', 'GET /app/my-finance/receipts/:id',
-  'GET /admin/finance-legal-gate', 'PUT /admin/finance-legal-gate',
+  'GET /admin/sites/:siteCode/finance-legal-gate', 'PUT /admin/sites/:siteCode/finance-legal-gate',
 ];
 
 const toTemplate = (path) =>
@@ -297,12 +297,14 @@ describe('4b yetki matrisi', () => {
   it('süper kullanıcı hukuk bayrağı ucu: yönetici / sakin 403 (süper denetimi), süper veri katmanına ulaşır', async () => {
     for (const user of [users.mgrA, users.resident, users.board]) {
       for (const method of ['GET', 'PUT']) {
-        const res = await call(method, '/admin/finance-legal-gate', { user, body: method === 'GET' ? undefined : { legal_ok: true } });
+        const res = await call(method, '/admin/sites/1/finance-legal-gate', { user, body: method === 'GET' ? undefined : { legal_ok: true } });
         assert.equal(res.status, 403, `${user.full_name} ${method}`);
       }
     }
     assert.equal(state.dataLog.length, 0);
-    const res = await call('GET', '/admin/finance-legal-gate', { user: users.superUser });
+    // Eski sistem geneli uç kaldırıldı (bayrak artık site başına).
+    assert.equal((await call('GET', '/admin/finance-legal-gate', { user: users.superUser })).status, 404);
+    const res = await call('GET', '/admin/sites/1/finance-legal-gate', { user: users.superUser });
     assert.notEqual(res.status, 403);
     assert.ok(state.dataLog.length > 0, 'süper için bayrak sorgusu çalışır');
   });

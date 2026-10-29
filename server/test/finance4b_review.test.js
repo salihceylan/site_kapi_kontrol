@@ -134,7 +134,10 @@ describe('P2-13: kısa FINANCE_RECEIPT_SECRET uyarısı', () => {
 describe('kaynak düzeyi korumalar (R10)', () => {
   it('P1-1/P1-2: kuyruk talebi legal_ok + modül + hatırlatma ayarını ve alıcı ilişkisini / muafiyeti / gün eşiğini GÖNDERİM ANINDA yeniden denetler', () => {
     const queue = source('finance_reminder_queue');
-    assert.match(queue, /readLegalOk\(client\)/);
+    // Hukuk onayı SİTE başına (sites.legal_ok; satır başına sorgudan) denetlenir; sistem geneli bayrak okunmaz.
+    assert.match(queue, /\(s\.legal_ok IS TRUE\) AS legal_on/);
+    assert.match(queue, /row\.legal_on !== true \? 'legal_gate'/);
+    assert.doesNotMatch(queue, /readLegalOk|platform_settings/);
     assert.match(queue, /FROM site_modules m WHERE m\.site_code = r\.site_code AND m\.module_code = 'finance'/);
     assert.match(queue, /fs\.reminders_enabled FROM finance_settings fs WHERE fs\.site_code = r\.site_code/);
     assert.match(queue, /mark\(row, 'cancelled'\)/);

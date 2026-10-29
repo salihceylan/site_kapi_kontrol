@@ -61,10 +61,18 @@ export async function runFinance4bSection(ctx) {
     return code;
   };
   let nextSite = 1000000500;
+  // Satis hazirligi (migration 114): hukuk onayi bayragi SITE basina (sites.legal_ok; yeni siteler KAPALI baslar). Eski sistem geneli bayragin esdegeri: `legalAll(true)` simdiki TUM
+  // siteleri acar ve bundan sonra mkSite ile olusacaklari da acik baslatir (kalicilik eski global bayrak gibi); `legalAll(false)` hepsini kapatir. Tek site: super ucu PUT /admin/sites/:siteCode/finance-legal-gate.
+  const legalState = { onCreate: false };
+  const legalAll = async (on) => {
+    legalState.onCreate = on;
+    await q(`UPDATE sites SET legal_ok = $1`, [on]);
+  };
   const mkSite = async (name, blocks, { approved = true } = {}) => {
     nextSite += 1;
     const code = nextSite;
     await q(`INSERT INTO sites (site_code, name, approval_status, approved_at) VALUES ($1, $2, $3, CASE WHEN $3 = 'approved' THEN NOW() END)`, [code, name, approved ? 'approved' : 'pending']);
+    if (legalState.onCreate) await q(`UPDATE sites SET legal_ok = TRUE WHERE site_code = $1`, [code]);
     const apts = [];
     let order = 0;
     for (const [blockName, count] of Object.entries(blocks)) {
@@ -277,7 +285,7 @@ export async function runFinance4bSection(ctx) {
 
   const t = {
     check, same, sleep, q, call, callRaw, pool, hooks, ctx, serverErrors, TODAY, dayNo, isoOf, ago, monthStart, ym, dayOf, mkUser, mkSite, mkManaged, link, addPerson, addResidency,
-    P, key, pay, ledger, failCode, failMessage, enableModule, users: { SUPER, MGR, MGR2, BOARD, STAFF, OUTSIDER, RESIDENT },
+    P, key, pay, ledger, failCode, failMessage, enableModule, users: { SUPER, MGR, MGR2, BOARD, STAFF, OUTSIDER, RESIDENT }, legalAll,
   };
   // Bolumler: QA_PART (ya da ctx.parts) verilmezse PART_NAMES; EXTRA_PARTS yalniz acikca istenince calisir (ornek: "parties").
   const parts = ctx.parts ?? (process.env.QA_PART || '').split(',').map((x) => x.trim()).filter(Boolean);

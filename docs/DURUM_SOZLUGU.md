@@ -313,8 +313,8 @@ Fiziksel hesap türü (`finance_accounts.kind`): `cash` → **Kasa** · `bank` �
 | Sayaç okuma kaynağı (`meter_readings.source`) | `manual` · `file` | — (elle girilen · dosyadan aktarılan) |
 | Finans raporu (`FinanceReportKind`) | `aging` · `income_expense` · `cash_position` · `statement` · `board_summary` · `expense_analysis` · `enforcement` | Gecikmiş borçlar · Aylık özet · Kasa Durumu · Daire ekstresi · Yıllık hesap · Gider Analizi · İcra dökümü |
 
-Hukuki bayrak: tazminat ve hatırlatma ayrıca sistem bayrağı `finance.legal_ok` ister (yalnız süper açar; varsayılan KAPALI;
-`server/.env.example` yorumu, `PUT /admin/finance-legal-gate`).
+Hukuki bayrak: tazminat ve hatırlatma ayrıca sitenin hukuk onayı bayrağını (`sites.legal_ok`, migration 114) ister (yalnız süper açar; mevcut siteler açık, YENİ siteler KAPALI başlar; satış öncesi avukat onayı ile açılır;
+`server/.env.example` yorumu, `PUT /admin/sites/:siteCode/finance-legal-gate`).
 
 ---
 

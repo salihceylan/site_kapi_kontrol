@@ -18,7 +18,7 @@ export default async function sectionReview(t) {
   // ============================================================================================================
   // R1-R2 (P1-1, P1-2): hatirlatma kuyrugu GONDERIM ANINDA kapilari ve alici iliskisini yeniden denetler
   // ============================================================================================================
-  await call('PUT', '/admin/finance-legal-gate', SUPER, { legal_ok: true });
+  await t.legalAll(true); // hukuk onayi site basina (114): simdiki ve bundan sonra olusacak siteler acik
   let counter = 0;
   /** Kuyruk DURDURULMUSKEN bir hatirlatma calistirmasi olusturur (satir bekler); sonra senaryo kapiyi / iliskiyi bozar. */
   const mkReminderRun = async (label, { extraTenant = false } = {}) => {
@@ -65,9 +65,9 @@ export default async function sectionReview(t) {
 
   // P1-1 / S-A: hukuk onayi geri alinir
   const legal = await mkReminderRun('hukuk');
-  await call('PUT', '/admin/finance-legal-gate', SUPER, { legal_ok: false });
+  await call('PUT', `/admin/sites/${legal.site.code}/finance-legal-gate`, SUPER, { legal_ok: false }); // yalniz BU sitenin onayi geri alinir (diger siteler etkilenmez)
   const legalResult = await drain(legal);
-  await call('PUT', '/admin/finance-legal-gate', SUPER, { legal_ok: true });
+  await call('PUT', `/admin/sites/${legal.site.code}/finance-legal-gate`, SUPER, { legal_ok: true });
   const legalAudit = await audits(legal);
   check('R1: P1-1 hukuk onayi (finance.legal_ok) GERI ALINIRSA kuyruktaki hatirlatma GONDERILMEZ: satir cancelled, adres silinir, ileti 0; nedeni denetimde (gate kodu)',
     same(legalResult.states, ['cancelled']) && legalResult.cleared && legalResult.sent === 0 && legalAudit.some((d) => d?.gate === 'legal_gate' && d?.cancelled_count === 1), { legalResult, legalAudit });
@@ -262,7 +262,7 @@ export default async function sectionReview(t) {
   check('R17: P2-10 kisi pasiflesince bekleyen hatirlatma satiri HEMEN resolved olur, duz adres ve ozet silinir (kuyruk dolmayi beklemez)', scrubbed >= 1 && goneRows.every((r) => r.email_status === 'resolved' && r.email === null && r.email_hash === null), { scrubbed, goneRows });
 
   // --- P2-3: tazminat iptali tekrari (tum kalemler daha once tek tek ters kaydedilmis)
-  await call('PUT', '/admin/finance-legal-gate', SUPER, { legal_ok: true });
+  await t.legalAll(true);
   const ls = await mkManaged('F4B Inceleme Tazminat', { 'L Blok': 2 });
   const lb = P(ls.code);
   const dayOf = (offset, day) => `${ym(offset)}-${String(day).padStart(2, '0')}`;

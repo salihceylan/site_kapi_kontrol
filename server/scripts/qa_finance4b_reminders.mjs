@@ -87,10 +87,10 @@ export default async function sectionReminders(t) {
   const pv0 = await call('POST', `${base(site)}/reminders/preview`, MGR, { tone: 'friendly' });
   check('G1: hatirlatma ayari KAPALIYKEN onizleme engel REMINDERS_DISABLED (+ hukuk onayi); send 409', pv0.status === 200 && pv0.body.blockers.includes('REMINDERS_DISABLED') && pv0.body.can_send === false
     && (await call('POST', `${base(site)}/reminders/send`, MGR, { tone: 'friendly', expected_hash: pv0.body.preview_hash, expected_apartment_count: 0, expected_person_count: 0, idempotency_key: key('s0') })).body.code === 'REMINDERS_DISABLED', pv0.body.blockers);
-  await call('PUT', `/admin/finance-legal-gate`, SUPER, { legal_ok: false });
+  await t.legalAll(false); // hukuk onayi site basina (114): hepsi kapali
   const s0 = await call('GET', `${base(site)}/settings`, MGR);
   const noGate = await call('PUT', `${base(site)}/settings`, MGR, { expected_settings_version: s0.body.settings_version, reminders: { enabled: true } });
-  await call('PUT', `/admin/finance-legal-gate`, SUPER, { legal_ok: true });
+  await t.legalAll(true);
   const s1 = await call('GET', `${base(site)}/settings`, MGR);
   const enable = await call('PUT', `${base(site)}/settings`, MGR, { expected_settings_version: s1.body.settings_version, reminders: { enabled: true, min_overdue_minor: 5000, min_days_overdue: 5, min_interval_days: 14, max_consecutive: 3 } });
   check('G1b: hukuk onayi bayragi KAPALIYKEN hatirlatma ACILAMAZ (409 LEGAL_APPROVAL_REQUIRED); bayrak acik + yonetici ayari acabilir', noGate.status === 409 && noGate.body.code === 'LEGAL_APPROVAL_REQUIRED' && enable.status === 200 && enable.body.reminders.enabled === true && enable.body.reminders.smtp_configured === true, [noGate.body, enable.body]);

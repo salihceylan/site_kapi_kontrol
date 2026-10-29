@@ -54,7 +54,7 @@ function fakeDb({ settings = null, rules = [], legalOk = true } = {}) {
       return { rows: rules };
     }
     if (/^SELECT id, to_char\(period, 'YYYY-MM-DD'\) AS period FROM late_fee_runs/.test(sql)) return { rows: [] };
-    if (/^SELECT value FROM platform_settings WHERE key = \$1$/.test(sql)) return { rows: [{ value: legalOk }] };
+    if (/^SELECT legal_ok FROM sites WHERE site_code = \$1$/.test(sql)) return { rows: [{ legal_ok: legalOk }] }; // hukuk onayı SİTE başına (migration 114)
     if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(sql) || /^(SAVEPOINT|RELEASE SAVEPOINT|ROLLBACK TO SAVEPOINT) /.test(sql)) return { rows: [] };
     if (/^SELECT site_code FROM sites WHERE site_code = \$1 FOR KEY SHARE$/.test(sql)) return { rows: [{ site_code: String(SITE) }] };
     if (/^SELECT pg_advisory_xact_lock\(hashtext\(\$1\)\)$/.test(sql)) return { rows: [] };

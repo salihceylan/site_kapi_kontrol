@@ -415,7 +415,7 @@ export function reminderPreviewBody(plan, { smtp, blockers }) {
 async function gateBlockers(db, siteCode, settings, plan, todayIso) {
   const blockers = [];
   if (!settings.reminders_enabled) blockers.push('REMINDERS_DISABLED');
-  if (!(await readLegalOk(db))) blockers.push('LEGAL_APPROVAL_REQUIRED');
+  if (!(await readLegalOk(db, siteCode))) blockers.push('LEGAL_APPROVAL_REQUIRED');
   if (!isSmtpConfigured()) blockers.push('EMAIL_NOT_CONFIGURED');
   const dup = await db.query(`SELECT 1 FROM finance_reminder_runs WHERE site_code = $1 AND run_on = $2::DATE AND status = 'active' LIMIT 1`, [siteCode, todayIso]);
   if (dup.rows?.[0]) blockers.push('REMINDER_DAILY_LIMIT');
@@ -488,7 +488,7 @@ export async function sendReminders({ siteCode, body, actor, now = new Date() })
     }
     const settings = await loadEffectiveSettings(client, siteCode);
     if (!settings.reminders_enabled) throw remindersDisabled();
-    if (!(await readLegalOk(client))) throw legalApprovalRequired();
+    if (!(await readLegalOk(client, siteCode))) throw legalApprovalRequired();
     if (!isSmtpConfigured()) throw emailNotConfigured();
     const todayIso = today(now);
     const daily = await client.query(`SELECT 1 FROM finance_reminder_runs WHERE site_code = $1 AND run_on = $2::DATE AND status = 'active' LIMIT 1`, [siteCode, todayIso]);

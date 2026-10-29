@@ -273,7 +273,7 @@ export async function sectionPlatformRules(ctx) {
   // F: gecikme tazminati ust siniri (finance_settings)
   {
     await q(`INSERT INTO site_modules (site_code, module_code, enabled) VALUES ($1, 'finance', TRUE) ON CONFLICT (site_code, module_code) DO UPDATE SET enabled = TRUE`, [siteA]);
-    const gate = await call('PUT', '/admin/finance-legal-gate', SUPER, { legal_ok: true });
+    const gate = await call('PUT', `/admin/sites/${siteA}/finance-legal-gate`, SUPER, { legal_ok: true }); // hukuk onayi site basina (114)
     const S = `/manager/sites/${siteA}/finance/settings`;
     const s0 = await call('GET', S, MGR);
     const tooHigh = await call('PUT', S, MGR, { expected_settings_version: s0.body?.settings_version ?? 1, late_fee: { rate_bp: 450 } });
