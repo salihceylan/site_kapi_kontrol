@@ -1,0 +1,174 @@
+{
+  "surum": 1,
+  "sunucu": {
+    "etkin": false,
+    "adres": "https://SUNUCU-ADRESI",
+    "site_kodu": "SITE-KODU",
+    "cihaz_anahtari": "KENAR-PC-ANAHTARI",
+    "site_baslik": "X-Site-Kodu",
+    "anahtar_baslik": "X-Cihaz-Anahtari",
+    "schema_version": 1,
+    "zaman_asimi_sn": 8,
+    "tls_dogrula": true,
+    "senkron_aralik_sn": 60,
+    "olay_gonderim_aralik_sn": 5,
+    "olay_toplu_adet": 50,
+    "kalp_atisi_aralik_sn": 90,
+    "olay_saklama_gun": 7,
+    "dogrulanmamis_olay_gonder": false,
+    "uclar": {
+      "kayit": {
+        "etkin": true,
+        "yol": "/edge/sites/{site_kodu}/register"
+      },
+      "senkron": {
+        "etkin": true,
+        "yol": "/edge/sites/{site_kodu}/sync"
+      },
+      "olay": {
+        "etkin": true,
+        "yol": "/edge/sites/{site_kodu}/events"
+      },
+      "kalp_atisi": {
+        "etkin": true,
+        "yol": "/edge/sites/{site_kodu}/heartbeat"
+      }
+    }
+  },
+  "kameralar": [
+    {
+      "id": "giris1",
+      "ad": "Giris kamerasi",
+      "url": "rtsp://KULLANICI:PAROLA@192.168.1.64:554/Streaming/Channels/101",
+      "mod": "akis",
+      "fps": 3,
+      "kapi_id": "ana_kapi",
+      "yon": "giris",
+      "etkin": true,
+      "roi": [
+        0,
+        0,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "cikis1",
+      "ad": "Cikis kamerasi",
+      "url": "rtsp://KULLANICI:PAROLA@192.168.1.65:554/Streaming/Channels/101",
+      "mod": "akis",
+      "fps": 3,
+      "kapi_id": "ana_kapi",
+      "yon": "cikis",
+      "etkin": true,
+      "roi": [
+        0,
+        0,
+        1,
+        1
+      ]
+    }
+  ],
+  "kapilar": [
+    {
+      "id": "ana_kapi",
+      "ad": "Ana kapi",
+      "yon_modu": "cift",
+      "skp_uid": "240AC4E2E001",
+      "skp_ip": "",
+      "skp_token": "YEREL-KONTROL-ANAHTARI",
+      "komut": "open"
+    }
+  ],
+  "yakalama": {
+    "rtsp_tasima": "tcp",
+    "yeniden_baglan_sn": 5,
+    "tetik_kare_sayisi": 3,
+    "tetik_aralik_sn": 0.3,
+    "okuma_zaman_asimi_ms": 5000
+  },
+  "tespit": {
+    "tur": "klasik",
+    "klasik": {
+      "olcek_genislik": 960,
+      "bulaniklik": 5,
+      "kapama_cekirdek": [
+        17,
+        3
+      ],
+      "erozyon_tekrar": 2,
+      "genlesme_tekrar": 2,
+      "genisletme": [
+        1.1,
+        2.2
+      ],
+      "en_boy_min": 2.8,
+      "en_boy_max": 6.5,
+      "hedef_en_boy": 4.7,
+      "alan_min_oran": 0.0015,
+      "alan_max_oran": 0.25,
+      "doluluk_min": 0.45,
+      "aci_max": 20,
+      "max_aday": 4,
+      "cikis_boyut": [
+        376,
+        80
+      ]
+    }
+  },
+  "segmentleme": {
+    "sol_kirp_oran": 0.0,
+    "kenar_kirp_oran": 0.04,
+    "yukseklik_min_oran": 0.35,
+    "yukseklik_max_oran": 0.98,
+    "genislik_max_oran": 0.22,
+    "min_karakter": 5,
+    "max_karakter": 9
+  },
+  "tanima": {
+    "tur": "otomatik",
+    "model_yolu": "modeller/karakter.onnx",
+    "model_onayli": true,
+    "sablon_dizini": "sablonlar",
+    "sablon_onayli": false,
+    "sablon_min_ornek": 3,
+    "siniflar": "0123456789ABCDEFGHIJKLMNOPRSTUVYZ",
+    "karakter_boyut": 28
+  },
+  "plaka": {
+    "regex": "^(0[1-9]|[1-7][0-9]|8[01])\\s?[A-PR-VYZ]{1,3}\\s?\\d{2,4}$",
+    "min_guven": 0.6,
+    "duzeltme": true
+  },
+  "dogrulama": {
+    "teyit_kare": 2,
+    "teyit_pencere_sn": 4.0,
+    "tekillestirme_sn": 5.0
+  },
+  "karar": {
+    "misafir_kurali": "tum_yerler_bos",
+    "tanimsiz_kare_sakla": false,
+    "tanimsiz_kare_gun": 7,
+    "tanimsiz_kare_dizini": "veri/tanimsiz",
+    "kalibrasyon_kare_kaydet": false,
+    "kalibrasyon_dizini": "veri/kalibrasyon"
+  },
+  "skp": {
+    "port": 8765,
+    "zaman_asimi_sn": 1.5,
+    "yeniden_deneme": 1,
+    "yayin_adresi": "255.255.255.255",
+    "izinli_komutlar": [
+      "open",
+      "pulse"
+    ]
+  },
+  "veri": {
+    "izin_db": "veri/izin.db",
+    "olay_db": "veri/olay.db",
+    "gunluk": "veri/plaka_kenar.log"
+  },
+  "arayuz": {
+    "olay_seridi_satir": 300
+  }
+}
