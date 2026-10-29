@@ -503,7 +503,7 @@ abstract final class HelpContent {
         'Misafir plakası ekle düğmesine dokunup plakayı yazın (örneğin 34 ABC 123; yazarken kendiliğinden biçimlenir), süreyi seçin (1 gün, 1 hafta ya da en çok 30 gün) ve kaydedin.',
         'İzin süresi dolunca kendiliğinden biter; erken bitirmek için listedeki iptal düğmesine dokunun.',
       ],
-      note: 'Bir günde en çok 5 misafir plakası tanımlayabilirsiniz; yalnız kendi daireniz için. Kapı açma Yakında…: şimdilik plaka kamerada tanınınca yönetim ekranında izinli olarak görünür.',
+      note: 'Bir günde en çok 5 misafir plakası tanımlayabilirsiniz; yalnız kendi daireniz için. Kapı açma kenar (güvenlik bilgisayarı) sistemiyle yapılır; plaka tanınınca izinliyse kapı tetiklenir ve kayıt düşer.',
     ),
     HelpTopic(
       id: 'open_door',

@@ -21,7 +21,7 @@ import 'package:site_kapi_kontrol/ui/widgets/plate_live_feed_panel.dart';
 /// - Yönetici: Olaylar | Canlı akış | Misafir izinleri | Kara liste | Geçiş noktaları | Ayarlar sekmeleri; izin verir/iptal eder, kara listeyi ve kapı/kamera ayarlarını yönetir.
 /// - Kurul üyesi / görevli: aynı sekmeleri SALT OKUR (hiçbir yazma düğmesi çizilmez).
 /// - Sakin: sade "Misafir plakası" ekranı; yalnız kendi dairesi için 1 gün - 30 gün geçici izin verir ve iptal eder.
-/// - Kapı açma "Yakında…": otomatik açma açık kapıda izinli okumalar yalnız "açılırdı" diye kaydedilir; kapı komutu gönderilmez.
+/// - Kapı açma: güvenlik bilgisayarındaki kenar sistemiyle yapılır; bu eski doğrudan-bildirim yolunda yalnız kayıt tutulur.
 /// - Yetkili araçlar (kalıcı araç listesi) Araçlar ekranından yönetilir; burada tekrarlanmaz.
 /// - [PlateRecognitionViewState.reload] sayfa kabuğunun aşağı çekip yenilemesinden çağrılır.
 class PlateRecognitionView extends StatefulWidget {
@@ -349,7 +349,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
             if (e.wouldOpen)
               Padding(
                 padding: const EdgeInsets.only(top: AppSpace.xs),
-                child: Text('Otomatik açma kaydı: kapı açılmadı (kapı açma Yakında…)', style: Theme.of(context).textTheme.bodySmall),
+                child: Text('Otomatik açma kaydı: bu bağlantı türü kapı komutu göndermez (kapı açma kenar sistemindedir)', style: Theme.of(context).textTheme.bodySmall),
               ),
           ],
         ),
@@ -460,7 +460,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
     final settings = _settings;
     if (settings == null) return const <Widget>[];
     return <Widget>[
-      _note('Kapı açma: Yakında… Otomatik açma açık kapıda izinli okumalar şimdilik yalnız "açılırdı" diye kaydedilir; kapıya komut gönderilmez.'),
+      _note('Kapı açma kenar (güvenlik bilgisayarı) sistemindedir; bu doğrudan-bildirim yolu yalnız kayıt tutar, kapıya komut göndermez.'),
       _note('Kameralar "Kamera ve Plaka" ekranından eklenir; burada kameranın hangi kapıya baktığını eşlersiniz. Kamera okuma güvenini (confidence) göndermiyorsa otomatik açma yapılmaz.'),
       if (settings.doors.isEmpty) _empty('Bu sitede tanımlı kapı yok.'),
       for (final door in settings.doors)
@@ -642,7 +642,7 @@ class _GateCardState extends State<_GateCard> {
             const SizedBox(height: AppSpace.sm),
             if (!widget.canWrite) ...<Widget>[
               Text('Kamera: ${camera.isEmpty ? 'eşleşmedi' : camera.first.name}'),
-              Text('Otomatik açma: ${widget.door.autoOpen ? 'Açık (kapı açma Yakında…)' : 'Kapalı'}'),
+              Text('Otomatik açma: ${widget.door.autoOpen ? 'Açık (komutu kenar sistemi gönderir)' : 'Kapalı'}'),
               Text('Güven eşiği ${_pct(widget.door.minConfidence)}  •  aynı plaka ${widget.door.cooldownSeconds} sn içinde tekrar açmaz'),
             ] else ...<Widget>[
               DropdownButtonFormField<int?>(
@@ -664,7 +664,7 @@ class _GateCardState extends State<_GateCard> {
                 value: _draft.autoOpen,
                 onChanged: _draft.deviceId == null ? null : _toggleAuto,
                 title: const Text('Plakayla otomatik açma'),
-                subtitle: const Text('Kapı açma: Yakında… Şimdilik yalnız "açılırdı" diye kaydedilir.'),
+                subtitle: const Text('Kapı açma kenar sistemindedir; bu yol yalnız kayıt tutar.'),
               ),
               Row(
                 children: <Widget>[
