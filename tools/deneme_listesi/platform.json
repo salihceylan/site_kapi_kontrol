@@ -10294,9 +10294,9 @@
     },
     {
       "id": "F63",
-      "baslik": "Kiracı borcunun malike devri, gecikmede öneri ve alacak iadesi (sunucu hazır, ekranlar sonraki iş)",
+      "baslik": "Kiracı borcunun malike devri, gecikmede öneri ve alacak iadesi (devir ekranları hazır, iade ekranları sonraki iş)",
       "durum": "yapiliyor",
-      "ozet": "Sunucu tarafı hazır ve gerçek PostgreSQL’de sınandı; yönetici ve sakin ekranları henüz yok (sonraki iş), bu yüzden aşağıdaki maddelerin çoğu “Yakında…” durumundadır. Kiracı borcunun malike devri açık, yönetici onaylı, izli ve geri alınabilir bir eylemdir; borç mutlaka tahsil edilir, kiracı vermezse mal sahibi öder: devir yalnız çıkışta değil gecikmede de yönetici önüne önerilir. Fazla ödeme varsayılan olarak alacak kalır; iade isteğe bağlı ve yönetici onaylıdır. Kiracı çıkışında malike giden bildirim şimdiden denenebilir. Devir ve bildirim metinlerinin hukuki zemini avukat onayı bekler.",
+      "ozet": "Sunucu tarafı hazır ve gerçek PostgreSQL’de sınandı; borcu malike devretme ve gecikmede öneri ekranları yönetici tarafında hazırdır, alacak iadesi ekranları (yönetici ve sakin) henüz yok (sonraki iş) ve o madde “Yakında…” durumundadır. Kiracı borcunun malike devri açık, yönetici onaylı, izli ve geri alınabilir bir eylemdir; borç mutlaka tahsil edilir, kiracı vermezse mal sahibi öder: devir yalnız çıkışta değil gecikmede de yönetici önüne önerilir. Fazla ödeme varsayılan olarak alacak kalır; iade isteğe bağlı ve yönetici onaylıdır. Kiracı çıkışında malike giden bildirim şimdiden denenebilir. Devir ve bildirim metinlerinin hukuki zemini avukat onayı bekler.",
       "maddeler": [
         {
           "id": "F63.01",
@@ -10316,26 +10316,27 @@
           "id": "F63.02",
           "baslik": "Borcu malike devret: önizleme, devir, geri alma",
           "adimlar": [
-            "Kiracı hesabında 1.000’er TL’lik üç aidatı olan ve 1.500 TL ödenmiş bir dairede “Borcu malike devret”i açın (yönetici ekranı yakında).",
-            "Önizlemeyi okuyup nedeni yazarak devri onaylayın; sonra devri geri alın."
+            "Kiracı hesabında 1.000’er TL’lik üç aidatı olan ve 1.500 TL ödenmiş bir dairenin hesap ekstresini açın ve “Kiracı Borcunu Malike Devret”e dokunun.",
+            "Önizlemeyi okuyup “Malike Devret”e dokunun, nedeni yazarak devri onaylayın; sonra Devir geçmişinden devri geri alın (neden yazın)."
           ],
-          "beklenen": "Önizlemede vadesi geçmiş, ödenmemiş kalemler ve toplamı (1.500 TL; kısmen ödenmiş kalem için kalan 500 TL) görünür; gecikme tazminatı ve vadesi gelmemiş kalem devredilmez. Onayla malikin borcu tutar kadar artar, kiracınınki aynı tutar azalır, iki hesabın toplamı aynı kalır; malike bildirim gider; ekstrede “Kiracı hesabından devreden borç” satırı görünür. Geri alma bakiyeleri devir öncesine döndürür (satırlar silinmez); devirden sonra malik hesabına ödeme girildiyse geri alınamaz. Malik kaydı olmayan dairede devir yapılamaz. Yazma yalnız yönetici ve süper kullanıcıdadır; kurul yalnız okur.",
+          "beklenen": "Önizlemede vadesi geçmiş, ödenmemiş kalemler ve toplamı (1.500 TL; kısmen ödenmiş kalem için kalan 500 TL) görünür; gecikme tazminatı ve vadesi gelmemiş kalem devredilmez. Onayla malikin borcu tutar kadar artar, kiracınınki aynı tutar azalır, iki hesabın toplamı aynı kalır; malike bildirim gider; ekstrede “Kiracı hesabından devreden borç” satırı görünür. Geri alma bakiyeleri devir öncesine döndürür (satırlar silinmez); devirden sonra malik hesabına ödeme girildiyse geri alınamaz. Malik kaydı olmayan dairede devir yapılamaz (pencere nedenini yazar). Devrin kalemleri sonradan başka bir devirle taşınmışsa da geri alınamaz; “Geri Al” çıkmaz, nedeni yazılır. Yazma yalnız yönetici ve süper kullanıcıdadır; kurul yalnız okur.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Hem malik hem kiracısı olan, kiracı hesabında vadesi geçmiş borç bulunan daire",
           "yeni": true,
-          "gelistirme": "yakinda"
+          "gelistirme": "hazir"
         },
         {
           "id": "F63.03",
           "baslik": "Gecikmede de malike devir önerisi",
           "adimlar": [
-            "Kiracısı oturan, vadesi geçmiş ödenmemiş borcu olan ve malik kaydı bulunan bir dairede yönetici ana sayfasındaki dikkat satırlarına bakın (satır etiketi ve devir penceresi yakında)."
+            "Kiracısı oturan, vadesi geçmiş ödenmemiş borcu olan ve malik kaydı bulunan bir dairede yönetici ana sayfasındaki dikkat satırlarına bakın; “Devri İncele”ye dokunun.",
+            "Finans > Daireler sekmesinin üstündeki “Malike devredilebilir borç” şeridine bakın; listeden bir daireye dokunup devir penceresini açın."
           ],
-          "beklenen": "Borç mutlaka tahsil edilir; kiracı vermezse mal sahibi öder: gecikmiş kiracı borcu için malike devir yalnız çıkışta değil gecikmede de yönetici önüne önerilir. Sunucuda “devredilebilir daireler” listesi ve yönetici dikkat satırı hazırdır; devir yine önizleme, onay ve neden ile yapılır ve geri alınabilir. Ekranda şimdilik genel bir “bekleyen iş” satırı görünebilir.",
+          "beklenen": "Borç mutlaka tahsil edilir; kiracı vermezse mal sahibi öder: gecikmiş kiracı borcu için malike devir yalnız çıkışta değil gecikmede de yönetici önüne önerilir. Ana sayfada “N dairede kiracının borcu gecikti; ev sahibine devredilebilir” satırı (liste kesildiyse “En az N”) ve “Devri İncele” düğmesi görünür; Daireler sekmesinde aynı öneri şeridi çıkar. “Malike Devredilebilir Borçlar” penceresi daireleri tutarıyla (büyük önce), neden rozetiyle (Gecikmiş borç / Kiracı ayrıldı) listeler; malik kaydı olmayan daire “Malik kaydı yok” uyarısıyla görünür ve devredilemez. Devir yine önizleme, onay ve neden ile yapılır ve geri alınabilir; devirden sonra daire listeden düşer. Kurul bu şeridi görmez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Kiracısı oturan, vadesi geçmiş borcu olan ve malik kaydı bulunan daire",
           "yeni": true,
-          "gelistirme": "yakinda"
+          "gelistirme": "hazir"
         },
         {
           "id": "F63.04",

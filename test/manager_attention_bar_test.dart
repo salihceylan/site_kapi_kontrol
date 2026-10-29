@@ -109,6 +109,58 @@ void main() {
     expect(opened, <(int, int)>[(1, FinanceHomeTab.balances)]);
   });
 
+  testWidgets('K17 tenant_debt_overdue_transfer: açık etiket + Devri İncele; onOpenLiabilityTransfer çağrılır ve satır yeniden yüklenir', (t) async {
+    PeopleSite? openedSite;
+    var fetches = 0;
+    await t.pumpWidget(_wrap(ManagerAttentionBar(
+      sites: sites,
+      fetch: (_) async {
+        fetches++;
+        return _home(attention: const [FinanceHomeAttention(key: 'tenant_debt_overdue_transfer', count: 3)]);
+      },
+      onOpenFinance: (_, _) => fail('doğrudan pencere varken Finans sekmesine gidilmez'),
+      onOpenLiabilityTransfer: (site) async => openedSite = site,
+    )));
+    await t.pumpAndSettle();
+    expect(find.textContaining('3 dairede kiracının borcu gecikti; ev sahibine devredilebilir'), findsOneWidget);
+    expect(find.textContaining('bekleyen iş var'), findsNothing, reason: 'genel "bekleyen iş var" metni değil, açık etiket');
+    expect(find.text('Devri İncele'), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey<String>('month_attention_1_tenant_debt_overdue_transfer')));
+    await t.pumpAndSettle();
+    expect(openedSite?.code, 1);
+    expect(fetches, 2, reason: 'pencereden dönünce dikkat satırları yeniden okunur');
+  });
+
+  testWidgets('K17 sayı kesilmiş listeden çıktıysa (at_least) "En az N dairede" yazılır; tam sayı gibi yazılmaz', (t) async {
+    await t.pumpWidget(_wrap(ManagerAttentionBar(
+      sites: sites,
+      fetch: (_) async => FinanceHome.fromJson(<String, dynamic>{
+        'month': '2026-10',
+        'numbers': <String, dynamic>{},
+        'attention': <Map<String, dynamic>>[
+          <String, dynamic>{'key': 'tenant_debt_overdue_transfer', 'count': 500, 'total_minor': 9000000, 'at_least': true},
+        ],
+      }),
+      onOpenFinance: (_, _) {},
+    )));
+    await t.pumpAndSettle();
+    expect(find.textContaining('En az 500 dairede kiracının borcu gecikti'), findsOneWidget);
+  });
+
+  testWidgets('K17 tenant_debt_pending_transfer (kiracı ayrıldı): açık etiket; doğrudan pencere verilmezse Daireler sekmesine gider', (t) async {
+    final opened = <(int, int)>[];
+    await t.pumpWidget(_wrap(ManagerAttentionBar(
+      sites: sites,
+      fetch: (_) async => _home(attention: const [FinanceHomeAttention(key: 'tenant_debt_pending_transfer', count: 2)]),
+      onOpenFinance: (s, tab) => opened.add((s, tab)),
+    )));
+    await t.pumpAndSettle();
+    expect(find.textContaining('2 dairede kiracı ayrıldı, borcu kiracı hesabında duruyor; ev sahibine devredilebilir'), findsOneWidget);
+    expect(find.text('Devri İncele'), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey<String>('month_attention_1_tenant_debt_pending_transfer')));
+    expect(opened, <(int, int)>[(1, FinanceHomeTab.balances)]);
+  });
+
   testWidgets('bekleyen iş yokken hiçbir şey çizilmez (boşluk bile yok)', (t) async {
     await t.pumpWidget(_wrap(ManagerAttentionBar(
       sites: sites,
