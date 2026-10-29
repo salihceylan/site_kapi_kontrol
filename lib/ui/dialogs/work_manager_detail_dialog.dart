@@ -24,11 +24,13 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/work_vendor_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/a11y_announce.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
 import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
 import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
+import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 import 'package:site_kapi_kontrol/ui/views/work_detail_controllers.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
@@ -239,6 +241,113 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
   }
 
   bool _hasEquipmentOption(int id) => _equipmentOptions.any((e) => e.id == id);
+
+  /// Kartta görünen firma satırları (ad her zaman; yetkili / telefon / tutar / yönlendirme zamanı doluysa).
+  List<Widget> _vendorInfoLines(WorkVendor vendor) => <Widget>[
+    CrmInfoLine(label: 'Firma', value: vendor.name),
+    if (vendor.contact.isNotEmpty)
+      CrmInfoLine(label: 'Firma yetkilisi', value: vendor.contact),
+    if (vendor.phone.isNotEmpty)
+      CrmInfoLine(label: 'Firma telefonu', value: vendor.phone),
+    if (vendor.amountKurus != null)
+      CrmInfoLine(
+        label: 'Anlaşılan tutar',
+        value: formatMinor(vendor.amountKurus!),
+      ),
+    if (vendor.referredAt != null)
+      CrmInfoLine(
+        label: 'Firmaya yönlendirme',
+        value: formatIstanbulDateTime(vendor.referredAt),
+      ),
+  ];
+
+  /// "Firmaya yönlendir" (durum `firmada` + firma tek çağrıda) ya da firmadaki işin firma bilgisini düzenleme. Forma
+  /// yazılmış kaydedilmemiş değişiklik varken kapalıdır (yönlendirme formun durum seçimini ezmesin).
+  Future<void> _vendor({required bool referral}) async {
+    if (_busy || _retry.locked) return;
+    final vendor = await WorkVendorDialog.show(
+      context,
+      initial: _c.item.vendor,
+      referral: referral,
+    );
+    if (vendor == null || !mounted) return;
+    if (!referral && _sameVendorPayload(vendor, _c.item.vendor)) return;
+    final ok = await _c.save(<String, Object?>{
+      if (referral) 'status': WorkStatus.firmada.apiValue,
+      'vendor': vendor.toJson(),
+    });
+    if (!mounted) return;
+    if (ok) {
+      setState(_syncFromItem);
+      announcePolite(
+        context,
+        referral ? 'İş firmaya yönlendirildi.' : 'Firma bilgisi güncellendi.',
+      );
+    } else {
+      _lockIfLimited();
+    }
+  }
+
+  bool _sameVendorPayload(WorkVendor next, WorkVendor? current) {
+    if (current == null) return false;
+    final a = next.toJson();
+    final b = current.toJson();
+    return a['name'] == b['name'] &&
+        a['contact'] == b['contact'] &&
+        a['phone'] == b['phone'] &&
+        a['amount_kurus'] == b['amount_kurus'];
+  }
+
+  /// Firma bölümü: yeni / islemde / beklemede işte "Firmaya yönlendir", firmadaki işte "Firma bilgisini düzenle".
+  /// Çözülmüş ve kapanmış işte görünmez (sunucu da yönlendirmeyi reddeder).
+  Widget _vendorSection(BuildContext context, {required bool formChanged}) {
+    final th = Theme.of(context).textTheme;
+    final i = _c.item;
+    final referring = i.status.canReferToVendor;
+    if (!referring && i.status != WorkStatus.firmada) {
+      return const SizedBox.shrink();
+    }
+    final locked = _c.busy || _retry.locked || formChanged;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: AppSpace.lg),
+        Semantics(
+          header: true,
+          child: Text('Firma (taşeron)', style: th.titleSmall),
+        ),
+        const SizedBox(height: AppSpace.xs),
+        Text(
+          referring
+              ? 'İşi dış bir firmaya devredin. Durum "Firmada" olur; firma bilgileri yalnız yönetimde görünür.'
+              : 'Bu iş firmada. Firma bilgisini güncelleyebilir, işi durum seçiciden sürdürebilirsiniz.',
+          style: th.bodySmall,
+        ),
+        const SizedBox(height: AppSpace.sm),
+        PrimaryActionButton(
+          key: ValueKey<String>(
+            referring ? 'work_vendor_refer' : 'work_vendor_edit',
+          ),
+          label: referring ? 'Firmaya Yönlendir' : 'Firma Bilgisini Düzenle',
+          icon: referring
+              ? Icons.business_center_rounded
+              : Icons.edit_outlined,
+          variant: AppButtonVariant.tonal,
+          onPressed: locked
+              ? null
+              : () => unawaited(_vendor(referral: referring)),
+        ),
+        if (formChanged) ...[
+          const SizedBox(height: AppSpace.xs),
+          Text(
+            'Önce yukarıdaki değişiklikleri kaydedin.',
+            key: const ValueKey<String>('work_vendor_save_first'),
+            style: th.bodySmall,
+          ),
+        ],
+      ],
+    );
+  }
 
   Map<String, Object?> _changedFields() {
     final item = _c.item;
@@ -577,6 +686,8 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
               ),
             if (i.equipment != null)
               CrmInfoLine(label: 'Ekipman', value: _equipmentText(i.equipment!)),
+            // Firma (taşeron) bilgisi yönetim görünümündedir; kurul da görür (salt okunur). Firmadan dönen işte kayıt olarak kalır.
+            if (i.vendor != null) ..._vendorInfoLines(i.vendor!),
             if (due != null) CrmInfoLine(label: 'Hedef tarih', value: due),
           ],
         ),
@@ -629,6 +740,7 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
           const SizedBox(height: AppSpace.sm),
           _manageSection(context),
           if (!i.status.isTerminal) ...[
+            _vendorSection(context, formChanged: _changedFields().isNotEmpty),
             const SizedBox(height: AppSpace.lg),
             _commentSection(context),
           ] else ...[
