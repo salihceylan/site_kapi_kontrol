@@ -26,6 +26,8 @@ Bu bölüm sunucu/uygulama/firmware kodunun DIŞINDAKİ arıza yerlerini toplar:
 | [test_driver/perf_driver.dart](../../test_driver/perf_driver.dart) | flutter drive sürücüsü: kare süresi JSON özeti yazar |
 | [cihaz_kontrol/host_test/run_all.py](../../cihaz_kontrol/host_test/run_all.py) | Firmware ana makine testlerini (MSVC) derleyip çalıştıran koşucu |
 | [cihaz_kontrol/host_test/README.md](../../cihaz_kontrol/host_test/README.md) | Host test tablosu (719 doğrulama) ve gereksinimler |
+| [tools/ota_imza/ota_imza.mjs](../../tools/ota_imza/ota_imza.mjs) | OTA imza aracı (anahtar-uret / genel-anahtar / imzala / dogrula); bağımlılığı yok, özel anahtar depo dışında |
+| [tools/ota_imza/README.md](../../tools/ota_imza/README.md) | İmza biçimi KAPI-OTA-IMZA-V1 (BAĞLAYICI tanım), akış, özel anahtar saklama, sınırlar |
 | [tools/klavuz/build.mjs](../../tools/klavuz/build.mjs) | Arıza klavuzu üreticisi / denetleyicisi |
 | [tools/klavuz/build.test.mjs](../../tools/klavuz/build.test.mjs) | Klavuz aracının testleri + gerçek girişlerin --check denetimi |
 | [.github/workflows/ci.yml](../../.github/workflows/ci.yml) | CI: server lint+test, Flutter analyze+test, gitleaks (deploy YOK) |
@@ -44,7 +46,7 @@ Bu bölüm sunucu/uygulama/firmware kodunun DIŞINDAKİ arıza yerlerini toplar:
 | [android/app/build.gradle.kts](../../android/app/build.gradle.kts) | applicationId, Java 17 hedefi, release imzası |
 | [.vscode/settings.json](../../.vscode/settings.json) | VS Code çalışma alanı ayarları (git.autorefresh, izleyici hariç tutma) |
 
-## Bu bölümdeki girişler (49)
+## Bu bölümdeki girişler (50)
 
 - [arac-sunucu-401](#arac-sunucu-401) — Şirket aracında "Sunucu yetkilendirmeyi reddetti (HTTP 401)" çıkıyor (Cihazı Sunucuya Kaydet, kayıtlı cihaz listesi, silme)
 - [arac-anahtar-tanimli-degil](#arac-anahtar-tanimli-degil) — Şirket aracı "COMPANY_API_KEY tanimli degil" uyarısı veriyor; sunucuya kayıt/liste/silme hiç denenmiyor (yalnız yerel kayıt yapılıyor)
@@ -95,6 +97,7 @@ Bu bölüm sunucu/uygulama/firmware kodunun DIŞINDAKİ arıza yerlerini toplar:
 - [test-flutter-analyze](#test-flutter-analyze) — "flutter analyze" hata/uyarı veriyor ya da bir klasör (android/ios/web) analiz edilmiyor; CI Flutter işi kırmızı
 - [surec-teknik-notlar-bayat](#surec-teknik-notlar-bayat) — PROJE_TEKNIK_NOTLAR.md ile kod/gerçek durum çelişiyor (komut, sayı, güncelleme sırası); hangi belgeye güvenmeliyim?
 - [test-codebase-belgeleri](#test-codebase-belgeleri) — Mimari, modül sınırları, risk, entegrasyon veya test düzeni sorusu: docs/codebase altındaki hangi belgeye bakmalıyım?
+- [arac-ota-imza-araci](#arac-ota-imza-araci) — tools/ota_imza: "imza URETILMEDI", "ICINDE olamaz", "varsayilan bir yol YOKTUR", "ZATEN VAR" ya da dogrula "SONUC: GECMEDI" veriyor
 
 ## Girişler
 
@@ -107,7 +110,7 @@ Bu bölüm sunucu/uygulama/firmware kodunun DIŞINDAKİ arıza yerlerini toplar:
 | [company_qr_tool/app.py:140](../../company_qr_tool/app.py#L140) | <code>headers["X-Company-Key"] = key</code> | Anahtar yalnız doluysa ve adres güvenliyse başlığa eklenir; aksi halde başlık hiç gitmez |
 | [server/src/middlewares/company_auth.js:16](../../server/src/middlewares/company_auth.js#L16) | <code>export function hasValidCompanyKey(req, env = process.env) {</code> | Sunucu tarafı: x-company-key başlığını COMPANY_API_KEY ile sabit zamanlı karşılaştırır; sunucuda anahtar tanımsızsa her zaman false |
 | [server/src/middlewares/company_auth.js:43](../../server/src/middlewares/company_auth.js#L43) | <code>return res.status(401).json({ error: 'Yetkisiz erisim.' });</code> | Anahtar da super_user JWT de yoksa 401; ayrıca company_access_denied denetim kaydı yazılır |
-| [server/src/config/env.js:325](../../server/src/config/env.js#L325) | <code>warnings.push('COMPANY_API_KEY tanimli degil; /api/company/* yalnizca super_user JWT ile …</code> | Sunucuda anahtar tanımsızsa açılışta bu uyarı yazılır (başlık işlemez) |
+| [server/src/config/env.js:326](../../server/src/config/env.js#L326) | <code>warnings.push('COMPANY_API_KEY tanimli degil; /api/company/* yalnizca super_user JWT ile …</code> | Sunucuda anahtar tanımsızsa açılışta bu uyarı yazılır (başlık işlemez) |
 | [company_qr_tool/env.example:12](../../company_qr_tool/env.example#L12) | <code>COMPANY_API_KEY=</code> | İstemcide anahtarın yazılacağı satır (değer sunucudaki server/.env ile AYNI olmalı) |
 
 **Olası nedenler**
@@ -284,7 +287,7 @@ ssh-keygen -R "[178.210.161.55]:22667"
 | [server/src/routes/company_routes.js:326](../../server/src/routes/company_routes.js#L326) | <code>return res.status(400).json({ error: 'device_uid 12 haneli hex (0-9, A-F) olmalidir.' });</code> | Sunucu UID'yi 12 haneli büyük harf hex ister (":" ve "-" ayırıcıları tolere edilir) |
 | [server/src/routes/company_routes.js:110](../../server/src/routes/company_routes.js#L110) | <code>export function resolveCompanyHardwareType(body) {</code> | hardware_type/hardware_target/chip alanlarından türü çıkarır; çıkaramazsa null |
 | [server/src/routes/company_routes.js:127](../../server/src/routes/company_routes.js#L127) | <code>const DEFAULT_COMPANY_HARDWARE_TYPE = 'esp32_c3';</code> | Tür belirlenemezse varsayılan esp32_c3 yazılır; cihaz MQTT bildirimi sonradan düzeltir |
-| [server/src/server.js:128](../../server/src/server.js#L128) | <code>app.post('/api/company/labeled-devices', companyAccessLimiter, requireCompanyAccess, expr…</code> | Bu uca özel 5 MB JSON limiti (QR PNG base64); hız sınırı yetkiden ÖNCE çalışır |
+| [server/src/server.js:130](../../server/src/server.js#L130) | <code>app.post('/api/company/labeled-devices', companyAccessLimiter, requireCompanyAccess, expr…</code> | Bu uca özel 5 MB JSON limiti (QR PNG base64); hız sınırı yetkiden ÖNCE çalışır |
 
 **Olası nedenler**
 - UID 12 haneli değil (ör. eski firmware farklı uzunlukta UID bildiriyor) → 400
@@ -1151,9 +1154,9 @@ node --test "tools/klavuz/*.test.mjs"
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [.github/workflows/ci.yml:41](../../.github/workflows/ci.yml#L41) | <code>- name: Lint (no-undef = hata)</code> | Sunucu işi: npm ci, lint (no-undef = hata), npm test (import smoke dahil) |
-| [.github/workflows/ci.yml:69](../../.github/workflows/ci.yml#L69) | <code>run: flutter analyze --no-fatal-infos</code> | Hata ve uyarılar CI'yı kırar; yalnız "info" düzeyi kırmaz |
-| [.github/workflows/ci.yml:84](../../.github/workflows/ci.yml#L84) | <code>- name: Run gitleaks</code> | Tam geçmiş taranır: eski ifşa olmuş sırlar kırmızıya neden olur |
-| [.github/workflows/ci.yml:91](../../.github/workflows/ci.yml#L91) | <code>GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}</code> | Kuruluma (organization) ait depolarda lisans secret'ı gerekir |
+| [.github/workflows/ci.yml:86](../../.github/workflows/ci.yml#L86) | <code>run: flutter analyze --no-fatal-infos</code> | Hata ve uyarılar CI'yı kırar; yalnız "info" düzeyi kırmaz |
+| [.github/workflows/ci.yml:101](../../.github/workflows/ci.yml#L101) | <code>- name: Run gitleaks</code> | Tam geçmiş taranır: eski ifşa olmuş sırlar kırmızıya neden olur |
+| [.github/workflows/ci.yml:108](../../.github/workflows/ci.yml#L108) | <code>GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}</code> | Kuruluma (organization) ait depolarda lisans secret'ı gerekir |
 | [.github/workflows/ci.yml:4](../../.github/workflows/ci.yml#L4) | <code># NOT: Bu dosyada DEPLOY YOKTUR (canli dagitim kullanici karari; AGENTS.md kural 8 elle y…</code> | CI canlıya dağıtım yapmaz (AGENTS.md kural 8 elle yürütülür) |
 | [SAHA_KONTROL_LISTESI.md:931](../../SAHA_KONTROL_LISTESI.md#L931) | <code>- [ ] **47.8.** GitHub: PR'da Actions "Server", "Flutter", "Secret scan" çalışır (gitleak…</code> | gitleaks geçmişteki parola yüzünden kırmızı çıkabilir; parolayı döndürme notu |
 | [docs/codebase/CONCERNS.md:9](../../docs/codebase/CONCERNS.md#L9) | <code>&#124; high &#124; Production credentials were exposed in the past (repository history, firmware bi…</code> | Geçmişte ifşa olan üretim sırları riski (döndürme ve geçmiş temizliği kullanıcı kararı) |
@@ -1491,7 +1494,7 @@ flutter doctor -v
 | [analysis_options.yaml:19](../../analysis_options.yaml#L19) | <code>include: package:flutter_lints/flutter.yaml</code> | Varsayılan Flutter lint seti; özel kural geçersiz kılmaları yorum satırında (kapalı) |
 | [analysis_options.yaml:13](../../analysis_options.yaml#L13) | <code>- android/**</code> | build, android, ios, web, windows, macos, linux klasörleri analiz dışıdır: oradaki kodu analyze görmez |
 | [pubspec.yaml:55](../../pubspec.yaml#L55) | <code>flutter_lints: ^6.0.0</code> | Lint paketi sürümü (sürüm yükselince yeni kurallar yeni uyarı çıkarabilir) |
-| [.github/workflows/ci.yml:69](../../.github/workflows/ci.yml#L69) | <code>run: flutter analyze --no-fatal-infos</code> | CI hata ve uyarıda kırılır, yalnız info düzeyi kırmaz |
+| [.github/workflows/ci.yml:86](../../.github/workflows/ci.yml#L86) | <code>run: flutter analyze --no-fatal-infos</code> | CI hata ve uyarıda kırılır, yalnız info düzeyi kırmaz |
 | [docs/codebase/CONVENTIONS.md:14](../../docs/codebase/CONVENTIONS.md#L14) | <code>### 2) Formatting and Linting</code> | Linter/biçimlendirici kuralları ve çalıştırma komutları |
 
 **Olası nedenler**
@@ -1554,4 +1557,42 @@ flutter pub get
 - Test belgesinin satır bilgisi için test-nerede-sunucu, test-nerede-flutter, test-nerede-firmware girişleri
 
 **Bkz.:** [test-nerede-sunucu](#test-nerede-sunucu), [test-nerede-flutter](#test-nerede-flutter), [test-nerede-firmware](#test-nerede-firmware)
+
+<a id="arac-ota-imza-araci"></a>
+### arac-ota-imza-araci · tools/ota_imza: "imza URETILMEDI", "ICINDE olamaz", "varsayilan bir yol YOKTUR", "ZATEN VAR" ya da dogrula "SONUC: GECMEDI" veriyor
+
+| Dosya:satır | Satırdaki kod | Ne işe yarar |
+| --- | --- | --- |
+| [tools/ota_imza/ota_imza.mjs:387](../../tools/ota_imza/ota_imza.mjs#L387) | <code>export function main(argv, ortam = {}) {</code> | Komut dağıtımı ve çıkış kodları: 0 başarılı/GEÇTİ, 1 reddedildi/GEÇMEDİ, 2 komut satırı hatası |
+| [tools/ota_imza/lib/anahtar.mjs:100](../../tools/ota_imza/lib/anahtar.mjs#L100) | <code>export function depoDisindaOlmali(yol, secenek) {</code> | Özel anahtar yolu git deposunun / proje klasörünün İÇİNDE olamaz (sembolik bağlantı ve ".." çözülür); varsayılan yol YOKTUR |
+| [tools/ota_imza/lib/imza.mjs:28](../../tools/ota_imza/lib/imza.mjs#L28) | <code>export function imzala({ imajYolu, hedef, surum, ozelAnahtar, rollbackMax }) {</code> | İmaj başlığı/hedef uyumu, sürüm metni sezgisi, imza üretimi ve hemen yeniden doğrulama; rollback_max sürümden büyük olmalı |
+| [tools/ota_imza/lib/imza.mjs:133](../../tools/ota_imza/lib/imza.mjs#L133) | <code>export function dogrula({ imajYolu, sigMetni, genelAnahtarlar, beklenenHedef, beklenenSur…</code> | Boyut, SHA-256, hedef, sürüm, key_id, Ed25519 imzası ve (--manifest ile) manifest çapraz kontrolü; hiçbir kontrol ilk hatada durmaz |
+| [tools/ota_imza/lib/imaj.mjs:88](../../tools/ota_imza/lib/imaj.mjs#L88) | <code>export function hedefUyumunuDenetle(hedef, veri) {</code> | ESP32 imaj başlığındaki yonga kimliği hedefle uyuşmalı (C3 imajı esp32-wroom diye imzalanamaz) |
+| [tools/ota_imza/lib/bicim.mjs:110](../../tools/ota_imza/lib/bicim.mjs#L110) | <code>export function imzaMesajiKur({ hedef, surum, boyut, sha256, rollbackMax }) {</code> | İmzalanan ileti: KAPI-OTA-IMZA-V1 + target/version/size/sha256 [+ rollback_max]; sunucu ve cihazla bayt-bayt aynı |
+
+**Olası nedenler**
+- "ICINDE olamaz" / "varsayilan bir yol YOKTUR": --ozel (ya da OTA_IMZA_OZEL_ANAHTAR) depo içinde ya da hiç verilmedi; özel anahtar depo DIŞINDA bir yola yazılır
+- "ZATEN VAR, uzerine yazilmaz": var olan anahtar/genel anahtar dosyası asla ezilmez (eskisini bilerek taşıyın)
+- "imza URETILMEDI": imaj başlığı hedefle uyuşmuyor (yanlış --hedef ya da başka hedefin .bin dosyası) ya da --rollback-max sürümden büyük değil; UYARI "surum metni ... imajin icinde bulunamadi": OTA_VERSION_* artırılmadan derlenmiş
+- dogrula "GECMEDI": .bin imzadan sonra değişti (boyut/sha256), .sig başka sürüm/hedef için, key_id verilen genel anahtarla eşleşmiyor ya da manifest.json (version/sha256/target/rollback_max) imzayla uyuşmuyor
+- "parola komut satirinda verilmez": parola yalnız OTA_IMZA_PAROLA ortam değişkeniyle verilir
+
+**Adım adım kontrol**
+- Çıktıdaki [HATA ] satırı hangi kontrolün düştüğünü söyler (boyut, sha256, anahtar kimligi, Ed25519 imzasi, manifest ...)
+- node tools/ota_imza/ota_imza.mjs yardim komutu tüm seçenekleri yazar; biçim ve saklama kuralları tools/ota_imza/README.md ve docs/OTA_IMZA.md
+- Araç testleri: node --test "tools/ota_imza/test/*.test.mjs" (anahtarı çalışma anında üretir; depoda özel anahtar yoktur)
+
+**Günlükte aranacak ifadeler**
+- `imza URETILMEDI`
+- `SONUC: GECMEDI`
+- `parola komut satirinda verilmez`
+
+**Komutlar**
+```bash
+node tools/ota_imza/ota_imza.mjs yardim
+```
+
+**İlgili testler:** [tools/ota_imza/test/dongu.test.mjs](../../tools/ota_imza/test/dongu.test.mjs), [tools/ota_imza/test/rollback.test.mjs](../../tools/ota_imza/test/rollback.test.mjs), [tools/ota_imza/test/vektor.test.mjs](../../tools/ota_imza/test/vektor.test.mjs)
+
+**Bkz.:** [sunucu-firmware-yukleme-imza](10-sunucu-api.md#sunucu-firmware-yukleme-imza), [cihaz-ota-imza-reddi](40-cihaz-yazilimi.md#cihaz-ota-imza-reddi), [arac-surum-derleme](#arac-surum-derleme)
 

@@ -7,6 +7,8 @@ const MQTT = 'cihaz_kontrol/include/mqtt_baglanti.h';
 const TLS = 'cihaz_kontrol/include/tls_kok_sertifika.h';
 const OTA = 'cihaz_kontrol/include/ota_guncelleme.h';
 const OTAID = 'cihaz_kontrol/include/ota_is_kimligi.h';
+const OTAIMZA = 'cihaz_kontrol/include/ota_imza.h';
+const OTAKEY = 'cihaz_kontrol/include/ota_public_key.h';
 const GM60 = 'cihaz_kontrol/include/gm60_scanner.h';
 const QRDEAD = 'cihaz_kontrol/include/qr_dogrulama.h';
 const ROLE = 'cihaz_kontrol/include/role_kontrol.h';
@@ -33,6 +35,7 @@ const EPIO = 'ekran_yazilimi/platformio.ini';
 const DENE = 'cihaz_dene/app.py';
 
 const T_MQTT = 'cihaz_kontrol/host_test/t_mqtt.cpp';
+const T_IMZA = 'cihaz_kontrol/host_test/t_imza.cpp';
 const T_CORE = 'cihaz_kontrol/host_test/t_core.cpp';
 const T_UDP = 'cihaz_kontrol/host_test/t_udp.cpp';
 const T_PIN = 'cihaz_kontrol/host_test/t_pin.cpp';
@@ -51,6 +54,8 @@ export default {
     { file: TLS, note: 'Gömülü kök CA (MQTT ve OTA TLS doğrulaması)' },
     { file: OTA, note: 'OTA: manifest, indirme, SHA-256, rollback doğrulaması, deneme sınırı, hedef (c3/wroom) ve sürüm sabitleri' },
     { file: OTAID, note: 'OTA iş kimliği (ota_job_id) yansıtma' },
+    { file: OTAIMZA, note: 'OTA paket imzası (KAPI-OTA-IMZA-V1): imzalanan ileti, anahtar durumu (HAZIR / YER TUTUCU / GEÇERSİZ), çıplak imza çözümleme, otaImzaDogrula' },
+    { file: OTAKEY, note: 'Gömülü OTA genel anahtarı (32 bayt; teslimde YER TUTUCU: gerçek anahtar ota_anahtar.mjs yaz ile yazılır)' },
     { file: GM60, note: 'GM60 QR okuyucu: UART, self-test, QR korumaları, qr_verify gönderimi' },
     { file: QRDEAD, note: 'ÖLÜ KOD: hiçbir yerden çağrılmaz; QR doğrulaması yalnız sunucudadır' },
     { file: ROLE, note: 'Röle pini, pulse süresi, debounce, manuel tutma, esp_timer ile bırakma' },
@@ -1333,6 +1338,40 @@ export default {
         'Kök değişikliğini planlarken eski + yeni kökü aynı pakette taşıyan geçiş sürümü önceden OTA ile dağıtın',
       ],
       related: ['cihaz-mqtt-tls-hatasi', 'cihaz-ota-manifest-hatasi', 'cihaz-saat-ntp-yok'],
+    },
+    {
+      id: 'cihaz-ota-imza-reddi',
+      symptom: 'Cihaz OTA güncellemesini kurmuyor: OTA durumu ya da ota_failed ayrıntısı "imza: ..." ("imza: dosya yok", "imza: dogrulama basarisiz", "imza: anahtar yerlestirilmemis", "imza: bicim gecersiz")',
+      keywords: ['OTA', 'imza', 'ota_failed', 'Ed25519', 'KAPI-OTA-IMZA-V1', 'yer tutucu', 'parmak izi', 'rollback_max', 'köprü sürüm'],
+      refs: [
+        { file: OTA, find: 'inline String otaImzaAl(const OtaImzaIstegi& istek', note: 'Önce imza alınır: manifestte signature varsa o, yoksa .sig dosyası (aracın JSON\'u ya da çıplak imza); imza yoksa paket HİÇ indirilmez' },
+        { file: OTA, find: 'inline bool otaImzaDosyasiCozumle(', note: '.sig JSON\'undan yalnız format (KAPI-OTA-IMZA-V1), algorithm (Ed25519) ve 128 hane hex signature okunur; başka biçim reddedilir' },
+        { file: OTA, find: 'const String imzaSonuc = otaImzaYukunuDogrula(', note: 'SHA-256 tuttuktan sonra, Update.end\'den ÖNCE imza doğrulanır; geçersizse Update.abort ve boot bölümü değişmez' },
+        { file: OTA, find: 'inline String otaImzaYukunuDogrula(', note: 'Yük cihazın KENDİ bildiği değerlerle (hedef, manifest sürümü, indirilen bayt sayısı, hesaplanan SHA-256 [+ rollback_max]) kurulur' },
+        { file: OTA, find: 'OTA GUVENLIK: paket imzasi dogrulanamadi', note: 'Reddedilen paket seriye Türkçe güvenlik satırı olarak yazılır' },
+        { file: OTAIMZA, find: 'inline OtaImzaSonuc otaImzaDogrula(', note: 'Anahtar HAZIR değilse hiçbir imza geçerli sayılmaz; yük kurulur ve Ed25519 doğrulanır' },
+        { file: OTAKEY, find: 'inline constexpr uint8_t OTA_IMZA_GENEL_ANAHTAR[32] = {', note: 'Gömülü genel anahtar: teslimde YER TUTUCU (hiçbir paket kurulmaz); gerçek anahtar cihaz_kontrol/tools/ota_anahtar.mjs yaz ile yazılır' },
+      ],
+      causes: [
+        '"imza: dosya yok (http 404/403/410)": paket imzasız ya da sunucuda .sig yok (imzasız paket köprü sürümden sonra KURULMAZ; bu beklenen korumadır)',
+        '"imza: dogrulama basarisiz": imza gömülü anahtarla bu hedef/sürüm/boyut/SHA-256 için atılmamış (başka anahtar, manifest sürümü ≠ imzalanan sürüm, paket imzadan sonra değişti, yanlış hedef); rollback_max/allow_downgrade uyuşmazlığı da böyle görünür',
+        '"imza: anahtar yerlestirilmemis": gömülü genel anahtar YER TUTUCU ya da geçersiz (yer tutuculu sürüm yayınlanmış: o cihazlar bir daha OTA ile güncellenemez, USB gerekir)',
+        '"imza: bicim gecersiz" / "imza: dosya cok buyuk": .sig ne aracın JSON\'u ne de 64 bayt ham / 128 hane hex / 88 karakter base64; dosya 1024 baytı aşıyor',
+        '"imza: dosya alinamadi (http N)": geçici ağ/sunucu hatası (deneme hakkı yanmaz, cihaz yeniden dener)',
+      ],
+      checks: [
+        'Seri açılışta "OTA imza anahtari: HAZIR (Ed25519, zorunlu); parmak izi <16 hane>" satırı olmalı; parmak izi imzalama aracının key_id değeriyle AYNI olmalı (YER TUTUCU/GECERSIZ yazıyorsa kart hiçbir paketi kurmaz)',
+        'Sunucuda manifest\'i cihazın sürümüyle okuyun: signature (128 hane hex) ve version imzalanan sürümle aynı mı; node tools/ota_imza/ota_imza.mjs dogrula <firmware.bin> --genel <genel.pem> --manifest <manifest.json>',
+        'Yayın öncesi ikilide yer tutucu kalmadığını doğrulayın: node cihaz_kontrol/tools/ota_anahtar.mjs kontrol <firmware.bin> <genel_anahtar>',
+        'Ayrıntı, köprü sürüm planı ve hata tablosu: docs/OTA_IMZA_CIHAZ.md bölüm 3 ve docs/OTA_IMZA.md bölüm 6-7',
+      ],
+      logs: ['OTA GUVENLIK: paket imzasi dogrulanamadi', 'imza: dosya yok', 'imza: anahtar yerlestirilmemis', 'imza: dogrulama basarisiz'],
+      commands: [
+        'curl -s "https://api.gudeteknoloji.com.tr/firmware/esp32-c3/manifest.json?current_version=4.4.0"',
+        'curl -s -o /dev/null -w "%{http_code}\\n" https://api.gudeteknoloji.com.tr/firmware/esp32-c3/firmware-v4.4.1.bin.sig',
+      ],
+      tests: [T_IMZA, T_MQTT],
+      related: ['cihaz-ota-manifest-hatasi', 'cihaz-ota-guncelleme-baslamiyor', 'sunucu-firmware-yukleme-imza', 'arac-ota-imza-araci'],
     },
 
   ],

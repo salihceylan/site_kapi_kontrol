@@ -27,7 +27,11 @@ import { auditLog, publicBaseUrl } from '../utils/helpers.js';
 //               olmali; surum dosyadan alinir (version sorgusu verilirse ayni olmali);
 //           (b) CIPLAK imza (128 hane onaltilik ya da 88 karakter base64): version sorgusu zorunlu.
 //     Imzasiz/bozuk imzali paket 400. Dogrulama: OTA_PUBLIC_KEY (Ed25519 GENEL anahtar[lar]). Basarida dosyalar + manifest yazilir (201).
-//     Canli surumden DUSUK surum yalniz allow_downgrade=1 + downgrade_reason ile ve denetim kaydina yazilarak yayinlanir.
+//     Canli surumden DUSUK surum yalniz allow_downgrade=1 + downgrade_reason ile ve denetim kaydina yazilarak yayinlanir. Bu yalniz "canli surum artik
+//     budur" kararidir; DUSURMENIN cihaza yansimasi ayrica IMZAYLA yetkilendirilir: paket tools/ota_imza `imzala --rollback-max <surum>` ile atilmissa
+//     (.sig'te rollback_max; ciplak imzada rollback_max sorgusu) sunucu dusurmeyi YALNIZ surumu rollback_max ve altinda olan, yayindan yeni cihazlara
+//     allow_downgrade:true + rollback_max ile teklif eder; rollback_max'siz imza cihaza dusurme olarak hic sunulmaz. rollback_max tasiyan imza yalniz
+//     allow_downgrade=1 ile ve gercek dusurmede kabul edilir (FIRMWARE_ROLLBACK_NOT_ALLOWED / _NOT_DOWNGRADE / _INVALID).
 //     nginx: bu yol icin client_max_body_size >= OTA_MAX_FIRMWARE_BYTES (+ pay) gerekir (varsayilan 1m yetmez), bkz. docs/PLATFORM_BELGELER.md kalibi.
 //   GET  /admin/firmware/:target/releases     canli yayin + diskteki imzali yayin kayitlari (imza degeri donmez).
 //

@@ -18,7 +18,10 @@ Bu bölüm Express sunucusunun (server/src) HTTP uçlarını kapsar: giriş/JWT,
 | [server/src/routes/manager_routes.js](../../server/src/routes/manager_routes.js) | Site yöneticisi uçları: site, kapı, cihaz, sakin, katılım başvurusu, yönetici daveti, güvenlik politikası |
 | [server/src/routes/admin_routes.js](../../server/src/routes/admin_routes.js) | Süper kullanıcı uçları: kullanıcı, site, daire, kapı, cihaz envanteri, OTA tetikleme, bakım |
 | [server/src/routes/door_log_routes.js](../../server/src/routes/door_log_routes.js) | Kapı geçiş günlükleri (admin/yönetici) ve çevrimdışı günlük senkronu |
-| [server/src/routes/firmware_routes.js](../../server/src/routes/firmware_routes.js) | /health, firmware manifest ve .bin sunumu (OTA) |
+| [server/src/routes/firmware_routes.js](../../server/src/routes/firmware_routes.js) | /health, firmware manifest ve .bin / .bin.sig sunumu (OTA; imzalı yayında signature alanları, rollback_max kuralları) |
+| [server/src/routes/firmware_admin_routes.js](../../server/src/routes/firmware_admin_routes.js) | İmzalı firmware yükleme ucu (POST /admin/firmware/:target/releases) ve yayın listesi; yalnız süper kullanıcı |
+| [server/src/services/firmware_release_service.js](../../server/src/services/firmware_release_service.js) | İmzalı yayın: imza/imaj doğrulama, sürüm düşürme koruması, dosya yazımı, canlı manifest, denetim kaydı |
+| [server/src/services/ota_signature.js](../../server/src/services/ota_signature.js) | OTA imzası (Ed25519, KAPI-OTA-IMZA-V1): imzalanan ileti, .sig ayrıştırma, OTA_PUBLIC_KEY, OTA_SERVE_UNSIGNED |
 | [server/src/routes/company_routes.js](../../server/src/routes/company_routes.js) | Şirket uçları (/api/company, /qrcodes): etiketli cihaz kaydı, karekod resimleri |
 | [server/src/middlewares/auth_middleware.js](../../server/src/middlewares/auth_middleware.js) | authRequired (JWT + taze DB okuması), requireSuperUser, requireSiteManager |
 | [server/src/middlewares/login_throttle.js](../../server/src/middlewares/login_throttle.js) | Hesap bazlı hatalı giriş/parola sayacı (LOGIN_LOCKED, CURRENT_PASSWORD_LOCKED) |
@@ -53,7 +56,7 @@ Bu bölüm Express sunucusunun (server/src) HTTP uçlarını kapsar: giriş/JWT,
 | [server/src/utils/ids.js](../../server/src/utils/ids.js) | İstekten gelen kimlik değerlerini güvenli ayrıştırma |
 | [server/src/utils/async_errors.js](../../server/src/utils/async_errors.js) | Express 4 async hata yaması (reddedilen promise -> next(err)) |
 
-## Bu bölümdeki girişler (82)
+## Bu bölümdeki girişler (83)
 
 - [sunucu-giris-401](#sunucu-giris-401) — Doğru parolaya rağmen giriş "Giris bilgileri hatali." (401) veriyor
 - [sunucu-giris-hesap-kilitli-429](#sunucu-giris-hesap-kilitli-429) — Giriş "Çok fazla hatalı giriş denemesi. Lütfen N dakika sonra tekrar deneyin ya da "Şifremi unuttum" ile şifrenizi sıfırlayın." (429, LOGIN_LOCKED) veriyor
@@ -137,6 +140,7 @@ Bu bölüm Express sunucusunun (server/src) HTTP uçlarını kapsar: giriş/JWT,
 - [sunucu-admin-ota-tetikleme-hata](#sunucu-admin-ota-tetikleme-hata) — Süper kullanıcı panelinden "OTA güncelleme denetimi" gönderilemiyor: 503 "MQTT baglantisi hazir degil.", 500 "OTA komutu gonderilemedi." ya da failed listesi dolu
 - [sunucu-admin-cihaz-envanteri-hata](#sunucu-admin-cihaz-envanteri-hata) — Süper kullanıcı panelinde cihaz ekleme/düzenleme/silme hata veriyor: 409 "Bu cihazin unique id kayitli.", 404 "Kullanici/Site ID bulunamadi.", 503 "... MQTT broker senkronu basarisiz."
 - [sunucu-admin-cihaz-ariza-sahiplik](#sunucu-admin-cihaz-ariza-sahiplik) — Cihaz sahiplenilemiyor/atanamıyor çünkü "arızalı" ya da sahipli görünüyor; süper kullanıcı arıza durumunu kaldıramıyor ya da sahipliği sıfırlayamıyor
+- [sunucu-firmware-yukleme-imza](#sunucu-firmware-yukleme-imza) — Firmware yükleme ucu (POST /admin/firmware/<hedef>/releases) 400 FIRMWARE_SIGNATURE_* / FIRMWARE_ROLLBACK_*, 409 FIRMWARE_DOWNGRADE_REJECTED / FIRMWARE_VERSION_EXISTS, 413 ya da 503 OTA_KEY_NOT_CONFIGURED veriyor
 
 ## Girişler
 
@@ -416,7 +420,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 | [server/src/middlewares/auth_middleware.js:8](../../server/src/middlewares/auth_middleware.js#L8) | <code>function isTokenVerificationError(error) {</code> | DB kesintisi/yapılandırma hatası token hatası sayılmaz -> 401 değil next(error) -> 500 |
 | [server/src/middlewares/auth_middleware.js:59](../../server/src/middlewares/auth_middleware.js#L59) | <code>const result = await pool.query(</code> | Her istekte users sorgusu: veritabanı yoksa tüm korumalı uçlar hata verir |
 | [server/src/middlewares/error_handler.js:119](../../server/src/middlewares/error_handler.js#L119) | <code>export function createErrorHandler({ logger = console } = {}) {</code> | Global hata yakalayıcı: 5xx'te genel mesaj + errorId, ayrıntı yalnız günlükte |
-| [server/src/routes/firmware_routes.js:95](../../server/src/routes/firmware_routes.js#L95) | <code>firmwareRouter.get('/health', async (_req, res) =&gt; {</code> | /health veritabanı bağlantısını denetler (kopuksa 500 database: disconnected) |
+| [server/src/routes/firmware_routes.js:123](../../server/src/routes/firmware_routes.js#L123) | <code>firmwareRouter.get('/health', async (_req, res) =&gt; {</code> | /health veritabanı bağlantısını denetler (kopuksa 500 database: disconnected) |
 
 **Olası nedenler**
 - PostgreSQL kapsayıcısı (site_kapi_kontrol_postgres) durdu/yanıt vermiyor ya da bağlantı havuzu doldu
@@ -563,7 +567,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 100 --nostrea
 | [server/src/services/membership_service.js:139](../../server/src/services/membership_service.js#L139) | <code>function describeMailError(error) {</code> | Günlüğe giden alanlar: code (ETIMEDOUT, EAUTH...), responseCode (535, 550...), command |
 | [server/src/mailer.js:88](../../server/src/mailer.js#L88) | <code>export async function sendIndividualVerificationEmail({</code> | Bireysel kayıt kod e-postası: konu "Site ve Toplu Yaşam Yönetim Sistemi - E-posta doğrulama kodunuz" |
 | [server/src/mailer.js:27](../../server/src/mailer.js#L27) | <code>connectionTimeout: 8_000,</code> | SMTP zaman aşımları: ad çözümleme 5 sn, bağlantı 8 sn, karşılama 8 sn, soket 20 sn |
-| [server/src/config/env.js:284](../../server/src/config/env.js#L284) | <code>warnings.push(`SMTP ayarlari eksik: ${missingSmtp.join(', ')}; e-posta gonderilemez.`);</code> | Açılışta SMTP_HOST/SMTP_USER/SMTP_PASSWORD eksikse uyarı yazılır |
+| [server/src/config/env.js:285](../../server/src/config/env.js#L285) | <code>warnings.push(`SMTP ayarlari eksik: ${missingSmtp.join(', ')}; e-posta gonderilemez.`);</code> | Açılışta SMTP_HOST/SMTP_USER/SMTP_PASSWORD eksikse uyarı yazılır |
 
 **Olası nedenler**
 - SMTP kimlik doğrulama hatası (EAUTH, 535) ya da parola değişmiş
@@ -885,7 +889,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | [server/src/mailer.js:3](../../server/src/mailer.js#L3) | <code>function requiredEnv(name) {</code> | SMTP_HOST/SMTP_USER/SMTP_PASSWORD eksikse "<AD> env degiskeni eksik." hatası fırlatır |
 | [server/src/mailer.js:11](../../server/src/mailer.js#L11) | <code>function createTransporter() {</code> | Port 465 ise secure, aksi halde STARTTLS zorunlu (requireTLS); zaman aşımları sınırlı |
 | [server/src/mailer.js:13](../../server/src/mailer.js#L13) | <code>const port = Number(process.env.SMTP_PORT &#124;&#124; 587);</code> | Varsayılan port 587 |
-| [server/src/config/env.js:284](../../server/src/config/env.js#L284) | <code>warnings.push(`SMTP ayarlari eksik: ${missingSmtp.join(', ')}; e-posta gonderilemez.`);</code> | Açılış uyarısı: eksik SMTP değişkenleri listelenir |
+| [server/src/config/env.js:285](../../server/src/config/env.js#L285) | <code>warnings.push(`SMTP ayarlari eksik: ${missingSmtp.join(', ')}; e-posta gonderilemez.`);</code> | Açılış uyarısı: eksik SMTP değişkenleri listelenir |
 
 **Olası nedenler**
 - .env içinde SMTP_HOST / SMTP_USER / SMTP_PASSWORD (ve SMTP_FROM) eksik ya da yanlış
@@ -998,7 +1002,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | [server/src/routes/app_doors_routes.js:64](../../server/src/routes/app_doors_routes.js#L64) | <code>if (error?.code === 'MQTT_BRIDGE_NOT_CONNECTED') {</code> | Sunucunun MQTT köprüsü brokera bağlı değilse 503 |
 | [server/src/routes/app_doors_routes.js:191](../../server/src/routes/app_doors_routes.js#L191) | <code>await publishDoorPulse({</code> | Komut MQTT ile yayınlanır (publishDoorPulse mqtt_bridge.js içindedir); başarılıysa 202 döner |
 | [server/src/routes/app_doors_routes.js:121](../../server/src/routes/app_doors_routes.js#L121) | <code>appDoorsRouter.get('/app/doors/:id/status', authRequired, async (req, res) =&gt; {</code> | Cihaz çevrimiçi/IP/yerel kontrol durumu bu uçtan okunur |
-| [server/src/routes/firmware_routes.js:95](../../server/src/routes/firmware_routes.js#L95) | <code>firmwareRouter.get('/health', async (_req, res) =&gt; {</code> | /health yanıtındaki mqtt alanı köprü durumunu gösterir |
+| [server/src/routes/firmware_routes.js:123](../../server/src/routes/firmware_routes.js#L123) | <code>firmwareRouter.get('/health', async (_req, res) =&gt; {</code> | /health yanıtındaki mqtt alanı köprü durumunu gösterir |
 
 **Olası nedenler**
 - Cihaz Wi-Fi/MQTT'ye bağlı değil (elektrik, internet, router) ya da yeniden başlıyor
@@ -2095,7 +2099,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 | [server/src/config/cors.js:4](../../server/src/config/cors.js#L4) | <code>export function normalizeOrigin(value) {</code> | Kaynak biçimi: şema+alan adı+port; "*" ve "null" kabul edilmez; şemasız değer https:// varsayılır |
 | [server/src/config/cors.js:53](../../server/src/config/cors.js#L53) | <code>export function isOriginAllowed(origin, allowlist) {</code> | localhost / 127.0.0.1 her zaman izinli; diğerleri listede olmalı |
 | [server/src/config/cors.js:65](../../server/src/config/cors.js#L65) | <code>export function createCorsOptionsDelegate(allowlist) {</code> | Listede olmayan Origin için hiçbir CORS başlığı eklenmez; listedekine credentials+Retry-After açığa çıkarılır |
-| [server/src/config/env.js:331](../../server/src/config/env.js#L331) | <code>warnings.push('CORS allowlist bos (CORS_ORIGINS/PUBLIC_APP_URL/PUBLIC_BASE_URL); tarayici…</code> | Hiçbiri tanımlı değilse açılışta uyarı yazılır |
+| [server/src/config/env.js:332](../../server/src/config/env.js#L332) | <code>warnings.push('CORS allowlist bos (CORS_ORIGINS/PUBLIC_APP_URL/PUBLIC_BASE_URL); tarayici…</code> | Hiçbiri tanımlı değilse açılışta uyarı yazılır |
 
 **Olası nedenler**
 - Web uygulamasının yayın adresi CORS_ORIGINS/PUBLIC_APP_URL/PUBLIC_BASE_URL içinde yok (.env değişikliği sonrası PM2 yeniden başlatma gerekir)
@@ -2211,17 +2215,19 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 50 --nostream
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/firmware_routes.js:111](../../server/src/routes/firmware_routes.js#L111) | <code>firmwareRouter.get('/firmware/:target/manifest.json', async (req, res) =&gt; {</code> | Manifest ucu: hedef doğrulama, kayıtlı cihaz denetimi, güncelleme kararı |
-| [server/src/routes/firmware_routes.js:143](../../server/src/routes/firmware_routes.js#L143) | <code>code: 'FIRMWARE_TARGET_MISMATCH',</code> | Cihazın KENDİ bildirdiği donanım hedefi klasörle çelişirse 403 (yalnız DB hardware_type çelişirse kilitlenmez, uyarı yazılır) |
-| [server/src/routes/firmware_routes.js:176](../../server/src/routes/firmware_routes.js#L176) | <code>const blockedByUid = allowedUids.length &gt; 0 &amp;&amp; !allowedUids.includes(uid);</code> | manifest.allowed_uids doluysa yalnız o UID'ler güncelleme alır |
-| [server/src/routes/firmware_routes.js:193](../../server/src/routes/firmware_routes.js#L193) | <code>(!currentVersion &#124;&#124; compareVersionParts(version, currentVersion) &gt; 0);</code> | Yalnız manifest sürümü cihazınkinden YÜKSEKSE güncelleme sunulur |
-| [server/src/routes/firmware_routes.js:127](../../server/src/routes/firmware_routes.js#L127) | <code>return res.status(503).json({ error: 'Cihaz dogrulamasi gecici olarak yapilamadi.' });</code> | UID kayıt sorgusu (DB) başarısızsa 503; cihaz bir sonraki aralıkta tekrar dener |
-| [server/src/services/firmware_manifest_service.js:50](../../server/src/services/firmware_manifest_service.js#L50) | <code>export function checkDeviceFirmwareTarget({ folderTarget, hardwareType, reportedTarget = …</code> | Cihaz donanım hedefi ile klasör hedefi karşılaştırması |
-| [server/src/services/firmware_manifest_service.js:29](../../server/src/services/firmware_manifest_service.js#L29) | <code>export function resolveManifestTarget(manifest, folderTarget) {</code> | Manifest içindeki target klasörle uyuşmuyorsa yayın durdurulur |
+| [server/src/routes/firmware_routes.js:141](../../server/src/routes/firmware_routes.js#L141) | <code>firmwareRouter.get('/firmware/:target/manifest.json', async (req, res) =&gt; {</code> | Manifest ucu: hedef doğrulama, kayıtlı cihaz denetimi, güncelleme kararı |
+| [server/src/routes/firmware_routes.js:173](../../server/src/routes/firmware_routes.js#L173) | <code>code: 'FIRMWARE_TARGET_MISMATCH',</code> | Cihazın KENDİ bildirdiği donanım hedefi klasörle çelişirse 403 (yalnız DB hardware_type çelişirse kilitlenmez, uyarı yazılır) |
+| [server/src/routes/firmware_routes.js:206](../../server/src/routes/firmware_routes.js#L206) | <code>const blockedByUid = allowedUids.length &gt; 0 &amp;&amp; !allowedUids.includes(uid);</code> | manifest.allowed_uids doluysa yalnız o UID'ler güncelleme alır |
+| [server/src/routes/firmware_routes.js:249](../../server/src/routes/firmware_routes.js#L249) | <code>(!currentVersion &#124;&#124; (compareVersionParts(version, currentVersion) &gt; 0 &amp;&amp; !rollbackOnlyBlo…</code> | Yalnız manifest sürümü cihazınkinden YÜKSEKSE güncelleme sunulur (rollback_max'li imzalı yayın yükseltme olarak sunulmaz; düşürme yalnız imzalı yetkiyle: offersDowngrade) |
+| [server/src/routes/firmware_routes.js:218](../../server/src/routes/firmware_routes.js#L218) | <code>const signaturePolicy = evaluateManifestSignatureOnDisk({</code> | İmzalı manifestin imzası her istekte sunucuda da doğrulanır; doğrulanamayan yayın SUNULMAZ ("[OTA] Yayin sunulmuyor"), OTA_SERVE_UNSIGNED=0 iken imzasız yayın da |
+| [server/src/routes/firmware_routes.js:157](../../server/src/routes/firmware_routes.js#L157) | <code>return res.status(503).json({ error: 'Cihaz dogrulamasi gecici olarak yapilamadi.' });</code> | UID kayıt sorgusu (DB) başarısızsa 503; cihaz bir sonraki aralıkta tekrar dener |
+| [server/src/services/firmware_manifest_service.js:51](../../server/src/services/firmware_manifest_service.js#L51) | <code>export function checkDeviceFirmwareTarget({ folderTarget, hardwareType, reportedTarget = …</code> | Cihaz donanım hedefi ile klasör hedefi karşılaştırması |
+| [server/src/services/firmware_manifest_service.js:30](../../server/src/services/firmware_manifest_service.js#L30) | <code>export function resolveManifestTarget(manifest, folderTarget) {</code> | Manifest içindeki target klasörle uyuşmuyorsa yayın durdurulur |
 
 **Olası nedenler**
 - Hedef klasörde manifest.json yok ya da enabled=false (OTA kapalı)
-- Manifest sürümü cihaz sürümünden yüksek değil (güncelleme yok)
+- Manifest sürümü cihaz sürümünden yüksek değil (güncelleme yok); yayın rollback_max'li bir düşürme paketiyse yalnız sürümü rollback_max içinde kalan ve yayından yeni cihazlara teklif edilir
+- İmzalı yayının imzası sunucuda doğrulanamıyor (OTA_PUBLIC_KEY farklı/bozuk manifest) ya da OTA_SERVE_UNSIGNED=0 iken yayın imzasız ("Imzasiz paket sunulmuyor")
 - Cihaz allowed_uids grubunda değil ya da usb_required=true (USB ile tam yükleme gerekir)
 - Manifest hedefi klasörle uyuşmuyor ("[OTA] Manifest hedefi klasorle uyusmuyor")
 - Cihaz donanım hedefi (c3/wroom) yanlış klasörü sorguluyor
@@ -2234,6 +2240,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 50 --nostream
 **Günlükte aranacak ifadeler**
 - `[OTA] Manifest hedefi klasorle uyusmuyor`
 - `[OTA] Kayitli hardware_type`
+- `[OTA] Yayin sunulmuyor`
 
 **Komutlar**
 ```bash
@@ -2250,9 +2257,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/firmware_routes.js:226](../../server/src/routes/firmware_routes.js#L226) | <code>firmwareRouter.get('/firmware/:target/:file', (req, res) =&gt; {</code> | Dosya sunumu: hedef/dosya adı doğrulaması, kök dizin dışına çıkış engeli |
-| [server/src/routes/firmware_routes.js:254](../../server/src/routes/firmware_routes.js#L254) | <code>headers['x-MD5'] = md5;</code> | Manifest'teki dosya adı eşleşir ve md5 geçerliyse x-MD5 başlığı eklenir; cihaz bunu doğrular |
-| [server/src/routes/firmware_routes.js:240](../../server/src/routes/firmware_routes.js#L240) | <code>return res.status(404).json({ error: 'Firmware dosyasi bulunamadi.' });</code> | Manifest'in gösterdiği dosya sunucuda yok (yükleme eksik) |
+| [server/src/routes/firmware_routes.js:323](../../server/src/routes/firmware_routes.js#L323) | <code>firmwareRouter.get('/firmware/:target/:file', (req, res) =&gt; {</code> | Dosya sunumu: hedef/dosya adı doğrulaması, kök dizin dışına çıkış engeli |
+| [server/src/routes/firmware_routes.js:361](../../server/src/routes/firmware_routes.js#L361) | <code>headers['x-MD5'] = md5;</code> | Manifest'teki dosya adı eşleşir ve md5 geçerliyse x-MD5 başlığı eklenir; cihaz bunu doğrular |
+| [server/src/routes/firmware_routes.js:340](../../server/src/routes/firmware_routes.js#L340) | <code>return res.status(404).json({ error: 'Firmware dosyasi bulunamadi.' });</code> | Manifest'in gösterdiği dosya sunucuda yok (yükleme eksik) |
 | [server/src/utils/helpers.js:31](../../server/src/utils/helpers.js#L31) | <code>export function safeFirmwareFile(value) {</code> | Dosya adı kısıtı: yalnız harf/rakam/_/./- içeren ve .bin ile biten ad kabul edilir |
 | [server/src/utils/helpers.js:26](../../server/src/utils/helpers.js#L26) | <code>export function safeFirmwareTarget(value) {</code> | Hedef adı kısıtı |
 
@@ -2285,7 +2292,7 @@ curl -sI "https://api.gudeteknoloji.com.tr/firmware/esp32_c3/firmware.bin"
 | [server/src/middlewares/company_auth.js:46](../../server/src/middlewares/company_auth.js#L46) | <code>return function requireCompanyAccess(req, res, next) {</code> | Önce anahtar, sonra Bearer + süper kullanıcı JWT; ikisi de yoksa 401 |
 | [server/src/middlewares/company_auth.js:38](../../server/src/middlewares/company_auth.js#L38) | <code>audit('company_access_denied', {</code> | Her red denetim günlüğüne (company_access_denied) yazılır |
 | [server/src/routes/company_routes.js:274](../../server/src/routes/company_routes.js#L274) | <code>companyRouter.use(['/qrcodes', '/api/company'], companyAccessLimiter, requireCompanyAcces…</code> | Önce hız sınırı (IP başına 15 dk'da 300), sonra yetki |
-| [server/src/config/env.js:325](../../server/src/config/env.js#L325) | <code>warnings.push('COMPANY_API_KEY tanimli degil; /api/company/* yalnizca super_user JWT ile …</code> | Anahtar tanımlı değilse açılışta uyarı |
+| [server/src/config/env.js:326](../../server/src/config/env.js#L326) | <code>warnings.push('COMPANY_API_KEY tanimli degil; /api/company/* yalnizca super_user JWT ile …</code> | Anahtar tanımlı değilse açılışta uyarı |
 
 **Olası nedenler**
 - Araçtaki anahtar sunucudaki COMPANY_API_KEY ile aynı değil ya da başlık hiç gönderilmiyor (araç tarafı: arac-anahtar-tanimli-degil / arac-http-anahtar-gonderilmiyor)
@@ -2534,4 +2541,48 @@ curl -s https://api.gudeteknoloji.com.tr/health
 **İlgili testler:** [server/test/fix_sx1_device_hardware.test.js](../../server/test/fix_sx1_device_hardware.test.js), [server/test/devices_device_service.test.js](../../server/test/devices_device_service.test.js)
 
 **Bkz.:** [sunucu-cihaz-sahiplenme-hata](#sunucu-cihaz-sahiplenme-hata), [sunucu-kapi-cihaz-atama-403](#sunucu-kapi-cihaz-atama-403), [sunucu-yerel-token-rotasyonu](#sunucu-yerel-token-rotasyonu)
+
+<a id="sunucu-firmware-yukleme-imza"></a>
+### sunucu-firmware-yukleme-imza · Firmware yükleme ucu (POST /admin/firmware/<hedef>/releases) 400 FIRMWARE_SIGNATURE_* / FIRMWARE_ROLLBACK_*, 409 FIRMWARE_DOWNGRADE_REJECTED / FIRMWARE_VERSION_EXISTS, 413 ya da 503 OTA_KEY_NOT_CONFIGURED veriyor
+
+| Dosya:satır | Satırdaki kod | Ne işe yarar |
+| --- | --- | --- |
+| [server/src/routes/firmware_admin_routes.js:185](../../server/src/routes/firmware_admin_routes.js#L185) | <code>firmwareAdminRouter.post(</code> | Yükleme ucu: yalnız süper kullanıcı, adminSensitiveLimiter; gövde ham .bin, imza X-Ota-Signature başlığında |
+| [server/src/routes/firmware_admin_routes.js:122](../../server/src/routes/firmware_admin_routes.js#L122) | <code>throw fail(503, 'OTA_KEY_NOT_CONFIGURED', 'Sunucuda OTA imza anahtarı (OTA_PUBLIC_KEY) ta…</code> | Sunucuda OTA_PUBLIC_KEY yoksa imzalı yayın yapılamaz (503) |
+| [server/src/services/firmware_release_service.js:403](../../server/src/services/firmware_release_service.js#L403) | <code>function checkSignatureInput({ signatureInput, keyState, target, size, sha256, options })…</code> | .sig alanları paketle birebir aynı mı; rollback_max kuralları; Ed25519 doğrulaması (anahtar donusu için key_id) |
+| [server/src/services/firmware_release_service.js:478](../../server/src/services/firmware_release_service.js#L478) | <code>'FIRMWARE_SIGNATURE_INVALID',</code> | İmza OTA_PUBLIC_KEY ile ya da bu hedef/sürüm/boyut/SHA-256 ile eşleşmiyorsa 400 |
+| [server/src/services/firmware_release_service.js:543](../../server/src/services/firmware_release_service.js#L543) | <code>'FIRMWARE_DOWNGRADE_REJECTED',</code> | Canlı yayından DÜŞÜK sürüm allow_downgrade + gerekçe olmadan reddedilir (409) |
+| [server/src/services/firmware_release_service.js:551](../../server/src/services/firmware_release_service.js#L551) | <code>'FIRMWARE_ROLLBACK_NOT_DOWNGRADE',</code> | rollback_max (imzalı sürüm düşürme yetkisi) yalnız gerçek bir düşürmede anlamlıdır |
+| [server/src/services/ota_signature.js:79](../../server/src/services/ota_signature.js#L79) | <code>export function buildOtaSignedMessage({ format = OTA_PRIMARY_FORMAT, target, version, siz…</code> | İmzalanan ileti (KAPI-OTA-IMZA-V1 + target/version/size/sha256 [+ rollback_max]); araç ve cihazla BİREBİR aynı |
+| [server/src/services/ota_signature.js:241](../../server/src/services/ota_signature.js#L241) | <code>export function loadOtaPublicKey(env = process.env) {</code> | OTA_PUBLIC_KEY (PEM / 32 bayt hex-base64 / DER; en çok 4 anahtar); özel anahtar reddedilir |
+
+**Olası nedenler**
+- 400 FIRMWARE_SIGNATURE_REQUIRED/MALFORMED: X-Ota-Signature başlığı yok ya da .sig / çıplak imza biçimi bozuk (Windows'ta imza dosyasını metin düzenleyiciyle kaydetmek de bozar; base64'ünü ReadAllBytes ile alın)
+- 400 FIRMWARE_SIGNATURE_MISMATCH: .sig içindeki hedef/sürüm/boyut/SHA-256/rollback_max yüklenen paketle ya da sorgudaki değerlerle uyuşmuyor (paket imzadan sonra değişti, yanlış hedefe yüklendi)
+- 400 FIRMWARE_SIGNATURE_INVALID: imza sunucudaki OTA_PUBLIC_KEY ile eşleşmiyor (yanlış anahtar, eski anahtar) ya da imzalanan alanlar paketle uyuşmuyor; FIRMWARE_SIGNATURE_KEY_UNKNOWN: imzadaki key_id sunucuda tanımlı anahtarlar arasında yok
+- 400 FIRMWARE_TARGET_MISMATCH: .bin başka donanım hedefinin derlemesi (imaj başlığındaki yonga kimliği); FIRMWARE_ROLLBACK_*: rollback_max'lı imza allow_downgrade=1 olmadan / düşürme olmayan yüklemede / paket sürümünden büyük olmadan kullanıldı
+- 409 FIRMWARE_DOWNGRADE_REJECTED / FIRMWARE_VERSION_EXISTS: sürüm canlı yayından düşük ya da aynı numara farklı içerikle
+- 413 (nginx): /admin/firmware/ yolu için client_max_body_size düşük; FIRMWARE_TOO_LARGE: imaj OTA_MAX_FIRMWARE_BYTES (varsayılan 0x1E0000) üstünde
+- 503 OTA_KEY_NOT_CONFIGURED/OTA_KEY_INVALID: canlı .env'de OTA_PUBLIC_KEY yok ya da bozuk; FIRMWARE_AUDIT_UNAVAILABLE: sürüm düşürmenin denetim kaydı yazılamadı (canlı yayın değişmedi)
+
+**Adım adım kontrol**
+- Yanıt gövdesindeki code ve error metni nedeni söyler; docs/OTA_IMZA.md bölüm 9 tablosu her kodu açıklar
+- Aracın key_id değerini (anahtar-uret / imzala çıktısı) sunucu günlüğündeki "[OTA] Imza dogrulama anahtari yuklendi (kimlik: ...)" satırıyla karşılaştırın
+- Yüklemeden önce yerelde: node tools/ota_imza/ota_imza.mjs dogrula <firmware.bin> --genel <genel.pem> (SONUC: GECTI olmalı)
+- GET /admin/firmware/<hedef>/releases canlı yayını ve diskteki imzalı kayıtları gösterir (imza değeri dönmez)
+
+**Günlükte aranacak ifadeler**
+- `Imza dogrulama anahtari yuklendi`
+- `[OTA] Imza dogrulama anahtari`
+- `OTA_PUBLIC_KEY kullanilamiyor`
+
+**Komutlar**
+```bash
+ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostream | grep -a '\[OTA\]'"
+curl -s "https://api.gudeteknoloji.com.tr/firmware/esp32-c3/manifest.json?current_version=0.0.0"
+```
+
+**İlgili testler:** [server/test/ota_signature.test.js](../../server/test/ota_signature.test.js), [server/test/ota_release_service.test.js](../../server/test/ota_release_service.test.js), [server/test/ota_firmware_routes.test.js](../../server/test/ota_firmware_routes.test.js)
+
+**Bkz.:** [sunucu-firmware-manifest-ota](#sunucu-firmware-manifest-ota), [arac-ota-imza-araci](50-arac-test-ve-surec.md#arac-ota-imza-araci), [cihaz-ota-imza-reddi](40-cihaz-yazilimi.md#cihaz-ota-imza-reddi)
 

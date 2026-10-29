@@ -2,7 +2,7 @@
 
 > Kullanıcıya/istemciye görünen metinleri üretildikleri `dosya:satır` ile eşler. `Ctrl+F` ile ekranda gördüğünüz mesajın bir parçasını arayın. Koddan otomatik üretilir: `node tools/klavuz/build.mjs`. Ana sayfa: [ARIZA_KLAVUZU.md](ARIZA_KLAVUZU.md) · [İndeks](ARIZA_KLAVUZU_INDEKS.md).
 
-## Sunucu mesajları (888)
+## Sunucu mesajları (894)
 
 Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`). Uygulama bu metinleri HTTP yanıt gövdesinde (`error` alanı) alır.
 
@@ -111,7 +111,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Bu gecis linkinin suresi dolmus. | [server/src/utils/guest_pass_utils.js:123](../server/src/utils/guest_pass_utils.js#L123) |
 | Bu gecisi olusturan kullanicinin kapiya yetkisi kalmamis. | [server/src/routes/guest_passes_routes.js:333](../server/src/routes/guest_passes_routes.js#L333) |
 | Bu gecisi olusturan kullanicinin yetkisi kalmamis. | [server/src/routes/guest_passes_routes.js:320](../server/src/routes/guest_passes_routes.js#L320) |
-| Bu hedef icin OTA yayini yok. | [server/src/routes/firmware_routes.js:165](../server/src/routes/firmware_routes.js#L165) |
+| Bu hedef icin OTA yayini yok. | [server/src/routes/firmware_routes.js:195](../server/src/routes/firmware_routes.js#L195) |
 | Bu hesap kullanıcının isteğiyle silinmiş (kimliksizleştirilmiş); düzenlenemez veya etkinleştirilemez. | [server/src/routes/admin_routes.js:185](../server/src/routes/admin_routes.js#L185) |
 | Bu hesap kullanıcının isteğiyle silinmiş (kimliksizleştirilmiş); kayıtları yasal saklama için korunur ve kalıcı silinemez. | [server/src/routes/admin_routes.js:564](../server/src/routes/admin_routes.js#L564) |
 | Bu hesap kullanıcının isteğiyle silinmiş (kimliksizleştirilmiş); kayıtları yasal saklama için korunur ve kalıcı silinemez. | [server/src/routes/admin_routes.js:660](../server/src/routes/admin_routes.js#L660) |
@@ -207,8 +207,8 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Cihaz bulunamadi. | [server/src/routes/manager_routes.js:1192](../server/src/routes/manager_routes.js#L1192) |
 | Cihaz bulunamadi. | [server/src/routes/manager_routes.js:1203](../server/src/routes/manager_routes.js#L1203) |
 | Cihaz bulunamadi. | [server/src/routes/manager_routes.js:1230](../server/src/routes/manager_routes.js#L1230) |
-| Cihaz dogrulamasi gecici olarak yapilamadi. | [server/src/routes/firmware_routes.js:127](../server/src/routes/firmware_routes.js#L127) |
-| Cihaz donanimi bu firmware hedefiyle uyusmuyor. | [server/src/routes/firmware_routes.js:144](../server/src/routes/firmware_routes.js#L144) |
+| Cihaz dogrulamasi gecici olarak yapilamadi. | [server/src/routes/firmware_routes.js:157](../server/src/routes/firmware_routes.js#L157) |
+| Cihaz donanimi bu firmware hedefiyle uyusmuyor. | [server/src/routes/firmware_routes.js:174](../server/src/routes/firmware_routes.js#L174) |
 | Cihaz durumu okunamadi; biraz sonra tekrar deneyin. | [server/src/routes/company_routes.js:490](../server/src/routes/company_routes.js#L490) |
 | Cihaz ekranindaki guncel karekod henuz alinamadi. Birkac saniye sonra tekrar deneyin. | [server/src/routes/app_doors_routes.js:328](../server/src/routes/app_doors_routes.js#L328) |
 | Cihaz kaydedildi ama MQTT broker senkronu basarisiz. | [server/src/routes/admin_routes.js:1770](../server/src/routes/admin_routes.js#L1770) |
@@ -430,8 +430,8 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Enlem -90 ile 90 arasinda olmalidir. | [server/src/utils/site_rules.js:331](../server/src/utils/site_rules.js#L331) |
 | Etiketli cihazlar okunamadi. | [server/src/routes/company_routes.js:308](../server/src/routes/company_routes.js#L308) |
 | feature_* alanlari true/false olmali. | [server/src/routes/admin_routes.js:1195](../server/src/routes/admin_routes.js#L1195) |
-| Firmware dosyasi bulunamadi. | [server/src/routes/firmware_routes.js:240](../server/src/routes/firmware_routes.js#L240) |
-| Firmware manifest okunamadi. | [server/src/routes/firmware_routes.js:221](../server/src/routes/firmware_routes.js#L221) |
+| Firmware dosyasi bulunamadi. | [server/src/routes/firmware_routes.js:340](../server/src/routes/firmware_routes.js#L340) |
+| Firmware manifest okunamadi. | [server/src/routes/firmware_routes.js:318](../server/src/routes/firmware_routes.js#L318) |
 | Fotoğraf bulunamadı. | [server/src/modules/metering_field_routes.js:190](../server/src/modules/metering_field_routes.js#L190) |
 | full_name en az 3 karakter olmali. | [server/src/routes/admin_routes.js:402](../server/src/routes/admin_routes.js#L402) |
 | Gecerli bir kapi secin. | [server/src/utils/guest_pass_utils.js:43](../server/src/utils/guest_pass_utils.js#L43) |
@@ -464,9 +464,9 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Gecersiz dosya adi. | [server/src/routes/company_routes.js:280](../server/src/routes/company_routes.js#L280) |
 | Gecersiz dosya adi. | [server/src/routes/company_routes.js:284](../server/src/routes/company_routes.js#L284) |
 | Gecersiz dosya adi. | [server/src/routes/company_routes.js:359](../server/src/routes/company_routes.js#L359) |
-| Gecersiz firmware dosyasi. | [server/src/routes/firmware_routes.js:230](../server/src/routes/firmware_routes.js#L230) |
-| Gecersiz firmware hedefi. | [server/src/routes/firmware_routes.js:114](../server/src/routes/firmware_routes.js#L114) |
-| Gecersiz firmware yolu. | [server/src/routes/firmware_routes.js:237](../server/src/routes/firmware_routes.js#L237) |
+| Gecersiz firmware dosyasi. | [server/src/routes/firmware_routes.js:330](../server/src/routes/firmware_routes.js#L330) |
+| Gecersiz firmware hedefi. | [server/src/routes/firmware_routes.js:144](../server/src/routes/firmware_routes.js#L144) |
+| Gecersiz firmware yolu. | [server/src/routes/firmware_routes.js:337](../server/src/routes/firmware_routes.js#L337) |
 | Gecersiz gecis id. | [server/src/routes/guest_passes_routes.js:196](../server/src/routes/guest_passes_routes.js#L196) |
 | Gecersiz gecis kodu. | [server/src/routes/guest_passes_routes.js:224](../server/src/routes/guest_passes_routes.js#L224) |
 | Gecersiz gecis suresi. | [server/src/utils/guest_pass_utils.js:62](../server/src/utils/guest_pass_utils.js#L62) |
@@ -617,6 +617,9 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Hesabiniz pasif durumda. Yonetici ile iletisime gecin. | [server/src/modules/oauth_login.js:624](../server/src/modules/oauth_login.js#L624) |
 | Hesap aktif degil. | [server/src/middlewares/auth_middleware.js:151](../server/src/middlewares/auth_middleware.js#L151) |
 | Hesap aktif degil. | [server/src/routes/auth_routes.js:889](../server/src/routes/auth_routes.js#L889) |
+| Imza dosyasi bulunamadi. | [server/src/routes/firmware_routes.js:350](../server/src/routes/firmware_routes.js#L350) |
+| Imza dosyasi manifest/paketle uyusmuyor; yayin durduruldu. | [server/src/services/firmware_manifest_service.js:136](../server/src/services/firmware_manifest_service.js#L136) |
+| Imzasiz paket sunulmuyor; imzali surum yayinlanmali. | [server/src/services/firmware_manifest_service.js:147](../server/src/services/firmware_manifest_service.js#L147) |
 | Islem basarisiz. | [server/src/utils/guest_pass_utils.js:242](../server/src/utils/guest_pass_utils.js#L242) |
 | Istek govdesi cok buyuk. | [server/src/middlewares/error_handler.js:24](../server/src/middlewares/error_handler.js#L24) |
 | Istek govdesi cok buyuk. | [server/src/routes/door_log_routes.js:223](../server/src/routes/door_log_routes.js#L223) |
@@ -733,6 +736,8 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Lütfen 6 haneli silme doğrulama kodunu giriniz. | [server/src/routes/admin_routes.js:1312](../server/src/routes/admin_routes.js#L1312) |
 | Mail gonderimi icin daire sakini e-postasi gerekli. | [server/src/routes/admin_routes.js:1460](../server/src/routes/admin_routes.js#L1460) |
 | Mail gonderimi icin daire sakini e-postasi gerekli. | [server/src/routes/manager_routes.js:803](../server/src/routes/manager_routes.js#L803) |
+| Manifestteki imza bozuk; yayin durduruldu. | [server/src/services/firmware_manifest_service.js:116](../server/src/services/firmware_manifest_service.js#L116) |
+| Manifestteki imza dogrulanamadi; yayin durduruldu. | [server/src/services/firmware_manifest_service.js:176](../server/src/services/firmware_manifest_service.js#L176) |
 | MERSİS numarası 16 haneli olmalıdır. | [server/src/modules/platform_config_service.js:165](../server/src/modules/platform_config_service.js#L165) |
 | message ya da stack gereklidir. | [server/src/modules/client_error_service.js:119](../server/src/modules/client_error_service.js#L119) |
 | metin olmalıdır. | [server/src/modules/platform_config_service.js:140](../server/src/modules/platform_config_service.js#L140) |
@@ -752,6 +757,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Oturum bulunamadı veya süresi doldu. | [server/src/modules/oauth_login.js:1161](../server/src/modules/oauth_login.js#L1161) |
 | Oturum gecersiz. Lutfen tekrar giris yapin. | [server/src/middlewares/auth_middleware.js:119](../server/src/middlewares/auth_middleware.js#L119) |
 | Oturum süresi dolmuş veya geçersiz. Lütfen uygulamadan tekrar deneyin. | [server/src/modules/oauth_login.js:1114](../server/src/modules/oauth_login.js#L1114) |
+| Paketin .sig dosyasi bozuk; yayin durduruldu. | [server/src/services/firmware_manifest_service.js:127](../server/src/services/firmware_manifest_service.js#L127) |
 | Parolayi degistirmek icin mevcut parolanizi girmelisiniz. | [server/src/routes/auth_routes.js:981](../server/src/routes/auth_routes.js#L981) |
 | PDF çok büyük. En çok 5 MB yüklenebilir. | [server/src/modules/bank_import_routes.js:54](../server/src/modules/bank_import_routes.js#L54) |
 | platform_rules: bilinmeyen kural ${String(key).slice(0, 80)} | [server/src/modules/platform_rules.js:397](../server/src/modules/platform_rules.js#L397) |
@@ -776,7 +782,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Seçilen alanda aktif sakin bulunamadı. | [server/src/services/membership_service.js:2802](../server/src/services/membership_service.js#L2802) |
 | Seçilen daire belirtilen bloğa ait değil. | [server/src/services/membership_service.js:1068](../server/src/services/membership_service.js#L1068) |
 | Seçilen daire bulunamadı veya bu siteye ait değil. | [server/src/services/membership_service.js:1064](../server/src/services/membership_service.js#L1064) |
-| SERVER_SKIP_START=1 production ortaminda YOK SAYILDI (yalniz testler icindir; .env dosyasindan kaldirin). Sunucu normal baslatiliyor. | [server/src/config/env.js:358](../server/src/config/env.js#L358) |
+| SERVER_SKIP_START=1 production ortaminda YOK SAYILDI (yalniz testler icindir; .env dosyasindan kaldirin). Sunucu normal baslatiliyor. | [server/src/config/env.js:362](../server/src/config/env.js#L362) |
 | Sıfırlama anahtarı (token) eksik. | [server/src/routes/auth_routes.js:485](../server/src/routes/auth_routes.js#L485) |
 | Sifre 4 haneli sayisal olmali. | [server/src/services/apartment_service.js:299](../server/src/services/apartment_service.js#L299) |
 | Sifre en fazla ${MAX_PASSWORD_LENGTH} karakter olabilir. | [server/src/routes/auth_routes.js:960](../server/src/routes/auth_routes.js#L960) |

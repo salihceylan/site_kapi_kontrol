@@ -1,6 +1,15 @@
 ESP32 OTA GUNCELLEME AKISI
 ==========================
 
+IMZALI YAYIN (Dalga F, 2026-10-29): Yeni firmware paketleri proje sahibinin OZEL anahtariyla
+imzalanir (tools/ota_imza) ve YALNIZ sunucunun yukleme ucuyla yayinlanir
+(POST /admin/firmware/<hedef>/releases, yalniz super kullanici). Kopru surumden (C3 4.4.0 /
+WROOM 5.3.0) itibaren cihaz imzasi dogrulanmamis hicbir paketi kurmaz. Tum akis, anahtar
+saklama, kopru plani ve geri alma: docs/OTA_IMZA.md ; cihaz sozlesmesi: docs/OTA_IMZA_CIHAZ.md.
+Bu dosyadaki "dosyayi klasore kopyala + manifest.json'u elle yaz" yontemi YALNIZ kopru oncesi
+eski (imzasiz) akis icindir; kopru sahaya yayilinca OTA_SERVE_UNSIGNED=0 ile kapatilir. Asagidaki
+sha256 / artan surum / rollback / allowed_uids kurallari imzali akista da AYNEN gecerlidir.
+
 Karar verilen model:
 - Cihaz acilista WiFi oturduktan sonra yaklasik 90 saniye + cihaz bazli rastgele
   gecikme ile bir kez guncelleme kontrol eder.

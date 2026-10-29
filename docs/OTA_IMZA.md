@@ -6,7 +6,7 @@ testlerle sınandı; canlıya ALINMADI, hiçbir karta YAZILMADI, üretim anahtar
 
 Kapsam: iki OTA hedefinin (`esp32-c3`, `esp32-wroom`) cihaz yazılımı güncellemelerinin imzalanması. Mevcut OTA akışı (SHA-256, artan sürüm, geri alma,
 `allowed_uids`) `OTA_KURULUM.txt`'de anlatılır; imza onun ÜSTÜNE eklenen ek bir katmandır, hiçbirini kaldırmaz. Plan:
-`docs/superpowers/plans/2026-10-28-karsilastirma-guclendirme.md` (Dalga F). Saha denemeleri: `SAHA_KONTROL_LISTESI.md` bölüm 122. Kullanıcıya düşen işler:
+`docs/superpowers/plans/2026-10-28-karsilastirma-guclendirme.md` (Dalga F). Saha denemeleri: `SAHA_KONTROL_LISTESI.md` bölüm 135. Kullanıcıya düşen işler:
 `BEKLEYEN_ISLER.md` bölüm 7. Bu belge bütünü anlatır; ayrıntı belgeleri: araç `tools/ota_imza/README.md`, sunucu yükleme ucu
 `server/src/routes/firmware_admin_routes.js` (üst açıklaması), cihaz tarafı `docs/OTA_IMZA_CIHAZ.md`.
 
@@ -135,7 +135,7 @@ sunucudan gelir. Bundan çıkan güvenceler:
 | Eski imzalı paketi KENDİ sürüm numarasıyla sunmak | İmza geçerlidir; cihaz varsayılan olarak yalnız ARTAN sürümü kurar (izinli düşürme: S5), yani yalnız o sürümden daha eski çalışan cihazlar etkilenir (bölüm 10) |
 
 Bu satırların cihaz düzeyindeki doğrulaması firmware ana makine testleriyle ve aracın test vektörleriyle yapılır. Saha denemesinde sunucu kendi doğrulamasını yaptığı için
-imzası doğrulanamayan manifest cihaza hiç sunulmaz (bölüm 5, S3); cihaz düzeyindeki ret sahada yalnız imzasız paketle görülebilir (SAHA 122.5).
+imzası doğrulanamayan manifest cihaza hiç sunulmaz (bölüm 5, S3); cihaz düzeyindeki ret sahada yalnız imzasız paketle görülebilir (SAHA 135.5).
 
 ---
 
@@ -164,7 +164,7 @@ Remove-Item Env:OTA_IMZA_PAROLA
 
 - **Çıktı:** genel anahtar (PEM, hex ve firmware için C++ tanımı) ve `key_id`. Bunları not alın (3.6). Genel anahtarın C++ tanımı firmware'in OTA imza başlığına
   işlenir (`cihaz_kontrol/include/`); `.pub.pem` dosyası depoya girmez (`.gitignore` `*.pem` kuralı) ve girmesi gerekmez.
-- **Hemen sonra:** yedekleri alın (3.5) ve yedekten deneme imzası doğrulayın (SAHA 122.1).
+- **Hemen sonra:** yedekleri alın (3.5) ve yedekten deneme imzası doğrulayın (SAHA 135.1).
 - **Test anahtarları üretim anahtarından AYRIDIR:** araç testleri her koşuda atılabilir anahtar üretir; hiçbir test anahtarının genel kısmı üretim firmware'ine girmez.
 
 ### 3.2 Saklama [kullanıcıda]
@@ -284,7 +284,7 @@ Yayın kuralları:
 - **OTA tetikleme:** tek cihaz için kartı yeniden başlatın (açılıştan yaklaşık 90–150 sn sonra kendiliğinden kontrol eder) ya da sunucuda `server/` klasöründe
   `node scripts/trigger_ota.js <UID>` (MQTT ortam değişkenleri `.env`'de; komut `retry` taşımaz). Şirket Paneli > Kayıtlı Cihazlar > "Tümüne OTA Kontrolü" BÜTÜN kayıtlı
   cihazlara komut gönderir (`retry` ile); `allowed_uids` dışındaki cihazlar paketi almaz.
-- **Deneme paketi kuralı:** olumsuz denemeler (imzasız, yanlış anahtarlı, düşük sürümlü paket; SAHA 122) ASLA `allowed_uids` boş bırakılarak yayınlanmaz. İmzayı henüz bilmeyen
+- **Deneme paketi kuralı:** olumsuz denemeler (imzasız, yanlış anahtarlı, düşük sürümlü paket; SAHA 135) ASLA `allowed_uids` boş bırakılarak yayınlanmaz. İmzayı henüz bilmeyen
   sahadaki eski cihazlar SHA-256 tuttuğu için bu paketi kurar. Deneme paketi her zaman ÇALIŞAN, zararsız bir derleme olmalı; `allowed_uids` yalnız TEST kartının UID'sini
   içermeli. Sunucu korumasını aşan denemelerde (paketi elle klasöre koymak) önce mevcut `manifest.json`'un yedeğini alın, iş bitince geri koyun.
 - **Her yükleme canlı yayını değiştirir:** hedef başına tek `manifest.json` vardır; yükleme ucuyla gönderilen her paket, `allowed_uids` yalnız kimin alacağını sınırlasa da, o hedefin
@@ -305,7 +305,7 @@ açıktır.
 | S2 | Sunucu yazar | Dosyalar `firmware-v<sürüm>.bin` (içeriği bir daha DEĞİŞMEZ), `firmware-v<sürüm>.bin.sig` ve `firmware-v<sürüm>.release.json` olarak yazılır; `manifest.json` EN SON ve atomik değişir (cihaz yarım yayın görmez). Elle manifest düzenlemek gerekmez |
 | S3 | İmza bilgisi yansıtılır | Manifest yanıtına `signature` (128 hane hex), `signature_alg`, `signature_format`, `signature_key_id` ve `signature_url` (`<imaj>.bin.sig`) eklenir; imzayı bilmeyen eski firmware ek alanları yok sayar (geriye uyum). Elle bozulmuş ya da doğrulanamayan imzalı manifest cihazlara SUNULMAZ |
 | S4 | Düşürme koruması | Yayındaki sürümden DÜŞÜK sürüm reddedilir (409 `FIRMWARE_DOWNGRADE_REJECTED`); aynı sürüm numarası farklı içerikle reddedilir (409 `FIRMWARE_VERSION_EXISTS`) |
-| S5 | İzinli düşürme | `allow_downgrade=1` ve `downgrade_reason` (10-300 karakter) ile yapılır; platform denetim kaydı ÖNCE yazılır, yazılamazsa işlem yapılmaz (503 `FIRMWARE_AUDIT_UNAVAILABLE`). Bu tek başına yalnız "canlı sürüm artık budur" kararıdır: sürümü paketin altındaki cihazlar bunu normal yükseltme olarak alır, daha yeni sürümdekilere DÜŞÜRME SUNULMAZ (cihaz imzasız yetkiyle düşürmeyi kurmaz). Düşürmenin cihaza yansıması ayrıca ve yalnız İMZAYLA yetkilendirilir: paket `imzala --rollback-max <sürüm>` ile atılmış olmalıdır; bu durumda sunucu yalnız sürümü `rollback_max`'a kadar olan (ve paketten yeni) cihazlara `allow_downgrade: true` + `rollback_max` ile teklif eder; `rollback_max` taşıyan imza yalnız `allow_downgrade=1` ile ve gerçekten düşürme olan yüklemede kabul edilir (400 `FIRMWARE_ROLLBACK_NOT_ALLOWED` / `FIRMWARE_ROLLBACK_NOT_DOWNGRADE`; `rollback_max` paket sürümünden büyük olmalı: `FIRMWARE_ROLLBACK_INVALID`), sürümü paketin altındaki cihaza sunulmaz. En güvenli geri dönüş yine de eski kodu DAHA YÜKSEK bir sürüm numarasıyla yeniden derleyip normal imzalamaktır (`OTA_KURULUM.txt` kuralı) |
+| S5 | İzinli düşürme | `allow_downgrade=1` ve `downgrade_reason` (10-300 karakter) ile yapılır; platform denetim kaydı ÖNCE yazılır, yazılamazsa işlem yapılmaz (503 `FIRMWARE_AUDIT_UNAVAILABLE`). Bu tek başına yalnız "canlı sürüm artık budur" kararıdır: sürümü paketin altındaki cihazlar bunu normal yükseltme olarak alır, daha yeni sürümdekilere DÜŞÜRME SUNULMAZ (cihaz imzasız yetkiyle düşürmeyi kurmaz). Düşürmenin cihaza yansıması ayrıca ve yalnız İMZAYLA yetkilendirilir: paket `imzala --rollback-max <sürüm>` ile atılmış olmalıdır; bu durumda sunucu yalnız sürümü `rollback_max`'a kadar olan (ve paketten yeni) cihazlara `allow_downgrade: true` + `rollback_max` ile teklif eder; `rollback_max` taşıyan imza yalnız `allow_downgrade=1` ile ve gerçekten düşürme olan yüklemede kabul edilir (400 `FIRMWARE_ROLLBACK_NOT_ALLOWED` / `FIRMWARE_ROLLBACK_NOT_DOWNGRADE`; `rollback_max` paket sürümünden büyük olmalı: `FIRMWARE_ROLLBACK_INVALID`), sürümü paketin altındaki cihaza sunulmaz. En güvenli geri dönüş yine de eski kodu DAHA YÜKSEK bir sürüm numarasıyla yeniden derleyip normal imzalamaktır (`OTA_KURULUM.txt` kuralı). Saha denemeleri: SAHA 135.7 (düşürme koruması) ve 135.12 (isteğe bağlı `--rollback-max`) |
 | S6 | Geçiş | `OTA_SERVE_UNSIGNED` (varsayılan 1): yayında olan mevcut (imzasız) manifest'ler geçiş boyunca sunulmaya devam eder; yalnız YENİ yüklemeler imza ister. 0 yapılınca imzasız manifest'ler sunulmaz (bölüm 7, G5) |
 | S7 | Özel anahtar yok | `OTA_PUBLIC_KEY` yalnız GENEL anahtar alır (PEM ya da 32 bayt hex/base64); özel anahtar yazılırsa reddedilir. Tanımlı değilse yükleme ucu 503 (`OTA_KEY_NOT_CONFIGURED`) verir. Sunucuda özel anahtar, parola ya da bunların yolu hiçbir yerde (`.env`, betik, yedek) bulunmaz |
 
@@ -358,11 +358,11 @@ dosyayı karşılaştırın.
 
 | Aşama | Ne yapılır | Çıkış kriteri |
 |---|---|---|
-| **G0 Hazırlık** (sahaya dokunmaz) | Anahtar çifti üretilir, yedeklenir, yedekten doğrulanır [kullanıcıda]; `key_id` 3.6'ya yazılır. Genel anahtar firmware'e işlenir (yer tutucu kalmamalı; firmware'in anahtar kontrol betiği ikilide doğru anahtarın gömülü olduğunu doğrular, bkz. `docs/OTA_IMZA_CIHAZ.md`), köprü sürüm HER hedef için ayrı derlenir (boyut 7.3); ana makine testleri geçer. Sunucu yeni kurallarla dağıtılır (AGENTS.md kural 8): canlı `.env`'e `OTA_PUBLIC_KEY` (genel anahtar) yazılır, nginx'te yükleme yolunun gövde sınırı yükseltilir. Mevcut manifest'ler DEĞİŞMEDEN yanıt vermeye devam eder | SAHA 122.1 ve 122.2 yeşil; firmware parmak izi = araç `key_id` |
-| **G1 TEST kartı** | Köprü sürüm TEST kartına USB ile yazılır [kullanıcıda]; kart normal çalışır (kapı, MQTT, QR, Wi-Fi). İmzalı bir deneme sürümü (N+2) `allowed_uids` = o kart ile yayınlanır, kurulur. Olumsuz denemeler yapılır | SAHA 122.4 – 122.8 yeşil |
-| **G2 Eski yolla köprü** | İmzayı bilmeyen eski firmware'li ikinci TEST kartı; köprü `allowed_uids` = o kart ile yayınlanır; kart köprüyü OTA ile alır, sonra imzalı N+2'yi alır. Eski → köprü → imzalı zinciri uçtan uca kanıtlanır | SAHA 122.3 yeşil; aynı kartta 122.4 |
-| **G3 Pilot (ZORUNLU KAPI)** | Her hedef için 1–2 saha cihazı (`allowed_uids`), 2–3 gün izleme; sonra bu cihazlara imzalı N+2 | Pilot cihazlar N+2'yi İMZA DOĞRULAYARAK kurdu ve `ota_validated` geldi (SAHA 122.9). Bu sonuç alınmadan G4'e geçilmez |
-| **G4 Yaygın yayın** | `allowed_uids` boşaltılır (manifest son yazılan dosya). Şirket Paneli > Kayıtlı Cihazlar: "Tümüne OTA Kontrolü" (isteğe bağlı; yoksa cihazlar `interval_hours` aralığıyla kendiliğinden kontrol eder) ve ilerleme için "Sürüm Raporu (PDF)" + panelin OTA iş sonuçları. Çevrimdışı cihazlar geldiklerinde alır | Bütün kayıtlı cihazlar köprü ya da daha yeni sürümde; kalanların listesi ve nedeni yazılı (SAHA 122.10) |
+| **G0 Hazırlık** (sahaya dokunmaz) | Anahtar çifti üretilir, yedeklenir, yedekten doğrulanır [kullanıcıda]; `key_id` 3.6'ya yazılır. Genel anahtar firmware'e işlenir (yer tutucu kalmamalı; firmware'in anahtar kontrol betiği ikilide doğru anahtarın gömülü olduğunu doğrular, bkz. `docs/OTA_IMZA_CIHAZ.md`), köprü sürüm HER hedef için ayrı derlenir (boyut 7.3); ana makine testleri geçer. Sunucu yeni kurallarla dağıtılır (AGENTS.md kural 8): canlı `.env`'e `OTA_PUBLIC_KEY` (genel anahtar) yazılır, nginx'te yükleme yolunun gövde sınırı yükseltilir. Mevcut manifest'ler DEĞİŞMEDEN yanıt vermeye devam eder | SAHA 135.1 ve 135.2 yeşil; firmware parmak izi = araç `key_id` |
+| **G1 TEST kartı** | Köprü sürüm TEST kartına USB ile yazılır [kullanıcıda]; kart normal çalışır (kapı, MQTT, QR, Wi-Fi). İmzalı bir deneme sürümü (N+2) `allowed_uids` = o kart ile yayınlanır, kurulur. Olumsuz denemeler yapılır | SAHA 135.4 – 135.8 yeşil |
+| **G2 Eski yolla köprü** | İmzayı bilmeyen eski firmware'li ikinci TEST kartı; köprü `allowed_uids` = o kart ile yayınlanır; kart köprüyü OTA ile alır, sonra imzalı N+2'yi alır. Eski → köprü → imzalı zinciri uçtan uca kanıtlanır | SAHA 135.3 yeşil; aynı kartta 135.4 |
+| **G3 Pilot (ZORUNLU KAPI)** | Her hedef için 1–2 saha cihazı (`allowed_uids`), 2–3 gün izleme; sonra bu cihazlara imzalı N+2 | Pilot cihazlar N+2'yi İMZA DOĞRULAYARAK kurdu ve `ota_validated` geldi (SAHA 135.9). Bu sonuç alınmadan G4'e geçilmez |
+| **G4 Yaygın yayın** | `allowed_uids` boşaltılır (manifest son yazılan dosya). Şirket Paneli > Kayıtlı Cihazlar: "Tümüne OTA Kontrolü" (isteğe bağlı; yoksa cihazlar `interval_hours` aralığıyla kendiliğinden kontrol eder) ve ilerleme için "Sürüm Raporu (PDF)" + panelin OTA iş sonuçları. Çevrimdışı cihazlar geldiklerinde alır | Bütün kayıtlı cihazlar köprü ya da daha yeni sürümde; kalanların listesi ve nedeni yazılı (SAHA 135.10) |
 | **G5 Kapanış** | İmzasız paket sunumu kapatılır: canlı `.env`'de `OTA_SERVE_UNSIGNED=0` (eski imzasız manifest/ikili dosyalar, yedeği alındıktan sonra, kaldırılabilir). İmzalı canlı yayın imzayı bilmeyen eski cihazlara da sunulmaya devam eder; kapatma yalnız imzasız manifest'leri durdurur. Atölye/fabrika USB yüklemeleri köprü ya da sonrası sürümle yapılır. `OTA_KURULUM.txt` ve bu belge "geçiş tamam" olarak güncellenir | İmzasız yayın artık yapılamıyor (sunucu reddeder, manifest sunmaz) ve köprü sonrası cihazlar kabul etmez |
 
 Tek TEST kartınız varsa sırayı değiştirin: önce G2 (kartı imzayı bilmeyen eski firmware ile USB'den yazın; köprüyü OTA ile alsın, sonra imzalı N+2'yi alsın), ardından
@@ -380,7 +380,7 @@ sığmazsa OTA ile kurulamaz. Derleme çıktısındaki boyutu G0'da yazın.
 | Gömülü genel anahtar imza makinesindekiyle uyuşmuyor | Köprüyü alan HER cihaz sonraki imzalı sürümleri reddeder; düzeltme USB ile sahaya gidiş demektir | G0'da `key_id` karşılaştırması (araç çıktısı ↔ firmware); G1–G3'te imzalı N+2'nin kurulduğunun kanıtı |
 | Doğrulayıcıda yazılım hatası (geçerli imzayı reddediyor) | Aynı | Araçla üretilen test vektörleriyle ana makine testi; G1–G3 |
 | Köprü sürüm yer tutucu anahtarla derlenip yayınlandı | Cihaz hiçbir paketi kurmaz (C8); bir daha OTA ile güncellenemez | G0: ikilide yer tutucu kalmadığı ve doğru anahtarın gömüldüğü kontrol edilir; G1'de seri günlükte anahtarın HAZIR olduğu görülür |
-| Yükleme ucu çalışmıyor (`OTA_PUBLIC_KEY` yok, nginx gövde sınırı) | Köprü yayınlanamaz; elle kopyalama yoluna kaçılırsa doğrulama atlanır | G0: SAHA 122.2; elle kopyalamaya KAÇMAYIN, ön koşulu düzeltin |
+| Yükleme ucu çalışmıyor (`OTA_PUBLIC_KEY` yok, nginx gövde sınırı) | Köprü yayınlanamaz; elle kopyalama yoluna kaçılırsa doğrulama atlanır | G0: SAHA 135.2; elle kopyalamaya KAÇMAYIN, ön koşulu düzeltin |
 | Doğrulayıcı sonraki bir sürümde sessizce kaldırılmış ya da devre dışı | İmza zorunluluğu kalkar | C5; her sürümde imzasız paket reddi testi |
 | Köprü sürüm kapı/röle işlevini bozuyor | Kapı çalışmaz | Mevcut geri alma (60 sn sağlık) ve G1–G3 aşamaları; ESP32-C3 sahada aktif (AGENTS.md kural 3) |
 | Köprü paketi boyut sınırını aşıyor | OTA ile kurulamaz | 7.3 |
@@ -494,11 +494,11 @@ yedeği maddesi hayati önemdedir.
 - Cihaz tarafı: `docs/OTA_IMZA_CIHAZ.md`, `cihaz_kontrol/include/ota_guncelleme.h`, `ota_imza.h`, `ota_public_key.h` (genel anahtar yer tutucusu ve yerleştirme / kontrol adımları).
 - Sunucu tarafı: `server/src/routes/firmware_admin_routes.js` (yükleme ucu), `firmware_routes.js` (cihaza sunum), `server/src/services/ota_signature.js`,
   `firmware_release_service.js`, `server/.env.example` (Firmware (OTA) bölümü: `OTA_PUBLIC_KEY`, `OTA_SERVE_UNSIGNED`, `OTA_MAX_FIRMWARE_BYTES`).
-- `SAHA_KONTROL_LISTESI.md` bölüm 122 (imza denemeleri), bölüm 44 ve 51 (mevcut OTA maddeleri).
+- `SAHA_KONTROL_LISTESI.md` bölüm 135 (imza denemeleri), bölüm 44 ve 51 (mevcut OTA maddeleri).
 - `BEKLEYEN_ISLER.md` bölüm 7: kullanıcıya düşen işler.
 - `docs/YAYIN_HAZIRLIGI.md` bölüm 3: Android yükleme anahtarı (aynı depo-dışı anahtar kuralı).
 - `docs/OPERASYON_YEDEK_IZLEME.md`: firmware arşivi (`kapi_firmware_*.tgz.enc`); `.sig` dosyaları buna girer, özel anahtar ASLA.
-- `AGENTS.md` kural 2, 3, 4 ve 8.
+- `AGENTS.md` kural 2, 3, 4, 8 ve 27 (OTA imzası: doğrulayıcı geri alınmaz, özel anahtar depoya / sunucuya girmez).
 
 ---
 

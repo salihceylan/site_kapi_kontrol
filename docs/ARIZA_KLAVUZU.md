@@ -2,7 +2,7 @@
 
 > Bu klavuz **elle yazılmış satır numarası içermez**: her `dosya:satır` bağlantısı `tools/klavuz/build.mjs` tarafından koddan çözülür; kod parçası bulunamazsa ya da belirsizse üretim hata verir. Kod değişince belgeleri yenileyin: `node tools/klavuz/build.mjs` (denetim: `node tools/klavuz/build.mjs --check --fresh`).
 
-Kapsam: 11 bölüm, **455 arıza girişi**, 2593 kod bağlantısı + otomatik ekler.
+Kapsam: 11 bölüm, **458 arıza girişi**, 2615 kod bağlantısı + otomatik ekler.
 
 ## Nasıl kullanılır (kişi ya da ajan için)
 
@@ -31,15 +31,15 @@ rg -i "Giris bilgileri hatali" docs/ARIZA_KLAVUZU_HATA_MESAJLARI.md   # ekranda 
 
 | Bölüm | Giriş | Bağlantı | İçerik doğrulaması |
 | --- | --- | --- | --- |
-| [Sunucu API — giriş, oturum, yetki, kayıt, kapı açma, site yönetimi](ariza-klavuzu/10-sunucu-api.md) | 82 | 438 | ⚠ doğrulanmadı |
+| [Sunucu API — giriş, oturum, yetki, kayıt, kapı açma, site yönetimi](ariza-klavuzu/10-sunucu-api.md) | 83 | 447 | ⚠ doğrulanmadı |
 | [Sunucu altyapısı ve yayın — açılış, veritabanı şeması, MQTT, OTA, dağıtım](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md) | 59 | 327 | ⚠ doğrulanmadı |
 | [Flutter uygulama çekirdeği — kök, oturum, HTTP istemcisi, yerel kapı, konum, ses, BLE, widget, tema, PDF](ariza-klavuzu/30-uygulama-cekirdek.md) | 51 | 328 | ⚠ doğrulanmadı |
 | [Flutter uygulama arayüzü — ana panel, kapı kartları, diyaloglar, giriş/kayıt, tema](ariza-klavuzu/31-uygulama-arayuz.md) | 57 | 326 | ⚠ doğrulanmadı |
 | [Flutter bileşenler, tasarım sistemi ve stiller](ariza-klavuzu/32-uygulama-bilesenler.md) | 49 | 178 | ⚠ doğrulanmadı |
 | [Flutter veri modelleri (lib/models) — JSON ayrıştırma](ariza-klavuzu/33-uygulama-modeller.md) | 22 | 105 | ⚠ doğrulanmadı |
-| [Cihaz yazılımı — ESP32 firmware, ekran, OTA, GM60, yerel kontrol](ariza-klavuzu/40-cihaz-yazilimi.md) | 44 | 252 | ⚠ doğrulanmadı |
+| [Cihaz yazılımı — ESP32 firmware, ekran, OTA, GM60, yerel kontrol](ariza-klavuzu/40-cihaz-yazilimi.md) | 45 | 259 | ⚠ doğrulanmadı |
 | [Ekran yazılımı — ST7789 ekran, CST816D dokunmatik, QR, UART protokolü](ariza-klavuzu/41-ekran-yazilimi.md) | 20 | 103 | ⚠ doğrulanmadı |
-| [Araçlar, test altyapısı, süreç/kurallar ve derleme/sürüm](ariza-klavuzu/50-arac-test-ve-surec.md) | 49 | 297 | ⚠ doğrulanmadı |
+| [Araçlar, test altyapısı, süreç/kurallar ve derleme/sürüm](ariza-klavuzu/50-arac-test-ve-surec.md) | 50 | 303 | ⚠ doğrulanmadı |
 | [Uçtan uca akış haritaları (uygulama -> sunucu -> veritabanı -> MQTT -> cihaz)](ariza-klavuzu/60-akislar.md) | 11 | 132 | ⚠ doğrulanmadı |
 | [Uçtan uca akış haritaları 2/2 (kurulum, OTA, katılım, abonelik, envanter, yetki, PDF)](ariza-klavuzu/61-akislar-devam.md) | 11 | 107 | ⚠ doğrulanmadı |
 
