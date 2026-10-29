@@ -2526,6 +2526,21 @@ class App:
         if rel is None:
             messagebox.showwarning("Surum yok", "Sunucuya gonderilecek surum bulunamadi.")
             return
+        # OTA IMZASI (Dalga F): bu yontem firmware.bin ve manifest.json'u sunucu klasorune DOGRUDAN kopyalar, yani imzayi ve sunucunun yukleme
+        # dogrulamasini ATLAR. Kopru surumden (C3 4.4.0 / WROOM 5.3.0) itibaren cihazlar imzasiz paketi KURMAZ; sunucuda OTA_SERVE_UNSIGNED=0 oldugunda
+        # da sunulmaz. Yeni surumler docs/OTA_IMZA.md akisiyla yayinlanir (tools/ota_imza ile imzalama + sunucunun yukleme ucu).
+        if not messagebox.askyesno(
+            "OTA imzasi",
+            "UYARI: Bu yontem firmware.bin ve manifest.json dosyalarini sunucu klasorune DOGRUDAN kopyalar; OTA IMZASINI ve sunucunun yukleme "
+            "dogrulamasini ATLAR.\n\n"
+            "Kopru surumden (ESP32-C3 4.4.0 / ESP32-WROOM 5.3.0) itibaren cihazlar imzasiz paketi KURMAZ. Yeni surumleri docs/OTA_IMZA.md akisiyla "
+            "yayinlayin: tools/ota_imza ile imzalayin, sunucunun yukleme ucuyla (POST /admin/firmware/<hedef>/releases) yukleyin.\n\n"
+            "Bu eski (imzasiz) yontemi yalnizca kopru oncesi eski cihazlar icin kullanin. Yine de gondermek istiyor musunuz?",
+            icon="warning",
+            default="no",
+            parent=self.root,
+        ):
+            return
         if not known_hosts_path().is_file():
             messagebox.showerror("Sunucu kimligi dogrulanamiyor", known_hosts_setup_help())
             return

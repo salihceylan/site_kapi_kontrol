@@ -76,7 +76,9 @@ bir kartın etiketi yanlışlıkla basılmaz.
    `cihaz_kontrol/firmware_releases/...` altına kaydedilir.
 4. `Dağıt` kartında hedef kartı seçin ve `USB ile karta yükle`ye basın.
    İlerleme `%` olarak görünür, bitince `TMM` bildirimi gelir.
-5. `Sunucuya gönder (OTA)` son sürümü VPS'e taşır; sahadaki kartlar OTA ile indirir.
+5. `Sunucuya gönder (OTA)` son sürümü VPS'e taşır; sahadaki kartlar OTA ile indirir. **OTA imzası (Dalga F):** bu düğme dosyaları sunucu klasörüne DOĞRUDAN
+   kopyalar ve imzayı atlar; köprü sürümden (C3 4.4.0 / WROOM 5.3.0) itibaren cihazlar imzasız paketi KURMAZ. Yeni sürümler `docs/OTA_IMZA.md` akışıyla yayınlanır
+   (`tools/ota_imza` ile imzalayın, sunucunun yükleme ucuna gönderin); düğme bir uyarı gösterir ve yalnız köprü öncesi eski cihazlar için kullanılmalıdır.
 6. `Çalışma arkadaşı için ZIP` USB yükleme paketini oluşturur.
 
 ## Cihaz Kaydı, Sunucu Depolama ve PDF Raporlama

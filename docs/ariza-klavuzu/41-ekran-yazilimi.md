@@ -502,7 +502,7 @@ diff -q ekran_yazilimi/include/display_protocol.h cihaz_kontrol/include/display_
 | [ekran_yazilimi/platformio.ini:38](../../ekran_yazilimi/platformio.ini#L38) | <code>bodmer/TFT_eSPI@^2.5.0</code> | Kütüphaneler: TFT_eSPI, QRCode, ArduinoJson |
 | [ekran_yazilimi/platformio.ini:13](../../ekran_yazilimi/platformio.ini#L13) | <code>-D USER_SETUP_LOADED=1</code> | TFT_eSPI kullanıcı ayarı yüklenmez; tüm pinler bayraklarla verilir (User_Setup.h değişimi etkisizdir) |
 | [ekran_yazilimi/platformio.ini:10](../../ekran_yazilimi/platformio.ini#L10) | <code>-D HARDWARE_TARGET="esp32c3-display"</code> | Donanım hedefi etiketi |
-| [company_qr_tool/app.py:3514](../../company_qr_tool/app.py#L3514) | <code>class ScreenFirmwarePage:</code> | Şirket aracının "Ekran yazılımı" sayfası (yan menü, Ctrl+5): ekranı bul, sürüm oluştur, yükle |
+| [company_qr_tool/app.py:3529](../../company_qr_tool/app.py#L3529) | <code>class ScreenFirmwarePage:</code> | Şirket aracının "Ekran yazılımı" sayfası (yan menü, Ctrl+5): ekranı bul, sürüm oluştur, yükle |
 
 **Olası nedenler**
 - COM8 yok/başka programda açık; ekranın bağlı olduğu port farklı

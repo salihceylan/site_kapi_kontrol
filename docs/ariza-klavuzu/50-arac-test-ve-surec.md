@@ -148,7 +148,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 | [company_qr_tool/app.py:108](../../company_qr_tool/app.py#L108) | <code>COMPANY_KEY_MISSING_MESSAGE = (</code> | Kullanıcıya gösterilen uyarı metni ve çözüm adımları |
 | [company_qr_tool/app.py:2023](../../company_qr_tool/app.py#L2023) | <code>error_msg = COMPANY_KEY_MISSING_MESSAGE</code> | Kayıt işçisi anahtar yokken ağ isteği yapmaz; yalnız yerel kayıt tamamlanır |
 | [company_qr_tool/app.py:544](../../company_qr_tool/app.py#L544) | <code>return [], f"{COMPANY_KEY_ENV} tanimli degil: sunucu listesi alinamadi, yalnizca yerel ka…</code> | Liste/PDF/Kayıtlı Cihazlar penceresi anahtar yokken yalnız yerel kayıtları gösterir |
-| [company_qr_tool/README.md:125](../../company_qr_tool/README.md#L125) | <code>### Sunucu yetkisi (COMPANY_API_KEY)</code> | Anahtarın nereye yazılacağı (.env veya setx) ve davranışı |
+| [company_qr_tool/README.md:127](../../company_qr_tool/README.md#L127) | <code>### Sunucu yetkisi (COMPANY_API_KEY)</code> | Anahtarın nereye yazılacağı (.env veya setx) ve davranışı |
 
 **Olası nedenler**
 - company_qr_tool/.env yok ya da app.py ile aynı klasörde değil
@@ -195,8 +195,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 | [company_qr_tool/app.py:191](../../company_qr_tool/app.py#L191) | <code>def known_hosts_setup_help() -&gt; str:</code> | İlk kurulum adımlarını ve known_hosts yolunu yazan yardım metni |
 | [company_qr_tool/app.py:215](../../company_qr_tool/app.py#L215) | <code>client.set_missing_host_key_policy(paramiko.RejectPolicy())</code> | Bilinmeyen sunucuya otomatik güvenilmez (AutoAddPolicy YOK) |
 | [company_qr_tool/app.py:238](../../company_qr_tool/app.py#L238) | <code>except paramiko.BadHostKeyException as exc:</code> | Kayıtlı anahtar ile sunucunun anahtarı uyuşmazsa "UYUSMUYOR" hatası |
-| [company_qr_tool/app.py:2529](../../company_qr_tool/app.py#L2529) | <code>if not known_hosts_path().is_file():</code> | Sunucuya gönder düğmesi known_hosts dosyası yoksa hiç bağlanmadan bu uyarıyı gösterir |
-| [company_qr_tool/README.md:136](../../company_qr_tool/README.md#L136) | <code>### SFTP ile firmware gonderme: sunucu kimligi dogrulamasi</code> | İlk kurulum ve sunucu yeniden kurulursa yapılacaklar |
+| [company_qr_tool/app.py:2544](../../company_qr_tool/app.py#L2544) | <code>if not known_hosts_path().is_file():</code> | Sunucuya gönder düğmesi known_hosts dosyası yoksa hiç bağlanmadan bu uyarıyı gösterir |
+| [company_qr_tool/README.md:138](../../company_qr_tool/README.md#L138) | <code>### SFTP ile firmware gonderme: sunucu kimligi dogrulamasi</code> | İlk kurulum ve sunucu yeniden kurulursa yapılacaklar |
 
 **Olası nedenler**
 - known_hosts dosyasında 178.210.161.55:22667 kaydı yok (ilk kurulum yapılmamış)
@@ -229,9 +229,9 @@ ssh-keygen -R "[178.210.161.55]:22667"
 | [company_qr_tool/app.py:222](../../company_qr_tool/app.py#L222) | <code>key_file = os.environ.get("SSH_KEY_FILE", "").strip()</code> | Anahtar tanımlıysa anahtarla, değilse parolayla bağlanır |
 | [company_qr_tool/app.py:226](../../company_qr_tool/app.py#L226) | <code>raise RuntimeError(f"SSH_KEY_FILE bulunamadi: {key_path}")</code> | Anahtar dosyası yolu yanlış |
 | [company_qr_tool/app.py:245](../../company_qr_tool/app.py#L245) | <code>except paramiko.PasswordRequiredException as exc:</code> | Anahtar parolalıysa SSH_KEY_PASSPHRASE gerekir |
-| [company_qr_tool/app.py:2536](../../company_qr_tool/app.py#L2536) | <code>password = os.environ.get("AHBU_VPS_PASSWORD", "").strip()</code> | Anahtar yoksa parola: önce AHBU_VPS_PASSWORD, yoksa diyalog; boş bırakılırsa işlem sessizce iptal olur |
-| [company_qr_tool/app.py:2573](../../company_qr_tool/app.py#L2573) | <code>import paramiko</code> | paramiko burada tembel içe alınır: kurulu değilse "Sunucu yukleme hatasi" ile düşer |
-| [company_qr_tool/app.py:2577](../../company_qr_tool/app.py#L2577) | <code>vps_target_dir = f"{VPS_FIRMWARE_BASE_DIR}/{target}"</code> | Dosyalar donanım hedef klasörüne (esp32-c3 / esp32-wroom) gider: AGENTS.md kural 4 izolasyonu |
+| [company_qr_tool/app.py:2551](../../company_qr_tool/app.py#L2551) | <code>password = os.environ.get("AHBU_VPS_PASSWORD", "").strip()</code> | Anahtar yoksa parola: önce AHBU_VPS_PASSWORD, yoksa diyalog; boş bırakılırsa işlem sessizce iptal olur |
+| [company_qr_tool/app.py:2588](../../company_qr_tool/app.py#L2588) | <code>import paramiko</code> | paramiko burada tembel içe alınır: kurulu değilse "Sunucu yukleme hatasi" ile düşer |
+| [company_qr_tool/app.py:2592](../../company_qr_tool/app.py#L2592) | <code>vps_target_dir = f"{VPS_FIRMWARE_BASE_DIR}/{target}"</code> | Dosyalar donanım hedef klasörüne (esp32-c3 / esp32-wroom) gider: AGENTS.md kural 4 izolasyonu |
 | [company_qr_tool/requirements.txt:5](../../company_qr_tool/requirements.txt#L5) | <code>paramiko&gt;=3.4.0</code> | SFTP için gerekli paket |
 
 **Olası nedenler**
@@ -420,12 +420,12 @@ git diff -- cihaz_kontrol/include/ota_guncelleme.h
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:2617](../../company_qr_tool/app.py#L2617) | <code>def start_coworker_zip(self) -&gt; None:</code> | Düğme yalnız derleme + sürüm hazırken (aynı env ve sürüm) çalışır, yoksa "Surum gerekli"; kayıt yeri sorulur |
-| [company_qr_tool/app.py:2644](../../company_qr_tool/app.py#L2644) | <code>def _coworker_zip_worker(self, rel: dict, target: Path) -&gt; None:</code> | ZIP işçisi: firmware, manifest, flash_smartkeypass_usb.bat, README ve PlatformIO araçlarını paketler |
-| [company_qr_tool/app.py:2649](../../company_qr_tool/app.py#L2649) | <code>raise FileNotFoundError(f"Guncelleme dosyasi yok: {p}")</code> | Sürümün bootloader / partitions / firmware / manifest dosyalarından biri yoksa ZIP yapılmaz |
-| [company_qr_tool/app.py:2650](../../company_qr_tool/app.py#L2650) | <code>required_tool_dirs = [</code> | ~/.platformio altında python3, packages/tool-esptoolpy ve penv/Lib/site-packages/serial klasörleri bulunmalı |
-| [company_qr_tool/app.py:2663](../../company_qr_tool/app.py#L2663) | <code>hw_target = target_for_env(env)</code> | Donanım hedefi ve bootloader ofseti sürümün env'inden çıkarılır; bat dosyasına ve README'ye yazılır |
-| [company_qr_tool/app.py:2761](../../company_qr_tool/app.py#L2761) | <code>zf.writestr("flash_smartkeypass_usb.bat", bat)</code> | Pakete konan bat dosyası: otomatik COM port bulur, esptool ile yazar |
+| [company_qr_tool/app.py:2632](../../company_qr_tool/app.py#L2632) | <code>def start_coworker_zip(self) -&gt; None:</code> | Düğme yalnız derleme + sürüm hazırken (aynı env ve sürüm) çalışır, yoksa "Surum gerekli"; kayıt yeri sorulur |
+| [company_qr_tool/app.py:2659](../../company_qr_tool/app.py#L2659) | <code>def _coworker_zip_worker(self, rel: dict, target: Path) -&gt; None:</code> | ZIP işçisi: firmware, manifest, flash_smartkeypass_usb.bat, README ve PlatformIO araçlarını paketler |
+| [company_qr_tool/app.py:2664](../../company_qr_tool/app.py#L2664) | <code>raise FileNotFoundError(f"Guncelleme dosyasi yok: {p}")</code> | Sürümün bootloader / partitions / firmware / manifest dosyalarından biri yoksa ZIP yapılmaz |
+| [company_qr_tool/app.py:2665](../../company_qr_tool/app.py#L2665) | <code>required_tool_dirs = [</code> | ~/.platformio altında python3, packages/tool-esptoolpy ve penv/Lib/site-packages/serial klasörleri bulunmalı |
+| [company_qr_tool/app.py:2678](../../company_qr_tool/app.py#L2678) | <code>hw_target = target_for_env(env)</code> | Donanım hedefi ve bootloader ofseti sürümün env'inden çıkarılır; bat dosyasına ve README'ye yazılır |
+| [company_qr_tool/app.py:2776](../../company_qr_tool/app.py#L2776) | <code>zf.writestr("flash_smartkeypass_usb.bat", bat)</code> | Pakete konan bat dosyası: otomatik COM port bulur, esptool ile yazar |
 
 **Olası nedenler**
 - ~/.platformio/python3, packages/tool-esptoolpy veya penv/Lib/site-packages/serial yok (PlatformIO bu bilgisayarda kurulmamış/farklı konumda)
@@ -467,10 +467,10 @@ git diff -- cihaz_kontrol/include/ota_guncelleme.h
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:2937](../../company_qr_tool/app.py#L2937) | <code>def _fetch_worker(self) -&gt; None:</code> | Liste = sunucu kayıtları + yerelde olup sunucuda olmayanlar (UID ile birleştirilir; sunucu önceliklidir) |
+| [company_qr_tool/app.py:2952](../../company_qr_tool/app.py#L2952) | <code>def _fetch_worker(self) -&gt; None:</code> | Liste = sunucu kayıtları + yerelde olup sunucuda olmayanlar (UID ile birleştirilir; sunucu önceliklidir) |
 | [company_qr_tool/app.py:541](../../company_qr_tool/app.py#L541) | <code>def fetch_server_labeled_devices_with_status() -&gt; tuple[list[dict], str]:</code> | Sunucu listesi alınamazsa neden döner (anahtar yok / 401 / ağ) ve yalnız yerel kayıtlar kalır |
 | [company_qr_tool/app.py:40](../../company_qr_tool/app.py#L40) | <code>LABELED_DEVICES_FILE = OUTPUT_DIR / "labeled_devices.json"</code> | Yerel indeks: company_qr_tool/output/labeled_devices.json (git dışı) |
-| [company_qr_tool/app.py:3026](../../company_qr_tool/app.py#L3026) | <code>def _delete_selected_device(self) -&gt; None:</code> | Önce yerel kayıt + PNG silinir, sonra sunucudan silinir; sunucu hatası "Kısmi Silme" uyarısı verir |
+| [company_qr_tool/app.py:3041](../../company_qr_tool/app.py#L3041) | <code>def _delete_selected_device(self) -&gt; None:</code> | Önce yerel kayıt + PNG silinir, sonra sunucudan silinir; sunucu hatası "Kısmi Silme" uyarısı verir |
 | [company_qr_tool/app.py:585](../../company_qr_tool/app.py#L585) | <code>def delete_server_labeled_device(device_uid: str) -&gt; tuple[bool, str]:</code> | DELETE /api/company/labeled-devices/<UID>; anahtar yoksa sunucudan silinmez |
 | [company_qr_tool/app.py:648](../../company_qr_tool/app.py#L648) | <code>def generate_devices_catalog_pdf(</code> | A4 2480x3508 (300 DPI), sayfa başına 6 kart; QR'lar her kart için yeniden üretilir |
 | [company_qr_tool/app.py:483](../../company_qr_tool/app.py#L483) | <code>def load_regular_font(size: int) -&gt; ImageFont.FreeTypeFont &#124; ImageFont.ImageFont:</code> | Yazı tipi C:/Windows/Fonts altından aranır (segoeui/arial/calibri); yoksa Pillow varsayılanı (küçük/Türkçe karakter sorunu) |
@@ -496,9 +496,9 @@ git diff -- cihaz_kontrol/include/ota_guncelleme.h
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [cihaz_dene/app.py:17](../../cihaz_dene/app.py#L17) | <code>STATUS_START = "----- CIHAZ DURUMU -----"</code> | Bağımsız araç ESKİ başlığı bekler; güncel firmware "--- ESP32 SISTEM BILGISI ---" yazar (bu araçta alanlar dolmaz) |
-| [company_qr_tool/app.py:3113](../../company_qr_tool/app.py#L3113) | <code>STATUS_START = "--- ESP32 SISTEM BILGISI ---"</code> | Şirket aracındaki "Cihaz testi" sayfası güncel başlığı tanır (eski başlığı da: STATUS_START_ALT) |
-| [company_qr_tool/app.py:3404](../../company_qr_tool/app.py#L3404) | <code>if line.strip().startswith("---") and self._collecting_status and len(self._status_lines)…</code> | Blok, ilk "---" ile başlayan satırda (en az 3 satır sonra) kapanır ve alanlara işlenir |
-| [company_qr_tool/app.py:3429](../../company_qr_tool/app.py#L3429) | <code>key_map = {</code> | Firmware anahtarlarını arayüz alanlarına çevirir (Cihaz Unique ID → Cihaz UID vb.) |
+| [company_qr_tool/app.py:3128](../../company_qr_tool/app.py#L3128) | <code>STATUS_START = "--- ESP32 SISTEM BILGISI ---"</code> | Şirket aracındaki "Cihaz testi" sayfası güncel başlığı tanır (eski başlığı da: STATUS_START_ALT) |
+| [company_qr_tool/app.py:3419](../../company_qr_tool/app.py#L3419) | <code>if line.strip().startswith("---") and self._collecting_status and len(self._status_lines)…</code> | Blok, ilk "---" ile başlayan satırda (en az 3 satır sonra) kapanır ve alanlara işlenir |
+| [company_qr_tool/app.py:3444](../../company_qr_tool/app.py#L3444) | <code>key_map = {</code> | Firmware anahtarlarını arayüz alanlarına çevirir (Cihaz Unique ID → Cihaz UID vb.) |
 | [cihaz_kontrol/src/main.cpp:355](../../cihaz_kontrol/src/main.cpp#L355) | <code>Serial.println("--- ESP32 SISTEM BILGISI ---");</code> | Firmware durum bloğu; "?" (ve s/u/i) komutuyla yazılır |
 | [cihaz_kontrol/src/main.cpp:191](../../cihaz_kontrol/src/main.cpp#L191) | <code>Serial.println("Atolye modu kapali (Wi-Fi sifirlayin veya reset butonu 3 sn)");</code> | h/l/p seri komutları yalnız ATÖLYE MODUNDA çalışır; r ve k her derlemede açık |
 | [company_qr_tool/app.py:367](../../company_qr_tool/app.py#L367) | <code># DTR/RTS MUTLAKA open() oncesinde False yapilmali!</code> | Seri bağlantıda DTR/RTS kontrolü (CH340 kartı indirme moduna sokmasın) |
@@ -526,11 +526,11 @@ git diff -- cihaz_kontrol/include/ota_guncelleme.h
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:3305](../../company_qr_tool/app.py#L3305) | <code>def _start_beacon_listener(self) -&gt; None:</code> | UDP 8765 dinleyicisi (yayın kabul eder); soket açılamazsa (port başka uygulamada, izin yok) hata sessizce yutulur ve alan "-" kalır |
-| [company_qr_tool/app.py:3338](../../company_qr_tool/app.py#L3338) | <code>if "Yerel Beacon (UDP)" in self.status_vars:</code> | Beacon yalnız bağlı kartın kimliğiyle eşleşirse (ya da kimlik henüz okunmadıysa) "ip:port (rssi dBm) · canlı" yazılır |
+| [company_qr_tool/app.py:3320](../../company_qr_tool/app.py#L3320) | <code>def _start_beacon_listener(self) -&gt; None:</code> | UDP 8765 dinleyicisi (yayın kabul eder); soket açılamazsa (port başka uygulamada, izin yok) hata sessizce yutulur ve alan "-" kalır |
+| [company_qr_tool/app.py:3353](../../company_qr_tool/app.py#L3353) | <code>if "Yerel Beacon (UDP)" in self.status_vars:</code> | Beacon yalnız bağlı kartın kimliğiyle eşleşirse (ya da kimlik henüz okunmadıysa) "ip:port (rssi dBm) · canlı" yazılır |
 | [docs/YEREL_KONTROL_V2.md:9](../../docs/YEREL_KONTROL_V2.md#L9) | <code>- **Beacon** (cihaz → alt ağ broadcast, ~5 sn): `{"device_uid","ip","port":8765,"rssi","h…</code> | Cihazın yayınladığı beacon biçimi (UDP 8765) |
 | [company_qr_tool/app.py:617](../../company_qr_tool/app.py#L617) | <code>def fetch_device_public_ip(device_uid: str) -&gt; str:</code> | Genel IP sunucudan okunur: GET /api/company/devices/<UID>/runtime (X-Company-Key, yalnız HTTPS ya da yerel makine, 4 sn zaman aşımı); anahtar yoksa ya da hata olursa boş döner, hata penceresi açmaz |
-| [company_qr_tool/app.py:3456](../../company_qr_tool/app.py#L3456) | <code>def _request_public_ip(self, uid: str) -&gt; None:</code> | Kartın durum bloğu her geldiğinde istenir (başarıdan sonra 120 sn, hatada 30 sn arayla); COMPANY_API_KEY yoksa hiç sorulmaz |
+| [company_qr_tool/app.py:3471](../../company_qr_tool/app.py#L3471) | <code>def _request_public_ip(self, uid: str) -&gt; None:</code> | Kartın durum bloğu her geldiğinde istenir (başarıdan sonra 120 sn, hatada 30 sn arayla); COMPANY_API_KEY yoksa hiç sorulmaz |
 | [server/src/routes/company_routes.js:478](../../server/src/routes/company_routes.js#L478) | <code>companyRouter.get('/api/company/devices/:deviceUid/runtime', async (req, res) =&gt; {</code> | Salt okunur uç: yalnız { device_uid, public_ip, last_seen_at }; geçersiz kimlik 400, kayıtlı olmayan kart 404 |
 | [server/src/routes/company_routes.js:219](../../server/src/routes/company_routes.js#L219) | <code>export function companyDeviceRuntimeBody(deviceUid, row) {</code> | public_ip kartın OTA manifest isteğinin kaynak adresidir (açılışta Wi-Fi oturduktan ~1,5-2,5 dk sonra, sonra 24 saatte bir); henüz istek yoksa ya da adres Cloudflare kenarıysa null |
 
@@ -554,12 +554,12 @@ git diff -- cihaz_kontrol/include/ota_guncelleme.h
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:3514](../../company_qr_tool/app.py#L3514) | <code>class ScreenFirmwarePage:</code> | Ekran (ESP32-C3 + TFT) için ayrı sayfa (yan menüde "Ekran yazılımı", Ctrl+5): ekranı bul, sürüm oluştur, yükle |
-| [company_qr_tool/app.py:3728](../../company_qr_tool/app.py#L3728) | <code>s.write(b"\r\nDISP_PING\r\n")</code> | "Ekranı bul": her porta DISP_PING gönderir |
-| [company_qr_tool/app.py:3731](../../company_qr_tool/app.py#L3731) | <code>if "AHBU_DEVICE:DISPLAY" in buf or "Display Controller" in buf:</code> | Ekranın yanıtı; gelmezse esptool chip_id ile ESP32-C3 aranır ("ESP32-C3 ekran modülü bulundu (yazılım yanıt vermedi)" der) |
+| [company_qr_tool/app.py:3529](../../company_qr_tool/app.py#L3529) | <code>class ScreenFirmwarePage:</code> | Ekran (ESP32-C3 + TFT) için ayrı sayfa (yan menüde "Ekran yazılımı", Ctrl+5): ekranı bul, sürüm oluştur, yükle |
+| [company_qr_tool/app.py:3743](../../company_qr_tool/app.py#L3743) | <code>s.write(b"\r\nDISP_PING\r\n")</code> | "Ekranı bul": her porta DISP_PING gönderir |
+| [company_qr_tool/app.py:3746](../../company_qr_tool/app.py#L3746) | <code>if "AHBU_DEVICE:DISPLAY" in buf or "Display Controller" in buf:</code> | Ekranın yanıtı; gelmezse esptool chip_id ile ESP32-C3 aranır ("ESP32-C3 ekran modülü bulundu (yazılım yanıt vermedi)" der) |
 | [ekran_yazilimi/src/main.cpp:86](../../ekran_yazilimi/src/main.cpp#L86) | <code>if (pcSerialBuffer == "?" &#124;&#124; pcSerialBuffer == "IDENT" &#124;&#124; pcSerialBuffer == "DISP_PING") {</code> | Ekran yazılımının kimlik yanıtı (PC USB seri) |
 | [company_qr_tool/app.py:56](../../company_qr_tool/app.py#L56) | <code>DISPLAY_CONFIG_H_PATH = DISPLAY_PROJECT_DIR / "include" / "config.h"</code> | Sürüm ekran projesindeki config.h içindeki DISPLAY_FIRMWARE_VERSION satırına yazılır |
-| [company_qr_tool/app.py:4093](../../company_qr_tool/app.py#L4093) | <code>"esp32c3",</code> | Ekran yüklemesi her zaman --chip esp32c3, 0x0 bootloader ofseti ve 460800 baud ile yapılır |
+| [company_qr_tool/app.py:4108](../../company_qr_tool/app.py#L4108) | <code>"esp32c3",</code> | Ekran yüklemesi her zaman --chip esp32c3, 0x0 bootloader ofseti ve 460800 baud ile yapılır |
 
 **Olası nedenler**
 - Ekran farklı bir seri portta / başka program portu tutuyor
@@ -587,7 +587,7 @@ pio run -d ekran_yazilimi -e esp32c3_display
 | [company_qr_tool/launch_company_qr_tool.bat:17](../../company_qr_tool/launch_company_qr_tool.bat#L17) | <code>".venv\Scripts\python.exe" -m pip install -r requirements.txt</code> | Bağımlılıkları kurar; ağ/proxy yoksa "Kutuphane kurulumu basarisiz" |
 | [company_qr_tool/launch_company_qr_tool.bat:24](../../company_qr_tool/launch_company_qr_tool.bat#L24) | <code>start "" ".venv\Scripts\pythonw.exe" app.py</code> | pythonw konsolsuz çalışır: açılış hataları (ör. içe aktarma/Tk) görünmez |
 | [company_qr_tool/requirements.txt:1](../../company_qr_tool/requirements.txt#L1) | <code>qrcode[pil]&gt;=7.4.2</code> | QR üretimi (Pillow ile) |
-| [company_qr_tool/app.py:4180](../../company_qr_tool/app.py#L4180) | <code>def main() -&gt; None:</code> | Giriş noktası: App().run() |
+| [company_qr_tool/app.py:4195](../../company_qr_tool/app.py#L4195) | <code>def main() -&gt; None:</code> | Giriş noktası: App().run() |
 
 **Olası nedenler**
 - Python 3 / py başlatıcısı kurulu değil
