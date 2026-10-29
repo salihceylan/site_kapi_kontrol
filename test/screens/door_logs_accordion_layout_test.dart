@@ -547,6 +547,7 @@ void main() {
                 'offline_sync',
                 'screen_qr',
                 'qr_scanner',
+                'plate',
               ])
                 {
                   'id': trigger.hashCode,
@@ -558,7 +559,7 @@ void main() {
                   'opened_at': '2026-05-01T08:00:00Z',
                 },
             ],
-            'total': 11,
+            'total': 12,
             'page': 1,
             'page_size': 10,
             'total_pages': 2,
@@ -601,7 +602,7 @@ void main() {
           );
 
           // İkincil metinler: panel (surfaceMuted) ve satır (surface) yüzeyinde.
-          final caption = g2TextColor(t, find.text('Toplam 11 geçiş kaydı'));
+          final caption = g2TextColor(t, find.text('Toplam 12 geçiş kaydı'));
           expect(caption, p.textSecondary);
           expect(
             g2Contrast(caption, p.surfaceMuted),

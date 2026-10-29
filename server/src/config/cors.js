@@ -71,7 +71,8 @@ export function createCorsOptionsDelegate(allowlist) {
         credentials: true,
         maxAge: 600,
         // Content-Disposition: web istemci belge indirmede dosya adini okuyabilsin (Belgeler, Faz 3b-A)
-        exposedHeaders: ['Retry-After', 'Content-Disposition'],
+        // ETag + X-Captured-At: plaka kamera karolari (web istemci kosullu istek ve kare zamanini okuyabilsin, sozlesme surum 3)
+        exposedHeaders: ['Retry-After', 'Content-Disposition', 'ETag', 'X-Captured-At'],
         optionsSuccessStatus: 204,
       });
       return;

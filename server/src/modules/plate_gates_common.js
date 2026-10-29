@@ -11,10 +11,13 @@ import { invalidField, cleanNote, parseConfidence, requireTrPlate } from './plat
 import { PlatformError } from './errors.js';
 
 // Sürüm 2 (A3): olay karar türü 'kara_liste' eklendi (yalnız v2 istemci gönderebilir); site ayarına "içeride" eşikleri geldi. Sürüm 1 istemcileri çalışmaya devam eder.
-export const PLATE_GATES_SCHEMA_VERSION = 2;
-export const SUPPORTED_SCHEMA_VERSIONS = Object.freeze([1, 2]);
+// Sürüm 3 (122, uygulamadan uçtan uca yönetim): komutlar, görüntü karoları, olaya kimlik / kapı komutu alanları, kalp atışına tanıma hazırlığı. Yalnız EKLEYİCİ.
+export const PLATE_GATES_SCHEMA_VERSION = 3;
+export const SUPPORTED_SCHEMA_VERSIONS = Object.freeze([1, 2, 3]);
 /** Bir karar türünü gönderebilmek için gereken en düşük sözleşme sürümü (listede yoksa v1). */
 export const DECISION_MIN_SCHEMA = Object.freeze({ kara_liste: 2 });
+/** Sürüm 3 olay / kalp atışı alanlarının okunması için gereken en düşük sözleşme sürümü (altındaki istemcinin bu alanları yok sayılır). */
+export const V3_MIN_SCHEMA = 3;
 
 export const DIRECTION_MODES = Object.freeze(['giris', 'cikis', 'cift']);
 export const CAMERA_DIRECTIONS = Object.freeze(['giris', 'cikis', 'auto']);
@@ -24,6 +27,12 @@ export const DECISION_KINDS_V1 = Object.freeze(['acildi', 'red', 'tanimsiz']);
 export const DECISION_KINDS = Object.freeze([...DECISION_KINDS_V1, 'kara_liste']);
 export const GUEST_RULES = Object.freeze(['tum_bos', 'en_az_bir_bos']);
 export const PRESENCE_KINDS = Object.freeze(['resident', 'guest', 'other']);
+// Sürüm 3 (migration 122) CHECK listeleri.
+export const COMMAND_KINDS = Object.freeze(['discover', 'probe']);
+export const COMMAND_STATUSES = Object.freeze(['pending', 'running', 'done', 'failed', 'expired']);
+export const PROBE_STATUSES = Object.freeze(['none', 'pending', 'ok', 'failed']);
+export const GATE_COMMANDS = Object.freeze(['accepted', 'failed']);
+export const IDENTITY_KINDS = Object.freeze(['resident', 'guest']);
 
 export const DIRECTION_MODE_LABELS = Object.freeze({ giris: 'Yalnız giriş', cikis: 'Yalnız çıkış', cift: 'Çift yön' });
 export const GUEST_RULE_LABELS = Object.freeze({ tum_bos: 'Tüm park yerleri boşsa', en_az_bir_bos: 'En az bir park yeri boşsa' });
@@ -43,6 +52,11 @@ export const DEFAULT_SITE_SETTINGS = Object.freeze({
   inside_timeout_hours: 24,
   alert_interval_minutes: 60,
   resident_notify_max_age_minutes: 15,
+  // Sürüm 3 (migration 122): komut ömrü, görüntü karosu aralıkları (izleyen varken / yokken) ve son karenin saklama süresi (KVKK).
+  command_ttl_seconds: 600,
+  snapshot_interval_seconds: 4,
+  snapshot_idle_interval_seconds: 15,
+  snapshot_keep_minutes: 30,
 });
 /** Alan -> [en az, en çok] (CHECK aralıklarının aynası). */
 export const SETTING_RANGES = Object.freeze({
@@ -54,6 +68,10 @@ export const SETTING_RANGES = Object.freeze({
   inside_timeout_hours: [2, 720],
   alert_interval_minutes: [5, 1440],
   resident_notify_max_age_minutes: [1, 1440],
+  command_ttl_seconds: [60, 3600],
+  snapshot_interval_seconds: [2, 60],
+  snapshot_idle_interval_seconds: [5, 600],
+  snapshot_keep_minutes: [1, 1440],
 });
 
 /** Daire başına park yeri üst sınırı: veri sağlığı (CHECK ile aynı); tek tük hatalı girişi engeller. */
@@ -262,6 +280,9 @@ export function mergeSettings(current, patch) {
   if (merged.inside_timeout_hours <= merged.inside_report_hours) {
     throw invalidField('İçeride zaman aşımı, rapor eşiğinden büyük olmalı.', 'inside_timeout_hours');
   }
+  if (merged.snapshot_idle_interval_seconds < merged.snapshot_interval_seconds) {
+    throw invalidField('İzleyen yokken görüntü aralığı, izlerken olan aralıktan kısa olamaz.', 'snapshot_idle_interval_seconds');
+  }
   return merged;
 }
 
@@ -309,7 +330,27 @@ export function parseEdgeEvent(body, now = Date.now()) {
   if (seenAt.getTime() < now - EVENT_MAX_AGE_MS || seenAt.getTime() > now + EVENT_MAX_FUTURE_MS) throw invalidField('Olay zamanı kabul edilebilir aralıkta değil.', 'seen_at');
   const reasonText = String(body.reason ?? '');
   const reason = /^[a-z0-9_]{1,40}$/.test(reasonText) ? reasonText : null;
-  return { schemaVersion, eventId, cameraId, gateId, plate, decision, direction, seenAt, confidence: parseConfidence(body.confidence), reason };
+  // Sürüm 3 alanları (isteğe bağlı, yalnız v3+ okunur; hatalı değer olayı DÜŞÜRMEZ, alan yok sayılır): kimlik ipucu + kapı komutu sonucu.
+  const v3 = schemaVersion >= V3_MIN_SCHEMA;
+  const hintId = v3 ? Number(body.apartment_id) : NaN;
+  const apartmentHint = Number.isSafeInteger(hintId) && hintId > 0 ? hintId : null;
+  const identityKind = v3 && IDENTITY_KINDS.includes(body.kind) ? body.kind : null;
+  const gateCommand = v3 && GATE_COMMANDS.includes(body.gate_command) ? body.gate_command : null;
+  return {
+    schemaVersion,
+    eventId,
+    cameraId,
+    gateId,
+    plate,
+    decision,
+    direction,
+    seenAt,
+    confidence: parseConfidence(body.confidence),
+    reason,
+    apartmentHint,
+    identityKind,
+    gateCommand,
+  };
 }
 
 /** Kalp atışı (POST heartbeat). */
@@ -329,8 +370,115 @@ export function parseHeartbeat(body) {
   }
   let queueDepth = null;
   if (body.queue_depth !== undefined && body.queue_depth !== null) queueDepth = intField(body.queue_depth, 'queue_depth', 'Kuyruk', 0, 10_000_000);
-  return { schemaVersion, appVersion, cameras, queueDepth };
+  // Sürüm 3: okuma modeli hazır mı (kalibrasyon modunda false). Yoksa / sürüm < 3 ise null (bilinmiyor).
+  let recognitionReady = null;
+  let recognitionNote = null;
+  const recognition = body.recognition;
+  if (schemaVersion >= V3_MIN_SCHEMA && recognition && typeof recognition === 'object' && typeof recognition.ready === 'boolean') {
+    recognitionReady = recognition.ready;
+    const note = cleanText(recognition.note, RECOGNITION_NOTE_MAX);
+    recognitionNote = note || null;
+  }
+  return { schemaVersion, appVersion, cameras, queueDepth, recognitionReady, recognitionNote };
 }
+
+export const RECOGNITION_NOTE_MAX = 80;
+export const COMMAND_MESSAGE_MAX = 300;
+/** Bir keşif sonucunda taşınan en çok cihaz (istek boyutu güvenliği; /24 ağda en çok 254 ana makine). */
+export const MAX_DISCOVERED_DEVICES = 300;
+
+const cleanText = (value, max) => {
+  // eslint-disable-next-line no-control-regex
+  const text = String(value ?? '').replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\s+/g, ' ').trim();
+  return Array.from(text).slice(0, max).join('');
+};
+const IPV4_RE = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+const SOURCE_VALUES = Object.freeze(['onvif', 'onvif+tarama', 'tarama']);
+
+/** Keşif sonucu: yalnız bilinen alanlar, uzunluk sınırlı, IPv4 olmayan cihaz atılır (kenar istemciden gelen veri güvenilmezdir). */
+export function sanitizeDiscoveryResult(result) {
+  const raw = result && typeof result === 'object' ? result : {};
+  const list = Array.isArray(raw.devices) ? raw.devices.slice(0, MAX_DISCOVERED_DEVICES) : [];
+  const devices = [];
+  for (const item of list) {
+    const d = item && typeof item === 'object' ? item : {};
+    const ip = cleanText(d.ip, 15);
+    if (!IPV4_RE.test(ip)) continue;
+    const ports = (Array.isArray(d.ports) ? d.ports : []).map(Number).filter((p) => Number.isInteger(p) && p >= 1 && p <= 65535).slice(0, 20);
+    const rtspPort = Number(d.rtsp_port);
+    devices.push({
+      ip,
+      ports,
+      name: cleanText(d.name, 80),
+      model: cleanText(d.model, 80),
+      source: SOURCE_VALUES.includes(d.source) ? d.source : 'tarama',
+      label: cleanText(d.label, 80),
+      rtsp_port: Number.isInteger(rtspPort) && rtspPort >= 1 && rtspPort <= 65535 ? rtspPort : null,
+    });
+  }
+  const count = (value) => (Number.isSafeInteger(Number(value)) && Number(value) >= 0 ? Number(value) : 0);
+  return {
+    devices,
+    summary: cleanText(raw.summary, 400),
+    onvif_count: count(raw.onvif_count),
+    scan_count: count(raw.scan_count),
+    interfaces: (Array.isArray(raw.interfaces) ? raw.interfaces : []).map((v) => cleanText(v, 15)).filter((v) => IPV4_RE.test(v)).slice(0, 16),
+  };
+}
+
+/** Kamera sınama sonucu. `rtsp_url` yalnız kimliksiz rtsp(s) adresi olarak kabul edilir (kimlik bilgisi içerirse REDDEDİLİR: sır sızdırmaz). */
+export function sanitizeProbeResult(result) {
+  const raw = result && typeof result === 'object' ? result : {};
+  const dim = (value) => (Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 20000 ? Number(value) : null);
+  let rtspUrl = null;
+  if (typeof raw.rtsp_url === 'string' && /^rtsps?:\/\/[^\s@/]+(?:\/\S*)?$/.test(raw.rtsp_url.trim()) && raw.rtsp_url.trim().length <= 500) rtspUrl = raw.rtsp_url.trim();
+  const reasonText = String(raw.reason ?? '');
+  return {
+    ok: raw.ok === true,
+    width: dim(raw.width),
+    height: dim(raw.height),
+    reason: /^[a-z0-9_]{1,40}$/.test(reasonText) ? reasonText : null,
+    message: cleanText(raw.message, COMMAND_MESSAGE_MAX) || null,
+    rtsp_url: rtspUrl,
+  };
+}
+
+/** Komut sonucu gövdesi (POST commands/:id/result). `result` türe göre ayrıca temizlenir. */
+export function parseCommandResult(body, kind) {
+  const schemaVersion = checkSchemaVersion(body.schema_version);
+  const status = String(body.status ?? '');
+  if (status !== 'done' && status !== 'failed') throw invalidField('Durum done ya da failed olmalı.', 'status');
+  const message = cleanText(body.message, COMMAND_MESSAGE_MAX) || null;
+  let result = null;
+  if (status === 'done') {
+    if (kind === 'discover') result = sanitizeDiscoveryResult(body.result);
+    else if (kind === 'probe') result = sanitizeProbeResult(body.result);
+    else result = {};
+  }
+  return { schemaVersion, status, message, result };
+}
+
+/** Görüntü karesi yükleme üstbilgileri (X-Captured-At / X-Frame-Width / X-Frame-Height) + JPEG imzası. Gövde Buffer olmalı. */
+export function parseSnapshotUpload(buffer, headers = {}, now = Date.now(), { maxBytes = MAX_SNAPSHOT_BYTES } = {}) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new PlatformError(400, 'INVALID_SNAPSHOT', 'Görüntü gövdesi boş (image/jpeg bekleniyor).');
+  if (buffer.length > maxBytes) throw new PlatformError(413, 'BODY_TOO_LARGE', 'Görüntü çok büyük.');
+  if (!(buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff)) throw new PlatformError(400, 'INVALID_SNAPSHOT', 'Görüntü JPEG değil.');
+  let capturedAt = new Date(now);
+  const rawAt = headers['x-captured-at'];
+  if (typeof rawAt === 'string' && rawAt) {
+    const ms = new Date(rawAt).getTime();
+    // Saat kayması payı: gelecek +60 sn, geçmiş 10 dk; aksi sunucu saati kullanılır (tarihçe yok, yalnız "ne kadar taze" bilgisi).
+    if (!Number.isNaN(ms) && ms <= now + 60_000 && ms >= now - 600_000) capturedAt = new Date(ms);
+  }
+  const dim = (value) => {
+    const n = Number(value);
+    return Number.isInteger(n) && n >= 1 && n <= 20000 ? n : null;
+  };
+  return { capturedAt, width: dim(headers['x-frame-width']), height: dim(headers['x-frame-height']), byteSize: buffer.length };
+}
+
+/** Görüntü karesi üst sınırı: istek boyutu güvenliği (≈360p JPEG birkaç on KB'tır), ürün sınırı değildir. */
+export const MAX_SNAPSHOT_BYTES = 262_144;
 
 /** Claim gövdesi: sürüm bilgisi (hepsi isteğe bağlı). */
 export function parseClaim(body) {
@@ -343,7 +491,7 @@ const REV_RE = /^[a-f0-9]{8,64}$/;
 
 /** Senkron sorgusu: updated_since (ISO) ve bölüm özetleri (vehicles_rev | permits_rev | blacklist_rev). */
 export function parseSyncQuery(query = {}, now = Date.now()) {
-  checkSchemaVersion(query.schema_version);
+  const schemaVersion = checkSchemaVersion(query.schema_version);
   let since = null;
   if (typeof query.updated_since === 'string' && query.updated_since) {
     const ms = new Date(query.updated_since).getTime();
@@ -351,7 +499,7 @@ export function parseSyncQuery(query = {}, now = Date.now()) {
     if (ms >= now - PRESENCE_FULL_SYNC_MAX_AGE_MS && ms <= now + EVENT_MAX_FUTURE_MS) since = new Date(ms);
   }
   const rev = (name) => (typeof query[name] === 'string' && REV_RE.test(query[name]) ? query[name] : null);
-  return { since, vehiclesRev: rev('vehicles_rev'), permitsRev: rev('permits_rev'), blacklistRev: rev('blacklist_rev') };
+  return { schemaVersion, since, vehiclesRev: rev('vehicles_rev'), permitsRev: rev('permits_rev'), blacklistRev: rev('blacklist_rev') };
 }
 
 export function parseParkingSlots(value) {

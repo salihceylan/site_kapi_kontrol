@@ -305,6 +305,17 @@ describe('evaluateTrialRequest: deneme oturumu erişim ilkesi (varsayılan RED)'
     denied('GET', `/manager/sites/${DEMO}/plate-recognition/inside`);
     denied('GET', '/edge/plate/v1/sync');
     denied('POST', '/edge/plate/v1/events');
+    // Sözleşme sürüm 3 (122): kamera ekle / sına, "ağda kamera ara" (yerel ağ taraması komutu) ve canlı görüntü karoları AYNI alt ağaçtadır => HER yöntemde kapalı
+    // (kamera parolası + canlı görüntü + kenar PC'ye komut: deneme kapsamı DIŞI, yeni rota ailesi AÇILMADI). Komut / görüntü kenar uçları da cihaz anahtarlıdır.
+    denied('GET', `/manager/sites/${DEMO}/plate-recognition/cameras`);
+    denied('POST', `/manager/sites/${DEMO}/plate-recognition/cameras`);
+    denied('PUT', `/manager/sites/${DEMO}/plate-recognition/cameras/3`);
+    denied('POST', `/manager/sites/${DEMO}/plate-recognition/cameras/3/probe`);
+    denied('GET', `/manager/sites/${DEMO}/plate-recognition/cameras/3/snapshot`);
+    denied('POST', `/manager/sites/${DEMO}/plate-recognition/discovery`);
+    denied('GET', `/manager/sites/${DEMO}/plate-recognition/discovery`);
+    denied('GET', '/edge/plate/v1/commands');
+    denied('PUT', '/edge/plate/v1/cameras/3/snapshot');
     denied('GET', `/manager/sites/${DEMO}/plate-events`);
     denied('POST', `/manager/sites/${DEMO}/drive/connect`);
     denied('DELETE', `/manager/sites/${DEMO}/drive`);

@@ -17,7 +17,7 @@ class _FakeService extends Fake implements PlateRecognitionService {
   }
 }
 
-Map<String, dynamic> _row(int id, String plate, String kind, String? direction, {String? door = 'Ana Giriş'}) => <String, dynamic>{
+Map<String, dynamic> _row(int id, String plate, String kind, String? direction, {String? door = 'Ana Giriş', Map<String, dynamic>? identity, String? gateState}) => <String, dynamic>{
   'id': id,
   'plate': plate,
   'decision': kind == 'acildi' ? 'ALLOWED' : (kind == 'tanimsiz' ? 'UNKNOWN' : 'DENIED'),
@@ -26,6 +26,8 @@ Map<String, dynamic> _row(int id, String plate, String kind, String? direction, 
   'reason_label': 'x',
   'seen_at': DateTime.now().toUtc().toIso8601String(),
   'door_name': door,
+  'identity': identity,
+  'gate_state': gateState,
 };
 
 PlateLiveFeed _feed({int inside = 7, int refresh = 5, List<Map<String, dynamic>>? rows}) => PlateLiveFeed.fromJson(<String, dynamic>{
@@ -60,7 +62,7 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text('İçeride: 7 araç', findRichText: true), findsOneWidget);
-      for (final badge in <String>['AÇILDI', 'RED', 'TANIMSIZ', 'KARA LİSTE']) {
+      for (final badge in <String>['İZİN VERİLDİ', 'RED', 'TANIMSIZ', 'KARA LİSTE']) {
         expect(find.text(badge), findsOneWidget);
       }
       final plate = tester.widget<Text>(find.text('34 ABC 123'));
@@ -68,7 +70,11 @@ void main() {
       expect(find.byIcon(Icons.south_rounded), findsNWidgets(2));
       expect(find.byIcon(Icons.north_rounded), findsOneWidget);
       expect(find.byIcon(Icons.swap_vert_rounded), findsOneWidget);
-      expect(find.bySemanticsLabel(RegExp('Plaka 34 ABC 123, Giriş, AÇILDI, Ana Giriş')), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('Plaka 34 ABC 123, Giriş, İZİN VERİLDİ, Ana Giriş')), findsOneWidget);
+      expect(find.text('AÇILDI'), findsNothing, reason: 'P1-15: kanıtsız "açıldı" yok');
+      expect(find.byKey(const ValueKey<String>('plate_identity_text')), findsNothing, reason: 'kimlik yoksa satır HİÇ çizilmez');
+      expect(find.textContaining('Kapı tetiklendi'), findsNothing);
+      expect(find.textContaining('Kapı yanıt vermedi'), findsNothing);
       expect(find.bySemanticsLabel('İçeride 7 araç'), findsOneWidget);
       await _close(tester);
     });
@@ -124,6 +130,70 @@ void main() {
       expect(find.textContaining('Bağlantı kesildi; son bilinen liste gösteriliyor.'), findsOneWidget);
       expect(find.text('34 ABC 123'), findsOneWidget, reason: 'hata son listeyi silmez');
       await _close(tester);
+    });
+
+    testWidgets('kimlik satırı: sakin "Daire … · Ali Y.", misafir "Misafir — Daire …"; tanımsızda ve kimliksizde satır yok; 320 dp taşmaz', (tester) async {
+      tester.view.physicalSize = const Size(320, 1100);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final service = _FakeService(
+        (_) => _feed(
+          rows: <Map<String, dynamic>>[
+            _row(5, '34 ABC 123', 'acildi', 'giris', identity: <String, dynamic>{'kind': 'resident', 'apartment_label': 'A Blok - 5', 'person_label': 'Ali Y.'}),
+            _row(4, '06 MIS 22', 'acildi', 'giris', identity: <String, dynamic>{'kind': 'guest', 'apartment_label': 'A Blok - 5', 'person_label': null}),
+            _row(3, '35 SOL 11', 'acildi', 'cikis', identity: <String, dynamic>{'kind': 'resident', 'apartment_label': null, 'person_label': 'Veli K.'}),
+            _row(2, '35 DEF 456', 'tanimsiz', null, identity: null),
+            _row(1, '16 KL 777', 'kara_liste', 'giris', identity: <String, dynamic>{'kind': 'bilinmeyen'}),
+          ],
+        ),
+      );
+      await _pump(tester, service);
+      expect(tester.takeException(), isNull);
+      expect(find.text('Daire A Blok - 5 · Ali Y.'), findsOneWidget);
+      expect(find.text('Misafir — Daire A Blok - 5'), findsOneWidget);
+      expect(find.text('Veli K.'), findsOneWidget, reason: 'daire etiketi yoksa yalnız kişi');
+      expect(find.byKey(const ValueKey<String>('plate_identity_text')), findsNWidgets(3), reason: 'tanımsız ve bilinmeyen tür için satır yok');
+      expect(find.bySemanticsLabel(RegExp('Plaka 34 ABC 123, Daire A Blok - 5 · Ali Y., Giriş, İZİN VERİLDİ')), findsOneWidget);
+      await _close(tester);
+    });
+
+    testWidgets('kapı durumu rozeti: tetiklendi ✓ / yanıt vermedi ✗; durum yoksa rozet yok; "açıldı" denmez', (tester) async {
+      tester.view.physicalSize = const Size(320, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final service = _FakeService(
+        (_) => _feed(
+          rows: <Map<String, dynamic>>[
+            _row(3, '34 ABC 123', 'acildi', 'giris', gateState: 'triggered'),
+            _row(2, '06 XY 99', 'red', 'giris', gateState: 'no_response'),
+            _row(1, '35 DEF 456', 'tanimsiz', null),
+          ],
+        ),
+      );
+      await _pump(tester, service);
+      expect(tester.takeException(), isNull);
+      expect(find.text('Kapı tetiklendi ✓'), findsOneWidget);
+      expect(find.text('Kapı yanıt vermedi ✗'), findsOneWidget);
+      expect(find.textContaining('açıldı'), findsNothing);
+      expect(find.bySemanticsLabel(RegExp('Plaka 34 ABC 123, Giriş, İZİN VERİLDİ, Kapı tetiklendi, komut kabul edildi, Ana Giriş')), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('Plaka 06 XY 99, Giriş, RED, Kapı yanıt vermedi, Ana Giriş')), findsOneWidget);
+      await _close(tester);
+    });
+
+    test('PlateDecisionRow: identity ve gate_state ayrıştırması (bilinmeyen değerler yok sayılır)', () {
+      final row = PlateDecisionRow.fromJson(<String, dynamic>{
+        'id': 1,
+        'plate': '34ABC123',
+        'identity': <String, dynamic>{'kind': 'guest', 'apartment_label': ' A - 2 ', 'person_label': ''},
+        'gate_state': 'triggered',
+      });
+      expect(row.identity?.isGuest, isTrue);
+      expect(row.identity?.apartmentLabel, 'A - 2');
+      expect(row.identity?.personLabel, isNull);
+      expect(row.gateState, 'triggered');
+      final odd = PlateDecisionRow.fromJson(<String, dynamic>{'id': 2, 'plate': 'X', 'identity': 'x', 'gate_state': 'opened'});
+      expect(odd.identity, isNull);
+      expect(odd.gateState, isNull);
     });
 
     test('liveDecisionOf: karar türü yoksa eski decision alanından türetilir', () {

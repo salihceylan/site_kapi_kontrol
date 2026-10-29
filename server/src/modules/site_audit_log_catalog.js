@@ -136,6 +136,10 @@ export const SITE_AUDIT_LABELS = Object.freeze({
   'plate.inside_cleared': 'İçerideki araç elle düşürüldü',
   'plate.edge_disconnected': 'Plaka tanıma bağlantısı koptu (kenar PC / kamera)',
   'plate.inside_timeout': 'İçeride uzun süre kalan araçlar zaman aşımıyla düşürüldü',
+  'plate.camera_created': 'Plaka kamerası eklendi',
+  'plate.camera_updated': 'Plaka kamerası değişti',
+  'plate.camera_probe_requested': 'Plaka kamerası sınama komutu verildi',
+  'plate.discovery_requested': 'Ağda kamera arama komutu verildi',
   'device.ownership_released': 'Cihaz sahipliği sıfırlandı',
 
   // Kişi ve daire kayıtları

@@ -47,6 +47,7 @@ import { ensureDriveHealthSchema } from './modules/drive_health_schema.js';
 import { ensureMessagingSchema } from './modules/messaging_schema.js';
 import { ensurePlateGatesSchema } from './modules/plate_gates_schema.js';
 import { ensurePlateAlertsSchema } from './modules/plate_alerts_schema.js';
+import { ensurePlateCamerasSchema } from './modules/plate_cameras_schema.js';
 import { ensureSiteFreePeriodSchema } from './modules/site_free_period_schema.js';
 import { ensurePaymentConnectionSchema } from './modules/payment_connection_schema.js';
 import { ensureMeteringFieldSchema } from './modules/metering_field_schema.js';
@@ -2102,6 +2103,9 @@ export async function ensureDbSchema() {
     // 121 (plaka tanima A3: "iceride" esikleri, kopukluk uyari siniri, sakin bildirim tercihi, olay karar turune 'kara_liste'): 120'den SONRA (plate_site_settings, plate_presence);
     // katalog kontrolu + eksikse idempotent ifadeler (plate_alerts_schema.js = migrations/121). Mevcut satirlara dokunmaz.
     await ensurePlateAlertsSchema(client);
+    // 122 (plaka tanima sozlesme surum 3: kamera RTSP + sinama sonucu, uzaktan komut kuyrugu, son goruntu karesi, olaya kimlik baglama + kapi komutu, site ayari sutunlari):
+    // 120/121'den SONRA (plate_edge_clients, plate_site_settings, plate_events); katalog kontrolu + eksikse idempotent ifadeler (plate_cameras_schema.js = migrations/122). Mevcut satirlara dokunmaz.
+    await ensurePlateCamerasSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

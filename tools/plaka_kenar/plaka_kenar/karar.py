@@ -23,8 +23,8 @@ from datetime import datetime
 from pathlib import Path
 
 _SEMA = """
-CREATE TABLE IF NOT EXISTS s_arac(plaka TEXT PRIMARY KEY, daire_id TEXT);
-CREATE TABLE IF NOT EXISTS s_izin(plaka TEXT PRIMARY KEY, daire_id TEXT, baslangic REAL, bitis REAL);
+CREATE TABLE IF NOT EXISTS s_arac(plaka TEXT PRIMARY KEY, daire_id TEXT, etiket TEXT, kisi TEXT);
+CREATE TABLE IF NOT EXISTS s_izin(plaka TEXT PRIMARY KEY, daire_id TEXT, baslangic REAL, bitis REAL, etiket TEXT);
 CREATE TABLE IF NOT EXISTS s_kara(plaka TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS s_iceride(plaka TEXT PRIMARY KEY, daire_id TEXT, tur TEXT, zaman REAL);
 CREATE TABLE IF NOT EXISTS daireler(
@@ -52,6 +52,22 @@ def _id(v):
     return None if v is None else str(v)
 
 
+def _metin(v, en_cok: int = 60):
+    """Sunucudan gelen gorunum etiketi: kirpilir, bos ise None (kisisel veri yalniz yerel gorunum icin saklanir)."""
+    t = " ".join(str(v).split())[:en_cok] if v not in (None, "") else ""
+    return t or None
+
+
+def kimlik_etiketi(tur: str, daire_etiketi: str | None, kisi: str | None) -> str:
+    """Mozaik karosu / olay seridi satiri. sakin: "Daire A - 5 · Ali Y." ; misafir: "Misafir — Daire A - 5".
+    Etiket yoksa yalniz bilinen kisimlar yazilir (tanimsiz plakada hic kimlik satiri uretilmez: cagiran None alir)."""
+    daire = f"Daire {daire_etiketi}" if daire_etiketi else ""
+    if tur == "misafir":
+        return f"Misafir — {daire}" if daire else "Misafir"
+    parcalar = [p for p in (daire, kisi or "") if p]
+    return " · ".join(parcalar) if parcalar else "Kayıtlı araç"
+
+
 class IzinDeposu:
     def __init__(self, yol: Path | str = ":memory:"):
         if yol != ":memory:":
@@ -61,6 +77,21 @@ class IzinDeposu:
         self.kilit = threading.RLock()
         with self.kilit:
             self.db.executescript(_SEMA)
+            self._sema_gecis()
+
+    def _sema_gecis(self) -> None:
+        """Eski (v2) yerel dosyalar: kimlik etiketi sutunlari eksikse eklenir ve bolum 'rev'leri sifirlanir (sonraki senkron tam bolumu ister)."""
+        gerekli = {"s_arac": ("etiket", "kisi"), "s_izin": ("etiket",)}
+        eklendi = False
+        for tablo, sutunlar in gerekli.items():
+            mevcut = {r["name"] for r in self.db.execute(f"PRAGMA table_info({tablo})")}
+            for sutun in sutunlar:
+                if sutun not in mevcut:
+                    self.db.execute(f"ALTER TABLE {tablo} ADD COLUMN {sutun} TEXT")
+                    eklendi = True
+        if eklendi:
+            self.db.execute("DELETE FROM meta WHERE k IN ('rev_vehicles', 'rev_permits')")
+            self.db.commit()
 
     # --- senkron -------------------------------------------------------------------
     def _meta(self, k: str, varsayilan: str = "") -> str:
@@ -91,8 +122,9 @@ class IzinDeposu:
             v = cevap.get("vehicles") or {}
             if "items" in v:
                 self.db.execute("DELETE FROM s_arac")
-                self.db.executemany("INSERT OR REPLACE INTO s_arac(plaka,daire_id) VALUES(?,?)",
-                                    [(_kanonik(x["plate"]), _id(x.get("apartment_id"))) for x in v["items"]])
+                self.db.executemany("INSERT OR REPLACE INTO s_arac(plaka,daire_id,etiket,kisi) VALUES(?,?,?,?)",
+                                    [(_kanonik(x["plate"]), _id(x.get("apartment_id")), _metin(x.get("apartment_label")),
+                                      _metin(x.get("person_label"))) for x in v["items"]])
                 n += len(v["items"])
                 self._yaz_meta("rev_vehicles", v.get("rev", ""))
             p = cevap.get("guest_permits") or {}
@@ -102,8 +134,9 @@ class IzinDeposu:
                     plaka, bitis = _kanonik(x["plate"]), _epoch(x.get("valid_until"))
                     eski = self.db.execute("SELECT bitis FROM s_izin WHERE plaka=?", (plaka,)).fetchone()
                     if eski is None or (bitis or 0) > (eski["bitis"] or 0):
-                        self.db.execute("INSERT OR REPLACE INTO s_izin(plaka,daire_id,baslangic,bitis) VALUES(?,?,?,?)",
-                                        (plaka, _id(x.get("apartment_id")), _epoch(x.get("valid_from")), bitis))
+                        self.db.execute("INSERT OR REPLACE INTO s_izin(plaka,daire_id,baslangic,bitis,etiket) VALUES(?,?,?,?,?)",
+                                        (plaka, _id(x.get("apartment_id")), _epoch(x.get("valid_from")), bitis,
+                                         _metin(x.get("apartment_label"))))
                 n += len(p["items"])
                 self._yaz_meta("rev_permits", p.get("rev", ""))
             b = cevap.get("blacklist") or {}
@@ -155,6 +188,17 @@ class IzinDeposu:
                 "gecerli_baslangic": None if sakin or not i else i["baslangic"],
                 "gecerli_bitis": None if sakin or not i else i["bitis"],
                 "kara_liste": int(k is not None), "iceride": int(c is not None)}
+
+    def kimlik(self, plaka: str):
+        """Kimlik baglama (v3): {tur: sakin|misafir, daire_id, etiket} ya da None (tanimsiz / yalniz kara liste). Sakin kaydi misafir iznine ustundur."""
+        with self.kilit:
+            a = self.db.execute("SELECT daire_id,etiket,kisi FROM s_arac WHERE plaka=?", (plaka,)).fetchone()
+            i = None if a is not None else self.db.execute("SELECT daire_id,etiket FROM s_izin WHERE plaka=?", (plaka,)).fetchone()
+        if a is not None:
+            return {"tur": "sakin", "daire_id": a["daire_id"], "etiket": kimlik_etiketi("sakin", a["etiket"], a["kisi"])}
+        if i is not None:
+            return {"tur": "misafir", "daire_id": i["daire_id"], "etiket": kimlik_etiketi("misafir", i["etiket"], None)}
+        return None
 
     def daire(self, daire_id):
         with self.kilit:

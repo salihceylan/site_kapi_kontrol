@@ -40,6 +40,15 @@ import {
 } from './plate_recognition_permits.js';
 
 import {
+  createCamera,
+  getCamerasOverview,
+  getLatestDiscovery,
+  probeCamera,
+  readSnapshot,
+  startDiscovery,
+  updateCamera,
+} from './plate_cameras_service.js';
+import {
   clearInside,
   createEdgeClient,
   createGate,
@@ -149,7 +158,7 @@ export const eventsLimiter = createRuleLimiter({
   includeRetryBody: true,
 });
 
-plateRecognitionRouter.get(`${BASE}/events`, ...managerHandler({ context: 'plate_events', fallback: 'Plaka kayıtları yüklenemedi.', limiter: eventsLimiter },({ req, access }) => listDecisions(access.siteCode, req.query)));
+plateRecognitionRouter.get(`${BASE}/events`, ...managerHandler({ context: 'plate_events', fallback: 'Plaka kayıtları yüklenemedi.', limiter: eventsLimiter },({ req, access }) => listDecisions(access.siteCode, req.query, { canWrite: access.canWrite })));
 
 plateRecognitionRouter.get(`${BASE}/permits`, ...managerHandler({ context: 'plate_permits', fallback: 'Misafir izinleri yüklenemedi.' }, ({ req, access }) => listPermits(access.siteCode, req.query)));
 plateRecognitionRouter.post(
@@ -250,6 +259,68 @@ plateRecognitionRouter.post(
   ...managerHandler({ context: 'plate_inside_clear', fallback: 'Kayıt düzeltilemedi.', write: true }, ({ req, access }) =>
     clearInside({ siteCode: access.siteCode, rawId: req.params.id, authUser: access.authUser }),
   ),
+);
+
+// --- Kamera yönetimi + görüntü karoları + "ağda kamera ara" (sözleşme sürüm 3) -----------------------------------------------------
+// Sunucu yerel ağı taramaz: komutlar kenar PC'ye kuyruk üzerinden gider (plate_edge_commands). Yazma = yönetici / süper. Görüntü yalnız yönetici / süper (kurul / görevli 403).
+
+/** Kamera gövdesi: parola + RTSP adresi dahil küçük bir JSON; istek boyutu güvenliği. */
+const CAMERA_BODY_BYTES = 8192;
+
+// Izgara görüntüleri kamera başına birkaç saniyede bir yoklanır: genel okuma sınırından geniş, yine de kullanıcı + IP başına sınırlı.
+const snapshotViewLimiter = createRuleLimiter({
+  rules: [
+    { windowMs: HOUR_MS, max: 36000, key: userKey },
+    { windowMs: HOUR_MS, max: 360000, key: ipKey },
+  ],
+  message: 'Çok fazla görüntü isteği. Biraz sonra tekrar deneyin.',
+  includeRetryBody: true,
+});
+
+plateRecognitionRouter.get(
+  `${BASE}/cameras`,
+  ...managerHandler({ context: 'plate_cameras', fallback: 'Kameralar yüklenemedi.', limiter: eventsLimiter }, ({ access }) => getCamerasOverview({ siteCode: access.siteCode, canWrite: access.canWrite })),
+);
+plateRecognitionRouter.post(
+  `${BASE}/cameras`,
+  ...managerHandler({ context: 'plate_camera_create', fallback: 'Kamera kaydedilemedi.', write: true, status: 201, maxBytes: CAMERA_BODY_BYTES }, ({ req, access }) =>
+    createCamera({ siteCode: access.siteCode, body: bodyOf(req), authUser: access.authUser }),
+  ),
+);
+plateRecognitionRouter.put(
+  `${BASE}/cameras/:id`,
+  ...managerHandler({ context: 'plate_camera_update', fallback: 'Kamera kaydedilemedi.', write: true, maxBytes: CAMERA_BODY_BYTES }, ({ req, access }) =>
+    updateCamera({ siteCode: access.siteCode, rawId: req.params.id, body: bodyOf(req), authUser: access.authUser }),
+  ),
+);
+plateRecognitionRouter.post(
+  `${BASE}/cameras/:id/probe`,
+  ...managerHandler({ context: 'plate_camera_probe', fallback: 'Sınama komutu verilemedi.', write: true, status: 202 }, ({ req, access }) =>
+    probeCamera({ siteCode: access.siteCode, rawId: req.params.id, body: bodyOf(req), authUser: access.authUser }),
+  ),
+);
+plateRecognitionRouter.get(`${BASE}/cameras/:id/snapshot`, authRequired, snapshotViewLimiter, async (req, res) => {
+  try {
+    const access = await resolveAccess(req, res, { write: true });
+    if (!access) return undefined;
+    const snapshot = await readSnapshot({ siteCode: access.siteCode, rawId: req.params.id });
+    res.set({ 'Cache-Control': 'no-store', 'X-Captured-At': snapshot.capturedAt.toISOString(), ETag: snapshot.etag, 'X-Content-Type-Options': 'nosniff' });
+    if (req.headers['if-none-match'] === snapshot.etag) return res.status(304).end();
+    res.type('image/jpeg');
+    return res.status(200).send(snapshot.jpeg);
+  } catch (error) {
+    return respondError(res, 'plate_camera_snapshot', error, 'Görüntü alınamadı.');
+  }
+});
+plateRecognitionRouter.post(
+  `${BASE}/discovery`,
+  ...managerHandler({ context: 'plate_discovery_start', fallback: 'Arama komutu verilemedi.', write: true, status: 202 }, ({ req, access }) =>
+    startDiscovery({ siteCode: access.siteCode, body: bodyOf(req), authUser: access.authUser }),
+  ),
+);
+plateRecognitionRouter.get(
+  `${BASE}/discovery`,
+  ...managerHandler({ context: 'plate_discovery_latest', fallback: 'Arama sonucu alınamadı.', limiter: eventsLimiter }, ({ access }) => getLatestDiscovery({ siteCode: access.siteCode })),
 );
 
 // --- Sakin ---------------------------------------------------------------------------------------------------------

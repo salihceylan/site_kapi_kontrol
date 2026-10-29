@@ -69,6 +69,9 @@ class DoorAccessLogRecord {
         return 'GM60 QR Okuyucu';
       case 'screen_qr':
         return 'Ekran QR Tarama';
+      case 'plate':
+        // Plaka Tanıma (kenar PC): SmartKeyPass açma komutu kabul edildi; fiziksel açılma kanıtı değildir (P1-15).
+        return 'Plaka ile';
       case 'display_btn':
         return 'Ekran Butonu';
       case 'admin_display_btn':

@@ -13,7 +13,9 @@ from pathlib import Path
 
 import cv2
 
-from . import ayarlar as ayarmod, boru as borumod, kapi as kapimod, karar as kararmod, yakalama
+from . import ayarlar as ayarmod, boru as borumod, kamerasync, kapi as kapimod, karar as kararmod, yakalama
+from .goruntu import GoruntuGonderici
+from .komut import KomutIsleyici
 from .kuyruk import OlayKuyrugu
 from .sunucu import SunucuHatasi, SunucuIstemcisi
 
@@ -40,8 +42,9 @@ def _iso(epoch: float) -> str:
 
 class Servis:
     def __init__(self, ayar: dict | None = None, taban: Path | None = None, boru=None, kapi_surucu=None,
-                 sunucu=None, depo=None, kuyruk=None):
-        self.ayar = ayar or ayarmod.yukle()
+                 sunucu=None, depo=None, kuyruk=None, ayar_yolu=None, komut_isleyici=None):
+        self.ayar = ayar or ayarmod.yukle(ayar_yolu)
+        self.ayar_yolu = ayar_yolu  # None: sunucudan inen kamera tanimlari dosyaya ISLENMEZ (testler); uygulama yolu verir
         self.taban = taban
         v = self.ayar["veri"]
         self.depo = depo or kararmod.IzinDeposu(ayarmod.yol_coz(v["izin_db"], taban))
@@ -52,6 +55,10 @@ class Servis:
         self.boru = boru or borumod.Boru(self.ayar, taban)
         self.kapi_surucu = kapi_surucu or kapimod.olustur(self.ayar)
         self.sunucu = sunucu or SunucuIstemcisi(self.ayar["sunucu"])
+        self.komutlar = komut_isleyici or KomutIsleyici(self.ayar, self.sunucu)  # uzaktan komutlar (kesif / sinama), v3
+        self.goruntu_sunucu: dict = {}  # sync config.settings: {aralik, bosta} (goruntu karosu araligi ipuclari)
+        self.goruntu_gonderici = None
+        self.kamera_surum = 0  # sunucu kamera tanimlari degistikce artar (arayuz tablolari tazelemek icin okur)
         self.dinleyiciler: list = []
         self.kam_durum: dict = {}  # id -> {durum, son_kare, son_okuma}
         self.kapi_durum: dict = {}
@@ -59,10 +66,12 @@ class Servis:
         self.goruntu: dict = {}  # id -> (kucultulmus kare, zaman): mozaik yayini, isleme hizindan bagimsiz
         self._akislar: list = []
         self._dur = threading.Event()
+        self._calisiyor = False
         self._kayitli = False
         self._arka = None
         self.son_hata = ""
         self._uyarilan: set = set()
+        self._kapisiz_uyarilan: set = set()
 
     # --- yardimcilar ---------------------------------------------------------------
     def kapilar(self) -> dict:
@@ -92,23 +101,31 @@ class Servis:
         yon_modu = kapi["yon_modu"] if kapi else "cift"
         karar = self.motor.karar(okuma.kanonik, yon_modu, kam.get("yon", ""), okuma.dogrulanmis, okuma.zaman)
         sonuc, neden = karar.sonuc, karar.neden
+        kapi_komut = ""  # v3: '' = acma denenmedi | 'accepted' = SmartKeyPass komutu KABUL ETTI (fiziksel acilma kaniti DEGIL) | 'failed'
         if karar.ac:
             if not kapi:
                 sonuc, neden = "acma_basarisiz", "kapi_tanimsiz"
+                kapi_komut = "failed"
             else:
                 r = self.kapi_surucu.ac(kapi)
                 self.kapi_durum[kapi["id"]] = {"basarili": r.basarili, "neden": r.neden, "zaman": okuma.zaman}
                 if r.basarili:
                     sonuc = "acildi"
+                    kapi_komut = "accepted"
                     self.depo.iceride_ayarla(okuma.kanonik, karar.yon == "giris")
                 else:
                     sonuc, neden = "acma_basarisiz", r.neden or "bilinmeyen"
+                    kapi_komut = "failed"
+        # Kimlik baglama (v3): yalniz DOGRULANMIS okumada (kalibrasyonda okunan plaka guvenilmez); tanimsiz plakada kimlik yok, yalniz plaka.
+        kimlik = self.depo.kimlik(okuma.kanonik) if okuma.dogrulanmis else None
         olay = {  # yerel (arayuz olay seridi); sunucuya giden govde sunucu_olayi()
             "schema_version": self.ayar["sunucu"]["schema_version"], "event_id": uuid.uuid4().hex,
             "zaman": _iso(okuma.zaman), "kamera_id": okuma.kamera_id,
             "kapi_id": kam.get("kapi_id", ""), "yon": karar.yon, "plaka": okuma.plaka,
             "guven": round(okuma.guven, 3), "karar": sonuc, "neden": neden,
             "dogrulanmis": okuma.dogrulanmis, "arac_tur": karar.arac_tur, "kaynak": okuma.kaynak,
+            "daire_id": (kimlik or {}).get("daire_id") or "", "kimlik_tur": (kimlik or {}).get("tur", ""),
+            "etiket": (kimlik or {}).get("etiket", ""), "kapi_komut": kapi_komut,
         }
         if self.sunucu.uc_etkin("olay"):
             govde = self.sunucu_olayi(olay, okuma, kam, kapi)
@@ -142,6 +159,10 @@ class Servis:
         gate_id = _tam_sayi(kapi.get("sunucu_id")) if kapi else None
         if gate_id is not None:
             govde["gate_id"] = gate_id
+        if int(self.ayar["sunucu"]["schema_version"]) >= 3:  # v3 alanlari (hepsi isteğe bagli; yoksa hic konmaz)
+            govde["apartment_id"] = _tam_sayi(olay.get("daire_id"))
+            govde["kind"] = {"sakin": "resident", "misafir": "guest"}.get(olay.get("kimlik_tur"))
+            govde["gate_command"] = olay.get("kapi_komut") if olay.get("kapi_komut") in ("accepted", "failed") else None
         neden = str(olay["neden"] or "").lower()
         if _NEDEN_RE.match(neden):
             govde["reason"] = neden
@@ -173,25 +194,72 @@ class Servis:
         return n
 
     # --- yasam dongusu ----------------------------------------------------------------
+    def _akis_baslat(self, kam: dict) -> None:
+        if not kam.get("etkin", True):
+            return
+        self.kam_durum.setdefault(kam["id"], {"durum": "bekliyor", "son_kare": 0, "son_okuma": 0})
+        if kam.get("mod", "akis") == "akis":
+            a = yakalama.AkisKaynagi(kam, self.ayar["yakalama"], self._kare_cb, self._durum_cb,
+                                     self._goruntu_cb, self.ayar["izleme"])
+            self._akislar.append(a)
+            a.start()
+
     def baslat(self) -> None:
         self._dur.clear()
-        for kam in self.ayar["kameralar"]:
-            if not kam.get("etkin", True):
-                continue
-            self.kam_durum.setdefault(kam["id"], {"durum": "bekliyor", "son_kare": 0, "son_okuma": 0})
-            if kam.get("mod", "akis") == "akis":
-                a = yakalama.AkisKaynagi(kam, self.ayar["yakalama"], self._kare_cb, self._durum_cb,
-                                         self._goruntu_cb, self.ayar["izleme"])
-                self._akislar.append(a)
-                a.start()
+        self._calisiyor = True
+        for kam in list(self.ayar["kameralar"]):
+            self._akis_baslat(kam)
         self._arka = threading.Thread(target=self._arka_dongu, daemon=True, name="arka")
         self._arka.start()
+        if self.ayar.get("goruntu_gonderim", {}).get("etkin", True) and not (
+                self.goruntu_gonderici is not None and self.goruntu_gonderici.is_alive()):  # kapali ise hic baslamaz
+            self.goruntu_gonderici = GoruntuGonderici(self)
+            self.goruntu_gonderici.start()
 
     def durdur(self) -> None:
+        self._calisiyor = False
         self._dur.set()
         for a in self._akislar:
             a.dur.set()
         self._akislar.clear()
+
+    # --- sunucu kamera tanimlari (v3) ---------------------------------------------------------
+    def kameralari_birlestir(self, sunucu_kameralari) -> dict:
+        """Sync `config.cameras` -> yerel kameralar (kamerasync.birlestir). `None` (sunucu bu bolumu vermedi) hicbir sey yapmaz.
+        Degisince calisan akislar farkla yenilenir ve sunucu-kaynakli satirlar dosyaya islenir (cevrimdisi acilista da kamera hazir olsun)."""
+        fark = kamerasync.birlestir(self.ayar, sunucu_kameralari)
+        yeni = [k for k in fark["kapisiz"] if k not in self._kapisiz_uyarilan]
+        for k in yeni:
+            self._kapisiz_uyarilan.add(k)
+            log.warning("sunucu kamerasi %s: yerelde sunucu_id'si eslesen kapi yok; goruntu / sinama calisir, kapi acilmaz", k)
+        if not fark["degisti"]:
+            return fark
+        log.info("sunucu kamera tanimlari: +%d -%d ~%d", len(fark["eklenen"]), len(fark["silinen"]), len(fark["guncellenen"]))
+        self.kamera_surum += 1
+        self.kameralari_yenile(fark)
+        if self.ayar_yolu is not None:
+            try:
+                ayarmod.sunucu_kameralarini_yaz(self.ayar["kameralar"], self.ayar_yolu)
+            except Exception as e:  # noqa: BLE001 - dosya hatasi calismayi durdurmasin (bellekteki tanim gecerli)
+                log.warning("sunucu kamera tanimlari dosyaya yazilamadi: %s", type(e).__name__)
+        return fark
+
+    def kameralari_yenile(self, fark: dict) -> None:
+        """Silinen / degisen akislari durdurur, yeni / degisenleri baslatir (servis calisiyorsa)."""
+        for kid in fark["yeniden_baslat"]:
+            a = self.akis(kid)
+            if a is not None:
+                a.dur.set()
+                self._akislar.remove(a)
+            if kid in fark["silinen"]:
+                for tablo in (self.kam_durum, self.son_kare, self.goruntu):
+                    tablo.pop(kid, None)
+        if not self._calisiyor:
+            return
+        var = self.kameralar()
+        for kid in fark["yeniden_baslat"]:
+            if kid in var:
+                self._akis_baslat(var[kid])
 
     def _kare_cb(self, kam, kare, t) -> None:
         try:
@@ -232,9 +300,12 @@ class Servis:
     # --- sunucu dongusu -------------------------------------------------------------
     def _arka_dongu(self) -> None:
         s = self.ayar["sunucu"]
-        sonraki = {"senkron": 0.0, "olay": 0.0, "kalp": 0.0, "temizle": 0.0}
+        sonraki = {"senkron": 0.0, "olay": 0.0, "kalp": 0.0, "temizle": 0.0, "komut": 0.0}
         while not self._dur.wait(1.0):
             t = time.monotonic()
+            if t >= sonraki["komut"]:  # hizli yoklama: yonetici "Agda kamera ara" dediginde beklememek icin kalp atisindan ayri
+                sonraki["komut"] = t + max(1.0, float(s.get("komut_aralik_sn", 5)))
+                self.komut_yokla()
             if t >= sonraki["senkron"]:
                 sonraki["senkron"] = t + s["senkron_aralik_sn"]
                 self.senkronla()
@@ -285,8 +356,25 @@ class Servis:
             return 0
         n = self.depo.delta_uygula(r.govde, iceride_uygula=not bekleyen)
         self.motor.sunucu_kuralini_al()
-        self._araliklar((r.govde.get("config") or {}).get("settings"))
+        cfg = r.govde.get("config") or {}
+        self._araliklar(cfg.get("settings"))
+        self._goruntu_araliklari(cfg.get("settings"))
+        if isinstance(cfg.get("cameras"), list):  # sozlesme v3; eski sunucuda bolum yoktur: yerel kameralara dokunulmaz
+            self.kameralari_birlestir(cfg["cameras"])
         return n
+
+    def _goruntu_araliklari(self, ayar_sunucu: dict | None) -> None:
+        """Sync config.settings goruntu karosu araliklari (izleyen varken / yokken). Yerel `goruntu_gonderim.aralik_sn` alt sinir olarak kalir."""
+        a = ayar_sunucu or {}
+        for anahtar, ad in (("snapshot_interval_seconds", "aralik"), ("snapshot_idle_interval_seconds", "bosta")):
+            n = _tam_sayi(a.get(anahtar))
+            if n is not None:
+                self.goruntu_sunucu[ad] = n
+
+    def komut_yokla(self) -> int:
+        """GET commands: bekleyen uzaktan komutlari (kesif / sinama) talep edip ayri is parcaciginda calistirir. Doner: baslatilan komut sayisi."""
+        r = self._dene("komutlar", self.sunucu.komutlar)
+        return self.komutlar.ver((r.govde.get("commands") if r is not None else None) or [])
 
     def olay_gonder(self) -> int:
         """Kuyruktaki olaylari TEK TEK gonderir (sozlesme: POST events tek olay). Ag/5xx/401/403: kalanlar sonraki tura kalir;
@@ -324,12 +412,17 @@ class Servis:
             if d.get("son_okuma"):
                 item["last_read_at"] = _iso(d["son_okuma"])
             kameralar.append(item)
-        return {"app_version": ayarmod.SURUM, "queue_depth": self.kuyruk.sayim()["bekleyen"], "cameras": kameralar}
+        govde = {"app_version": ayarmod.SURUM, "queue_depth": self.kuyruk.sayim()["bekleyen"], "cameras": kameralar}
+        # v3: okuma hazir mi (model onayli, kalibrasyon modunda degil)? Uygulamadaki "Plakayla otomatik kapi acma" durumunu besler.
+        not_ = " ".join(str(getattr(self.boru.tanima, "aciklama", "") or "").split())[:80]
+        govde["recognition"] = {"ready": not self.boru.kalibrasyon_modu, **({"note": not_} if not_ else {})}
+        return govde
 
     def kalp_atisi(self) -> None:
         r = self._dene("kalp_atisi", lambda: self.sunucu.kalp_atisi(self.kalp_atisi_govdesi()))
         if r is not None:
             self._araliklar(r.govde.get("intervals"))
+            self.komutlar.ver(r.govde.get("commands") or [])  # kalp atisi yaniti da komut tasir (GET commands ile ayni atomik talep)
 
     def durum(self) -> dict:
         return {
