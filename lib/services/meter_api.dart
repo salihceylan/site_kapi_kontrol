@@ -146,6 +146,22 @@ class MeterApi {
     return MeterBilling.fromJson(Map<String, dynamic>.from(body['billing'] as Map));
   }
 
+  Future<List<MeterTariff>> listTariffs({required String token, required int siteCode}) async =>
+      MeterTariff.listFrom(await _call('GET', _path(siteCode, 'meter-tariffs'), token: token, timeout: _readTimeout));
+
+  /// Yeni tarife: türdeki açık tarifeyi `validFrom` tarihinde kapatır (sunucu); `unitPriceMinor` kuruş / birim.
+  Future<MeterTariff> createTariff({required String token, required int siteCode, required MeterKind kind, required int unitPriceMinor, required String validFrom}) async {
+    final body = await _call(
+      'POST',
+      _path(siteCode, 'meter-tariffs'),
+      token: token,
+      timeout: _writeTimeout,
+      body: <String, dynamic>{'kind': kind.api, 'unit_price_minor': unitPriceMinor, 'valid_from': validFrom},
+      ok: const <int>{201},
+    );
+    return MeterTariff.fromJson(Map<String, dynamic>.from(body['tariff'] as Map));
+  }
+
   Future<List<MeterBilling>> listBillings({required String token, required int siteCode}) async =>
       MeterBilling.listFrom(await _call('GET', _path(siteCode, 'meter-billings'), token: token, timeout: _readTimeout));
 
@@ -300,5 +316,8 @@ class MeterService {
   Future<BillingPreview> previewBilling(int siteCode, Map<String, dynamic> input) =>
       _guard((t) => api.previewBilling(token: t, siteCode: siteCode, input: input));
   Future<MeterBilling> postBilling(int siteCode, Map<String, dynamic> input) => _guard((t) => api.postBilling(token: t, siteCode: siteCode, input: input));
+  Future<List<MeterTariff>> listTariffs(int siteCode) => _guard((t) => api.listTariffs(token: t, siteCode: siteCode));
+  Future<MeterTariff> createTariff(int siteCode, {required MeterKind kind, required int unitPriceMinor, required String validFrom}) =>
+      _guard((t) => api.createTariff(token: t, siteCode: siteCode, kind: kind, unitPriceMinor: unitPriceMinor, validFrom: validFrom));
   Future<List<MeterBilling>> listBillings(int siteCode) => _guard((t) => api.listBillings(token: t, siteCode: siteCode));
 }

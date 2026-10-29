@@ -53,6 +53,11 @@ export const incompleteAreaBasis = (missing) =>
 /** Seçilen alan payı tabanında dağıtılacak pay yok (tüm arsa payları 0). */
 export const areaBasisUnusable = () =>
   new PlatformError(409, 'AREA_BASIS_UNUSABLE', 'Seçilen alan payı tabanında dağıtılacak pay yok (tüm arsa payları 0). Başka bir taban seçin.');
+/** Birim fiyat yontemi, istekte fiyat verilmediyse tarifeden hesaplanir; o tarihte gecerli tarife yoksa kurulum yonlendirmesi (UI: "Önce tarife girin"). */
+export const tariffMissing = (kind) =>
+  new PlatformError(409, 'TARIFF_MISSING', `${KIND_LABELS[kind] ?? 'Bu tür'} için bu tarihte geçerli bir tarife yok. Önce tarife girin.`, { kind });
+export const tariffOutOfOrder = () =>
+  new PlatformError(409, 'TARIFF_OUT_OF_ORDER', 'Yeni tarifenin geçerlilik başlangıcı, bu türdeki son tarifenin başlangıcından sonra olmalıdır.');
 export const nothingToPost = () => new PlatformError(409, 'NOTHING_TO_POST', 'Borçlandırılacak daire yok.');
 export const billingOverlap = () =>
   new PlatformError(409, 'BILLING_OVERLAP', 'Bu tür için seçilen tarih aralığı daha önce faturalandırılmış bir aralıkla çakışıyor.');

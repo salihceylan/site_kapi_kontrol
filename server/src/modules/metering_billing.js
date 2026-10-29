@@ -35,7 +35,9 @@ import {
   parseKind,
   parseMoney,
   previewStale,
+  tariffMissing,
 } from './metering_common.js';
+import { tariffOn } from './metering_tariff.js';
 import { meteringLockKey } from './metering_service.js';
 
 /** Dagitim girdisi (onizleme ve kayit ortak). */
@@ -51,8 +53,10 @@ export function parseBillingInput(body, { commit = false } = {}) {
   // Alan payı tabanı (K5): yönetimin açık seçimi, varsayılan eşit; yalnız ısı payı yönteminde anlamlı (diğerlerinde null).
   const areaBasis = parseAreaBasis(input.area_basis, method);
   const parsed = { kind, method, from, to, areaBasis, skipMissing: input.skip_missing === true, unitPriceMinor: null, totalMinor: null, dueDate: null };
-  if (method === 'unit_price') parsed.unitPriceMinor = parseMoney(input.unit_price_minor, 'unit_price_minor', 'Birim fiyat');
-  else parsed.totalMinor = parseMoney(input.total_minor, 'total_minor', 'Tutar');
+  // Birim fiyat verilmezse (null) tarifeden okunur (computeBillingPlan; tarife yoksa 409 TARIFF_MISSING). Açıkça verilen fiyat eskisi gibi geçerlidir.
+  if (method === 'unit_price') {
+    parsed.unitPriceMinor = input.unit_price_minor === undefined || input.unit_price_minor === null ? null : parseMoney(input.unit_price_minor, 'unit_price_minor', 'Birim fiyat');
+  } else parsed.totalMinor = parseMoney(input.total_minor, 'total_minor', 'Tutar');
   if (input.due_date !== undefined && input.due_date !== null) parsed.dueDate = parseDate(input.due_date, 'Son ödeme tarihi', 'due_date');
   if (commit) {
     parsed.key = parseKey(input.idempotency_key);
@@ -81,8 +85,21 @@ export async function computeBillingPlan(client, siteCode, input, { entryDate, l
     params.measured_pct = measuredPct;
     params.area_pct = 100 - measuredPct;
   }
-  if (input.method === 'unit_price') params.unit_price_minor = input.unitPriceMinor;
-  else params.total_minor = input.totalMinor;
+  let unitPriceMinor = input.unitPriceMinor;
+  let tariff = null;
+  if (input.method === 'unit_price') {
+    if (unitPriceMinor === null || unitPriceMinor === undefined) {
+      // Tarife: dönem SONUNDA (period_to) geçerli olan. Fiyat ve tarife no params'a (dolayısıyla plan özetine) girer: tarife önizleme ile kayıt arasında
+      // değişirse özet değişir ve kayıt 409 PREVIEW_STALE verir; sonradan yeni tarife girilmesi KAYITLI faturalandırmayı etkilemez (fiyat dondurulur).
+      const found = await tariffOn(client, siteCode, input.kind, input.to);
+      if (!found) throw tariffMissing(input.kind);
+      unitPriceMinor = found.unit_price_minor;
+      tariff = { id: found.id, unit_price_minor: found.unit_price_minor, valid_from: found.valid_from, mid_period: found.valid_from > input.from };
+      params.tariff_id = found.id;
+      params.tariff_valid_from = found.valid_from;
+    }
+    params.unit_price_minor = unitPriceMinor;
+  } else params.total_minor = input.totalMinor;
   // Alan payı tabanı (K5): yönetimin seçimi, varsayılan eşit. Kişi sayısı yalnız seçildiğinde okunur (3000 daireli sitede gereksiz alt sorgu yok).
   const areaBasis = input.method === 'heat' ? (input.areaBasis ?? 'equal') : null;
   const needPersonCount = areaBasis === 'person_count' && params.area_pct > 0;
@@ -142,13 +159,13 @@ export async function computeBillingPlan(client, siteCode, input, { entryDate, l
     ...basisGaps.map((gap) => ({ apartment_id: gap.id, label: apartments.get(gap.id).label, reason: gap.reason })),
   ];
   if (participants.length === 0) {
-    return { params, lines: [], total: 0n, zeroCount: 0, missing: missingList(), hash: planHash({ kind: input.kind, method: input.method, from: input.from, to: input.to, params, lines: [] }) };
+    return { params, tariff, lines: [], total: 0n, zeroCount: 0, missing: missingList(), hash: planHash({ kind: input.kind, method: input.method, from: input.from, to: input.to, params, lines: [] }) };
   }
   const calc = buildMeterPlan({
     method: input.method,
     apartments: participants,
     consumption: byApartment,
-    unitPriceMinor: input.unitPriceMinor,
+    unitPriceMinor,
     totalMinor: input.totalMinor,
     measuredPct,
     areaBasis: areaBasis ?? undefined,
@@ -168,6 +185,7 @@ export async function computeBillingPlan(client, siteCode, input, { entryDate, l
   const missing = missingList();
   return {
     params,
+    tariff,
     lines,
     total: calc.total,
     zeroCount: calc.zeroCount,
@@ -185,6 +203,8 @@ function previewBody(input, plan) {
     // Yönetimin seçtiği alan payı tabanı (yalnız ısı payı; diğer yöntemlerde null)
     area_basis: input.areaBasis ?? null,
     params: plan.params,
+    // Birim fiyat tarifeden geldiyse (aksi halde null): tarife no, fiyat, geçerlilik başlangıcı; mid_period = tarife dönem içinde başladı (uyarı).
+    tariff: plan.tariff,
     total_minor: minorToNumber(plan.total),
     apartment_count: plan.lines.length,
     zero_count: plan.zeroCount,

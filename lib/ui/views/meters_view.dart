@@ -572,6 +572,7 @@ class _BillingTabState extends State<_BillingTab> {
   String _key = _newKey();
   Map<String, dynamic>? _previewInput;
   List<MeterBilling>? _history;
+  List<MeterTariff>? _tariffs;
   bool _busy = false;
   String? _error;
 
@@ -579,6 +580,50 @@ class _BillingTabState extends State<_BillingTab> {
   void initState() {
     super.initState();
     unawaited(_loadHistory());
+    unawaited(_loadTariffs());
+  }
+
+  Future<void> _loadTariffs() async {
+    try {
+      final list = await widget.service.listTariffs(widget.site.code);
+      if (mounted) setState(() => _tariffs = list);
+    } catch (_) {
+      // Tarifeler yardımcıdır; fiyat yoksa sunucu kendi uyarısını verir (409 TARIFF_MISSING).
+    }
+  }
+
+  /// Seçili türde hiç tarife girilmemiş (liste yüklenmeden karar verilmez).
+  bool get _noTariffForKind => _tariffs != null && !_tariffs!.any((t) => t.kind == _kind);
+
+  Future<void> _addTariff() async {
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (_) => _TariffDialog(service: widget.service, siteCode: widget.site.code, initialKind: _kind),
+    );
+    if (created == true && mounted) {
+      setState(_dirty);
+      await _loadTariffs();
+    }
+  }
+
+  Widget _tariffSection(BuildContext context) {
+    final open = <MeterTariff>[for (final t in _tariffs ?? const <MeterTariff>[]) if (t.isOpen) t];
+    return Card(
+      key: const ValueKey<String>('billing_tariffs'),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.md),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+          Text('Tarifeler (birim fiyat)', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: AppSpace.xs),
+          if (_tariffs != null && open.isEmpty) const Text('Henüz tarife girilmedi.'),
+          for (final t in open) Text('${t.kind.label}: ${formatMinorTl(t.unitPriceMinor)} / birim · ${t.validFrom} tarihinden itibaren'),
+          if (widget.site.canWrite) ...<Widget>[
+            const SizedBox(height: AppSpace.sm),
+            OutlinedButton.icon(key: const ValueKey<String>('billing_add_tariff'), onPressed: _busy ? null : _addTariff, icon: const Icon(Icons.add_rounded), label: const Text('Tarife ekle')),
+          ],
+        ]),
+      ),
+    );
   }
 
   @override
@@ -609,9 +654,10 @@ class _BillingTabState extends State<_BillingTab> {
       setState(() => _error = 'Başlangıç ve bitiş tarihlerini seçin.');
       return null;
     }
-    final minor = parseTlToMinor(_amount.text);
-    if (minor == null) {
-      setState(() => _error = _method == MeterMethod.unitPrice ? 'Birim fiyatı TL olarak girin (ör. 45,50).' : 'Tutarı TL olarak girin (ör. 12500,00).');
+    // Birim fiyat yönteminde fiyat TARİFEDEN gelir (istekte gönderilmez); fatura / ısı payında yönetici toplam tutarı girer.
+    final minor = _method == MeterMethod.unitPrice ? null : parseTlToMinor(_amount.text);
+    if (_method != MeterMethod.unitPrice && minor == null) {
+      setState(() => _error = 'Tutarı TL olarak girin (ör. 12500,00).');
       return null;
     }
     return <String, dynamic>{
@@ -619,7 +665,7 @@ class _BillingTabState extends State<_BillingTab> {
       'method': _method.api,
       'period_from': _iso(_from!),
       'period_to': _iso(_to!),
-      if (_method == MeterMethod.unitPrice) 'unit_price_minor': minor else 'total_minor': minor,
+      if (_method != MeterMethod.unitPrice) 'total_minor': minor,
       if (_method == MeterMethod.heat) 'area_basis': _areaBasis.api,
       'skip_missing': _skipMissing,
     };
@@ -707,6 +753,8 @@ class _BillingTabState extends State<_BillingTab> {
         if (widget.site.canWrite) ...<Widget>[
           const Text('İki okuma tarihi arasındaki tüketim hesaplanır. Başlangıç tarihinde (ya da öncesinde) ve bitiş tarihinde (ya da öncesinde) okuma olmalıdır. Borçlandırdığınızda tutarlar, Aidat ve Finans’taki daire hesaplarına borç olarak yazılır.', key: ValueKey<String>('meters_billing_intro')),
           const SizedBox(height: AppSpace.md),
+          _tariffSection(context),
+          const SizedBox(height: AppSpace.md),
           DropdownButtonFormField<MeterKind>(
             initialValue: _kind,
             isExpanded: true,
@@ -739,13 +787,32 @@ class _BillingTabState extends State<_BillingTab> {
             const SizedBox(width: AppSpace.sm),
             Expanded(child: OutlinedButton(onPressed: _busy ? null : () => _pickDate(false), child: Text(_to == null ? 'Bitiş tarihi' : _iso(_to!)))),
           ]),
-          TextField(
-            controller: _amount,
-            enabled: !_busy,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            onChanged: (_) => setState(_dirty),
-            decoration: InputDecoration(labelText: _method == MeterMethod.unitPrice ? 'Birim fiyat (TL / birim)' : _method == MeterMethod.invoice ? 'Fatura tutarı (TL)' : 'Toplam ısınma gideri (TL)'),
-          ),
+          if (_method == MeterMethod.unitPrice && _noTariffForKind)
+            Card(
+              key: const ValueKey<String>('billing_tariff_setup'),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpace.md),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+                  Text('Önce tarife girin', style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: AppSpace.xs),
+                  Text('${_kind.label} için birim fiyat tarifesi yok. Birim fiyatla faturalandırmak için önce tarifeyi ekleyin${widget.site.canWrite ? '.' : '; bunu site yöneticisi yapar.'}'),
+                  if (widget.site.canWrite) ...<Widget>[
+                    const SizedBox(height: AppSpace.sm),
+                    FilledButton(key: const ValueKey<String>('billing_setup_tariff'), onPressed: _busy ? null : _addTariff, child: const Text('Tarife gir')),
+                  ],
+                ]),
+              ),
+            )
+          else if (_method == MeterMethod.unitPrice)
+            const Padding(padding: EdgeInsets.only(top: AppSpace.xs), child: Text('Birim fiyat, dönem sonunda geçerli olan tarifeden alınır.', key: ValueKey<String>('billing_price_from_tariff')))
+          else
+            TextField(
+              controller: _amount,
+              enabled: !_busy,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              onChanged: (_) => setState(_dirty),
+              decoration: InputDecoration(labelText: _method == MeterMethod.invoice ? 'Fatura tutarı (TL)' : 'Toplam ısınma gideri (TL)'),
+            ),
           if (_method == MeterMethod.heat) ...<Widget>[
             const Padding(padding: EdgeInsets.only(top: AppSpace.xs), child: Text('Gider; ölçüme göre ve alan payıyla, platform kuralındaki oranla (varsayılan %70 / %30) paylaştırılır. Alan payının dağıtım tabanını siz seçersiniz.')),
             DropdownButtonFormField<HeatAreaBasis>(
@@ -764,13 +831,18 @@ class _BillingTabState extends State<_BillingTab> {
             _skipMissing = v;
             _dirty();
           })),
-          FilledButton(onPressed: _busy ? null : _previewNow, child: const Text('Önizle')),
+          FilledButton(onPressed: _busy || (_method == MeterMethod.unitPrice && _noTariffForKind) ? null : _previewNow, child: const Text('Önizle')),
         ],
         if (_error != null) Padding(padding: const EdgeInsets.only(top: AppSpace.sm), child: Text(_error!, style: TextStyle(color: error))),
         if (preview != null) ...<Widget>[
           const SizedBox(height: AppSpace.md),
           Text('${preview.apartmentCount} daire · toplam ${formatMinorTl(preview.totalMinor)}', style: Theme.of(context).textTheme.titleMedium),
           if (preview.areaBasis != null) Text('Alan payı tabanı: ${preview.areaBasis!.label}', key: const ValueKey<String>('billing_preview_area_basis')),
+          if (preview.tariff != null) ...<Widget>[
+            Text('Tarife: ${formatMinorTl(preview.tariff!.unitPriceMinor)} / birim (${preview.tariff!.validFrom} tarihinden itibaren)', key: const ValueKey<String>('billing_preview_tariff')),
+            if (preview.tariff!.midPeriod)
+              Text('Dönem içinde tarife değişti: dönemin tamamı bu fiyatla hesaplandı. İsterseniz dönemi tarife tarihinde ikiye bölüp ayrı faturalandırın.', key: const ValueKey<String>('billing_preview_tariff_mid'), style: TextStyle(color: error)),
+          ],
           if (preview.missing.isNotEmpty) ...<Widget>[
             const SizedBox(height: AppSpace.sm),
             Text('Eksik olan ${preview.missing.length} daire:', style: TextStyle(color: error)),
@@ -791,4 +863,94 @@ class _BillingTabState extends State<_BillingTab> {
       ],
     );
   }
+}
+
+// --- Tarife girişi ----------------------------------------------------------------------------------------------
+
+/// Yeni tarife: tür + birim fiyat (TL / birim) + geçerlilik başlangıcı. Sunucu, türdeki açık tarifeyi bu tarihte kapatır;
+/// geçmiş faturalandırmalar etkilenmez (fiyat kayıt anında dondurulur). Başlangıç, son tarifenin başlangıcından sonra olmalıdır.
+class _TariffDialog extends StatefulWidget {
+  const _TariffDialog({required this.service, required this.siteCode, required this.initialKind});
+
+  final MeterService service;
+  final int siteCode;
+  final MeterKind initialKind;
+
+  @override
+  State<_TariffDialog> createState() => _TariffDialogState();
+}
+
+class _TariffDialogState extends State<_TariffDialog> {
+  late MeterKind _kind = widget.initialKind;
+  DateTime _from = DateTime.now();
+  final TextEditingController _price = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _price.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final minor = parseTlToMinor(_price.text);
+    if (minor == null) {
+      setState(() => _error = 'Birim fiyatı TL olarak girin (ör. 45,50).');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.service.createTariff(widget.siteCode, kind: _kind, unitPriceMinor: minor, validFrom: _iso(_from));
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = _errorText(e, 'Tarife kaydedilemedi. İnternet bağlantınızı kontrol edin.');
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Tarife ekle'),
+    content: SingleChildScrollView(
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+        DropdownButtonFormField<MeterKind>(
+          initialValue: _kind,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Sayaç türü'),
+          items: <DropdownMenuItem<MeterKind>>[for (final k in MeterKind.values) DropdownMenuItem<MeterKind>(value: k, child: Text(k.label))],
+          onChanged: _busy ? null : (v) => setState(() => _kind = v ?? _kind),
+        ),
+        TextField(
+          key: const ValueKey<String>('tariff_price'),
+          controller: _price,
+          enabled: !_busy,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(labelText: 'Birim fiyat (TL / birim)'),
+        ),
+        const SizedBox(height: AppSpace.sm),
+        OutlinedButton.icon(
+          onPressed: _busy ? null : () async {
+            final picked = await showDatePicker(context: context, initialDate: _from, firstDate: DateTime(2000), lastDate: DateTime.now().add(const Duration(days: 366)));
+            if (picked != null) setState(() => _from = picked);
+          },
+          icon: const Icon(Icons.event_rounded),
+          label: Text('Geçerlilik başlangıcı: ${_iso(_from)}'),
+        ),
+        const Padding(padding: EdgeInsets.only(top: AppSpace.sm), child: Text('Bu türdeki mevcut tarife bu tarihte sona erer. Daha önce borçlandırılmış dönemler etkilenmez.')),
+        if (_error != null) Padding(padding: const EdgeInsets.only(top: AppSpace.sm), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+      ]),
+    ),
+    actions: <Widget>[
+      TextButton(onPressed: _busy ? null : () => Navigator.of(context).pop(false), child: const Text('Vazgeç')),
+      FilledButton(onPressed: _busy ? null : _save, child: const Text('Kaydet')),
+    ],
+  );
 }

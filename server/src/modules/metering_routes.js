@@ -8,7 +8,9 @@
 //   POST   .../meters/:id/readings                                          201 { reading, replayed }      { date, value }
 //   DELETE .../meters/:id/readings/:readingId                               { deleted }                    (donemi faturalanmis okuma silinemez)
 //   POST   .../meter-readings/import                                        { dry_run, rows[...] }         { kind, reading_date, rows:[{n,code,value}], dry_run? }
-//   POST   .../meter-billings/preview                                       onizleme (yazmaz)
+//   GET    .../meter-tariffs                                                { items }                      (tur basina gecerlilik tarihli birim fiyat)
+//   POST   .../meter-tariffs                                                201 { tariff }                 { kind, unit_price_minor, valid_from }
+//   POST   .../meter-billings/preview                                     onizleme (yazmaz)
 //   POST   .../meter-billings                                               201 { billing, replayed }      onizleme ozeti + idempotency_key
 //   GET    .../meter-billings[/:id]                                         liste / ayrinti
 //
@@ -22,6 +24,7 @@ import { HOUR_MS, ipKey, respondError, userKey } from './route_helpers.js';
 import { resolveMeteringAccess } from './metering_access.js';
 import { MAX_BODY_BYTES, bodyTooLarge } from './metering_common.js';
 import { getBilling, listBillings, postBilling, previewBilling } from './metering_billing.js';
+import { createTariff, listTariffs } from './metering_tariff.js';
 import { addReading, createMeter, deleteReading, importReadings, listApartments, listMeters, listReadings, updateMeter } from './metering_service.js';
 
 export const meteringRouter = express.Router();
@@ -135,6 +138,24 @@ meteringRouter.post(
   meteringWriteLimiter,
   handler({ context: 'meter_readings_import', fallback: 'Okumalar aktarılamadı.', write: true }, async ({ req, access }) => ({
     body: await importReadings({ siteCode: access.siteCode, actor: req.authUser, body: req.body }),
+  })),
+);
+
+// Tarife (birim fiyat, tur basina, gecerlilik tarihli): okuma = + kurul; yazma = yonetici/super. Yeni tarife turdeki acik tarifeyi valid_from'da kapatir.
+meteringRouter.get(
+  `${BASE}/meter-tariffs`,
+  authRequired,
+  meteringReadLimiter,
+  handler({ context: 'meter_tariffs_list', fallback: 'Tarifeler yüklenemedi.' }, async ({ access }) => ({ body: await listTariffs(access.siteCode) })),
+);
+
+meteringRouter.post(
+  `${BASE}/meter-tariffs`,
+  authRequired,
+  meteringWriteLimiter,
+  handler({ context: 'meter_tariffs_create', fallback: 'Tarife kaydedilemedi.', write: true }, async ({ req, access }) => ({
+    status: 201,
+    body: await createTariff({ siteCode: access.siteCode, actor: req.authUser, body: req.body }),
   })),
 );
 

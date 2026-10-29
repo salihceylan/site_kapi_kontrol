@@ -11642,6 +11642,56 @@
           "gelistirme": "hazir"
         }
       ]
+    },
+    {
+      "id": "F81",
+      "baslik": "Sayaç tarifesi ve tarifeli faturalandırma (migration 116)",
+      "durum": "hazir",
+      "ozet": "Sayaç türü başına, geçerlilik tarihli birim fiyat tarifesi (migration 116, meter_tariffs; uçlar GET/POST /manager/sites/<site>/meter-tariffs). Yeni tarife türdeki açık tarifeyi kendi başlangıcında kapatır; son tarifenin başlangıcından önce ya da aynı gün başlayan tarife reddedilir. Birim fiyat yönteminde fiyat artık istekte verilmez, dönem sonunda (period_to) geçerli tarifeden okunur; tarife yoksa 409 TARIFF_MISSING (ekranda “Önce tarife girin”). Önizleme ve borçlandırma aynı hesabı kullanır: fiyat ve tarife no plan özetine girer, kayıtta özet uyuşmazsa 409 PREVIEW_STALE; kayıtlı faturalandırmaların fiyatı params içinde dondurulur. Açıkça verilen unit_price_minor eskisi gibi geçerlidir. Tarife değerlerini yönetici girer; tanıtımda fiyat rakamı yoktur.",
+      "maddeler": [
+        {
+          "id": "F81.01",
+          "baslik": "Sayaç tarifesi girilir; yeni tarife eskisini kapatır",
+          "adimlar": [
+            "Site yöneticisiyle Sayaçlar > Faturalandır sekmesini açın; “Tarifeler (birim fiyat)” kutusundan “Tarife ekle” deyin.",
+            "Sayaç türünü seçin, kendi birim fiyatınızı (TL / birim) ve geçerlilik başlangıcını girip kaydedin.",
+            "Aynı tür için bundan sonraki bir tarihle ikinci bir tarife ekleyin. Sonra ilk tarihten ÖNCEKİ bir tarihle üçüncü bir tarife eklemeyi deneyin."
+          ],
+          "beklenen": "İlk tarife kutuda “<tür>: <fiyat> / birim · <tarih> tarihinden itibaren” olarak görünür. İkinci tarife eklenince kutuda yalnız yenisi geçerli görünür (eskisi yeni tarihte sona erer); başka türün tarifesi değişmez. Son tarifenin başlangıcından önce ya da aynı gün başlayan tarife reddedilir (409 TARIFF_OUT_OF_ORDER). Geçmiş faturalandırmalar aynen kalır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Sayaç modülü açık, siteye sayaç ve okuma girilmiş",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F81.02",
+          "baslik": "Tarife yokken Faturalandır sekmesi “Önce tarife girin” der",
+          "adimlar": [
+            "Hiç tarifesi olmayan bir türde (örneğin elektrik) Faturalandır sekmesini açın; yöntem “Birim fiyat” olsun.",
+            "“Tarife gir” düğmesine basıp tarifeyi ekleyin."
+          ],
+          "beklenen": "“Önce tarife girin” kutusu ve “Tarife gir” düğmesi görünür; birim fiyat kutusu yoktur ve “Önizle” kapalıdır. Tarife eklenince kutu kaybolur, “Birim fiyat, dönem sonunda geçerli olan tarifeden alınır.” yazar ve “Önizle” açılır. Salt okur kurul üyesinde düğme çıkmaz.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Tarifesi olmayan bir sayaç türü",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F81.03",
+          "baslik": "Önizleme tarifeyle hesaplanır, onaydan sonra aynı tutarlar Finans’a borç yazılır",
+          "adimlar": [
+            "İki okuma tarihi arasını seçip “Önizle” deyin; satırlardaki tüketim ve tutarlara, üstteki “Tarife:” satırına bakın.",
+            "“Borçlandır” deyip onaylayın; sonra Finans’ta bir dairenin hesabına bakın.",
+            "Yeni bir tarife ekleyin ve geçmiş faturalandırmalar listesine bakın."
+          ],
+          "beklenen": "Önizlemede her dairenin tutarı tüketim x tarifedeki birim fiyattır; toplam ve daire sayısı yazar. Onaydan sonra Finans’ta yazılan borç, önizlemedeki tutarla birebir aynıdır (önizleme olmadan tahakkuk yapılamaz; önizlemeden sonra tarife değişirse kayıt “Önizleme güncel değil” diyerek reddedilir). Tarife dönem İÇİNDE başlamışsa önizlemede kırmızı uyarı çıkar. Sonradan girilen yeni tarife geçmiş faturalandırmayı değiştirmez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "F81.01 tarifesi; dönem başında ve sonunda okumalar tam",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ],
+      "yeni": true
     }
   ]
 }

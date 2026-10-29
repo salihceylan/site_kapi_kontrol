@@ -4450,3 +4450,16 @@ Online Tahsilat ve Banka Bağlantısı: site yöneticisi, ödeme kuruluşu bağl
 - [ ] **156.3. Gerçek kartla ödeme alma (ödeme kuruluşu sözleşmesi bekleniyor) (F79.03):**
   - **Nasıl Test Edilir:** Rol: Proje sahibi. Ön koşul: Ödeme kuruluşu sözleşmesi ve sürücü kodu. Ödeme kuruluşu sözleşmesi imzalanıp sağlayıcı sürücüsü eklenince bu madde denenir.
   - **Beklenen Sonuç:** Canlı mod + başarılı sınama + etkin sürücü varsa sakin Öde sayfasında Online Öde görünür; ödeme yalnız sağlayıcının imzalı geri çağrısıyla ‘ödendi’ yazılır.
+## 157. 💧 Sayaç Tarifesi ve Tarifeli Faturalandırma (2026-10-29, migration 116)
+
+Sayaç türü başına geçerlilik tarihli birim fiyat tarifesi; Faturalandır sekmesinde birim fiyat tarifeden alınır, önizleme onaylanınca aynı tutarlar Finans’a borç yazılır. Fiyatı yönetici kendisi girer.
+
+- [ ] **157.1. Sayaç tarifesi girilir; yeni tarife eskisini kapatır (F81.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Sayaç modülü açık, siteye sayaç ve okuma girilmiş. Site yöneticisiyle Sayaçlar > Faturalandır sekmesini açın; “Tarifeler (birim fiyat)” kutusundan “Tarife ekle” deyin. Sayaç türünü seçin, kendi birim fiyatınızı (TL / birim) ve geçerlilik başlangıcını girip kaydedin. Aynı tür için bundan sonraki bir tarihle ikinci bir tarife ekleyin. Sonra ilk tarihten ÖNCEKİ bir tarihle üçüncü bir tarife eklemeyi deneyin.
+  - **Beklenen Sonuç:** İlk tarife kutuda “<tür>: <fiyat> / birim · <tarih> tarihinden itibaren” olarak görünür. İkinci tarife eklenince kutuda yalnız yenisi geçerli görünür (eskisi yeni tarihte sona erer); başka türün tarifesi değişmez. Son tarifenin başlangıcından önce ya da aynı gün başlayan tarife reddedilir (409 TARIFF_OUT_OF_ORDER). Geçmiş faturalandırmalar aynen kalır.
+- [ ] **157.2. Tarife yokken Faturalandır sekmesi “Önce tarife girin” der (F81.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Tarifesi olmayan bir sayaç türü. Hiç tarifesi olmayan bir türde (örneğin elektrik) Faturalandır sekmesini açın; yöntem “Birim fiyat” olsun. “Tarife gir” düğmesine basıp tarifeyi ekleyin.
+  - **Beklenen Sonuç:** “Önce tarife girin” kutusu ve “Tarife gir” düğmesi görünür; birim fiyat kutusu yoktur ve “Önizle” kapalıdır. Tarife eklenince kutu kaybolur, “Birim fiyat, dönem sonunda geçerli olan tarifeden alınır.” yazar ve “Önizle” açılır. Salt okur kurul üyesinde düğme çıkmaz.
+- [ ] **157.3. Önizleme tarifeyle hesaplanır, onaydan sonra aynı tutarlar Finans’a borç yazılır (F81.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F81.01 tarifesi; dönem başında ve sonunda okumalar tam. İki okuma tarihi arasını seçip “Önizle” deyin; satırlardaki tüketim ve tutarlara, üstteki “Tarife:” satırına bakın. “Borçlandır” deyip onaylayın; sonra Finans’ta bir dairenin hesabına bakın. Yeni bir tarife ekleyin ve geçmiş faturalandırmalar listesine bakın.
+  - **Beklenen Sonuç:** Önizlemede her dairenin tutarı tüketim x tarifedeki birim fiyattır; toplam ve daire sayısı yazar. Onaydan sonra Finans’ta yazılan borç, önizlemedeki tutarla birebir aynıdır (önizleme olmadan tahakkuk yapılamaz; önizlemeden sonra tarife değişirse kayıt “Önizleme güncel değil” diyerek reddedilir). Tarife dönem İÇİNDE başlamışsa önizlemede kırmızı uyarı çıkar. Sonradan girilen yeni tarife geçmiş faturalandırmayı değiştirmez.

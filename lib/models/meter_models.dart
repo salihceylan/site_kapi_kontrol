@@ -253,8 +253,11 @@ class BillingPreview {
     required this.canPost,
     required this.params,
     this.areaBasis,
+    this.tariff,
   });
 
+  /// Birim fiyatın geldiği tarife (yoksa null).
+  final BillingTariff? tariff;
   final int totalMinor;
   final int apartmentCount;
   final int zeroCount;
@@ -277,7 +280,49 @@ class BillingPreview {
     canPost: json['can_post'] == true,
     params: _map(json['params']),
     areaBasis: HeatAreaBasis.values.where((basis) => basis.api == json['area_basis']).firstOrNull,
+    tariff: BillingTariff.fromJson(json['tariff']),
   );
+}
+
+/// Sayaç tarifesi (birim fiyat, tür başına, geçerlilik tarihli): `[validFrom, validTo)`; `validTo` null = şu an geçerli (açık) tarife.
+@immutable
+class MeterTariff {
+  const MeterTariff({required this.id, required this.kind, required this.unitPriceMinor, required this.validFrom, this.validTo});
+
+  final int id;
+  final MeterKind kind;
+  final int unitPriceMinor;
+  final String validFrom;
+  final String? validTo;
+
+  bool get isOpen => validTo == null;
+
+  factory MeterTariff.fromJson(Map<String, dynamic> json) => MeterTariff(
+    id: _int(json['id']),
+    kind: MeterKind.tryParse(json['kind']) ?? MeterKind.water,
+    unitPriceMinor: _int(json['unit_price_minor']),
+    validFrom: _str(json['valid_from']),
+    validTo: json['valid_to'] is String ? json['valid_to'] as String : null,
+  );
+
+  static List<MeterTariff> listFrom(Map<String, dynamic> body) => <MeterTariff>[for (final m in _list(body['items'])) MeterTariff.fromJson(m)];
+}
+
+/// Önizlemede birim fiyatın geldiği tarife (`tariff`); fiyat istekte açıkça verildiyse sunucu null döner.
+/// [midPeriod]: tarife dönemin İÇİNDE başlamış; dönemin tamamı bu fiyatla hesaplandı (uyarı gösterilir).
+@immutable
+class BillingTariff {
+  const BillingTariff({required this.unitPriceMinor, required this.validFrom, required this.midPeriod});
+
+  final int unitPriceMinor;
+  final String validFrom;
+  final bool midPeriod;
+
+  static BillingTariff? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final json = Map<String, dynamic>.from(raw);
+    return BillingTariff(unitPriceMinor: _int(json['unit_price_minor']), validFrom: _str(json['valid_from']), midPeriod: json['mid_period'] == true);
+  }
 }
 
 @immutable
