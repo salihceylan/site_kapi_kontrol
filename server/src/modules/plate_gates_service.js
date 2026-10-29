@@ -42,7 +42,8 @@ const parsePositive = (raw, what, code) => {
 
 export async function loadSiteSettings(db, siteCode) {
   const result = await db.query(
-    `SELECT guest_rule, heartbeat_warn_seconds, heartbeat_crit_seconds, heartbeat_interval_seconds, sync_interval_seconds
+    `SELECT guest_rule, heartbeat_warn_seconds, heartbeat_crit_seconds, heartbeat_interval_seconds, sync_interval_seconds,
+            inside_report_hours, inside_timeout_hours, alert_interval_minutes, resident_notify_max_age_minutes
        FROM plate_site_settings WHERE site_code = $1`,
     [siteCode],
   );
@@ -64,12 +65,27 @@ export async function saveSiteSettings({ siteCode, body, authUser }) {
   const merged = mergeSettings(await loadSiteSettings(pool, siteCode), patch);
   const actor = actorFromAuthUser(authUser);
   await pool.query(
-    `INSERT INTO plate_site_settings (site_code, guest_rule, heartbeat_warn_seconds, heartbeat_crit_seconds, heartbeat_interval_seconds, sync_interval_seconds, updated_by, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+    `INSERT INTO plate_site_settings (site_code, guest_rule, heartbeat_warn_seconds, heartbeat_crit_seconds, heartbeat_interval_seconds, sync_interval_seconds,
+                                     inside_report_hours, inside_timeout_hours, alert_interval_minutes, resident_notify_max_age_minutes, updated_by, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
      ON CONFLICT (site_code) DO UPDATE SET guest_rule = EXCLUDED.guest_rule, heartbeat_warn_seconds = EXCLUDED.heartbeat_warn_seconds,
        heartbeat_crit_seconds = EXCLUDED.heartbeat_crit_seconds, heartbeat_interval_seconds = EXCLUDED.heartbeat_interval_seconds,
-       sync_interval_seconds = EXCLUDED.sync_interval_seconds, updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
-    [siteCode, merged.guest_rule, merged.heartbeat_warn_seconds, merged.heartbeat_crit_seconds, merged.heartbeat_interval_seconds, merged.sync_interval_seconds, actor.userCode],
+       sync_interval_seconds = EXCLUDED.sync_interval_seconds, inside_report_hours = EXCLUDED.inside_report_hours, inside_timeout_hours = EXCLUDED.inside_timeout_hours,
+       alert_interval_minutes = EXCLUDED.alert_interval_minutes, resident_notify_max_age_minutes = EXCLUDED.resident_notify_max_age_minutes,
+       updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+    [
+      siteCode,
+      merged.guest_rule,
+      merged.heartbeat_warn_seconds,
+      merged.heartbeat_crit_seconds,
+      merged.heartbeat_interval_seconds,
+      merged.sync_interval_seconds,
+      merged.inside_report_hours,
+      merged.inside_timeout_hours,
+      merged.alert_interval_minutes,
+      merged.resident_notify_max_age_minutes,
+      actor.userCode,
+    ],
   );
   await audit(pool, authUser, 'plate.site_settings_changed', siteCode, 'site', siteCode, { changed: Object.keys(patch) });
   return settingsView(merged);
@@ -331,19 +347,33 @@ export async function revokeEdgeClient({ siteCode, rawId, authUser }) {
 
 // --- "İçeride" ---------------------------------------------------------------------------------------------------------------------
 
-/** İçerideki araçlar + park yeri olan / içeride aracı olan dairelerin doluluğu ve misafir kabul durumu. */
+const INSIDE_ROWS_SQL = `
+  SELECT p.id, p.plate, p.kind, p.apartment_id, p.since_at, g.name AS gate_name, b.block_name, a.unit_label
+    FROM plate_presence p
+    LEFT JOIN apartments a ON a.id = p.apartment_id
+    LEFT JOIN site_blocks b ON b.id = a.block_id
+    LEFT JOIN plate_gates g ON g.id = p.gate_id`;
+
+/** İçerideki araçlar + park yeri olan / içeride aracı olan dairelerin doluluğu ve misafir kabul durumu + "çıkışı olmayan girişler" raporu (eşik site ayarı). */
 export async function listInside(siteCode) {
   const settings = await loadSiteSettings(pool, siteCode);
-  const [items, apartments, total] = await Promise.all([
-    pool.query(
-      `SELECT p.id, p.plate, p.kind, p.apartment_id, p.since_at, g.name AS gate_name, b.block_name, a.unit_label
-         FROM plate_presence p
-         LEFT JOIN apartments a ON a.id = p.apartment_id
-         LEFT JOIN site_blocks b ON b.id = a.block_id
-         LEFT JOIN plate_gates g ON g.id = p.gate_id
-        WHERE p.site_code = $1 AND p.inside ORDER BY p.since_at DESC LIMIT 200`,
-      [siteCode],
-    ),
+  const now = Date.now();
+  const mapItem = (row) => {
+    const since = iso(row.since_at);
+    const age = ageSecondsOf(row.since_at, now);
+    return {
+      id: Number(row.id),
+      plate: formatPlate(row.plate),
+      kind: row.kind,
+      apartment_id: row.apartment_id === null ? null : Number(row.apartment_id),
+      apartment_label: row.apartment_id === null ? null : apartmentLabel(row.block_name, row.unit_label),
+      since_at: since,
+      inside_hours: age === null ? null : Math.floor(age / 3600),
+      gate_name: row.gate_name ?? null,
+    };
+  };
+  const [items, apartments, total, overdue] = await Promise.all([
+    pool.query(`${INSIDE_ROWS_SQL} WHERE p.site_code = $1 AND p.inside ORDER BY p.since_at DESC LIMIT 200`, [siteCode]),
     pool.query(
       `SELECT a.id, b.block_name, a.unit_label, a.parking_slots, COUNT(p.id)::INT AS inside_count
          FROM apartments a
@@ -356,19 +386,17 @@ export async function listInside(siteCode) {
       [siteCode],
     ),
     pool.query(`SELECT COUNT(*)::INT AS n FROM plate_presence WHERE site_code = $1 AND inside`, [siteCode]),
+    pool.query(
+      `${INSIDE_ROWS_SQL} WHERE p.site_code = $1 AND p.inside AND p.since_at < NOW() - make_interval(hours => $2::INT) ORDER BY p.since_at ASC LIMIT 200`,
+      [siteCode, settings.inside_report_hours],
+    ),
   ]);
   return {
     total: total.rows[0]?.n ?? 0,
     guest_rule: settings.guest_rule,
-    items: items.rows.map((row) => ({
-      id: Number(row.id),
-      plate: formatPlate(row.plate),
-      kind: row.kind,
-      apartment_id: row.apartment_id === null ? null : Number(row.apartment_id),
-      apartment_label: row.apartment_id === null ? null : apartmentLabel(row.block_name, row.unit_label),
-      since_at: iso(row.since_at),
-      gate_name: row.gate_name ?? null,
-    })),
+    items: items.rows.map(mapItem),
+    // Çıkışı görülmeyen girişler: içeride `inside_report_hours` saatten uzun; `inside_timeout_hours` dolunca bakım rutini otomatik düşürür.
+    overdue: { after_hours: settings.inside_report_hours, timeout_hours: settings.inside_timeout_hours, items: overdue.rows.map(mapItem) },
     apartments: apartments.rows.map((row) => ({
       id: Number(row.id),
       label: apartmentLabel(row.block_name, row.unit_label),

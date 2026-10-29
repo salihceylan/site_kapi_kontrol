@@ -10,13 +10,18 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { invalidField, cleanNote, parseConfidence, requireTrPlate } from './plate_recognition_common.js';
 import { PlatformError } from './errors.js';
 
-export const PLATE_GATES_SCHEMA_VERSION = 1;
-export const SUPPORTED_SCHEMA_VERSIONS = Object.freeze([1]);
+// Sürüm 2 (A3): olay karar türü 'kara_liste' eklendi (yalnız v2 istemci gönderebilir); site ayarına "içeride" eşikleri geldi. Sürüm 1 istemcileri çalışmaya devam eder.
+export const PLATE_GATES_SCHEMA_VERSION = 2;
+export const SUPPORTED_SCHEMA_VERSIONS = Object.freeze([1, 2]);
+/** Bir karar türünü gönderebilmek için gereken en düşük sözleşme sürümü (listede yoksa v1). */
+export const DECISION_MIN_SCHEMA = Object.freeze({ kara_liste: 2 });
 
 export const DIRECTION_MODES = Object.freeze(['giris', 'cikis', 'cift']);
 export const CAMERA_DIRECTIONS = Object.freeze(['giris', 'cikis', 'auto']);
 export const EVENT_DIRECTIONS = Object.freeze(['giris', 'cikis']);
-export const DECISION_KINDS = Object.freeze(['acildi', 'red', 'tanimsiz']);
+/** Migration 120 ile gelen ilk liste (v1); 121 `kara_liste` ekledi. */
+export const DECISION_KINDS_V1 = Object.freeze(['acildi', 'red', 'tanimsiz']);
+export const DECISION_KINDS = Object.freeze([...DECISION_KINDS_V1, 'kara_liste']);
 export const GUEST_RULES = Object.freeze(['tum_bos', 'en_az_bir_bos']);
 export const PRESENCE_KINDS = Object.freeze(['resident', 'guest', 'other']);
 
@@ -24,7 +29,7 @@ export const DIRECTION_MODE_LABELS = Object.freeze({ giris: 'Yalnız giriş', ci
 export const GUEST_RULE_LABELS = Object.freeze({ tum_bos: 'Tüm park yerleri boşsa', en_az_bir_bos: 'En az bir park yeri boşsa' });
 
 /** Karar türü -> mevcut plate_decisions kararı (ALLOWED | DENIED | UNKNOWN). */
-export const DECISION_TO_LEGACY = Object.freeze({ acildi: 'ALLOWED', red: 'DENIED', tanimsiz: 'UNKNOWN' });
+export const DECISION_TO_LEGACY = Object.freeze({ acildi: 'ALLOWED', red: 'DENIED', tanimsiz: 'UNKNOWN', kara_liste: 'DENIED' });
 
 /** Site ayarı varsayılanları (DB sütun varsayılanlarının aynası; satır yoksa bunlar geçerli). */
 export const DEFAULT_SITE_SETTINGS = Object.freeze({
@@ -33,6 +38,11 @@ export const DEFAULT_SITE_SETTINGS = Object.freeze({
   heartbeat_crit_seconds: 600,
   heartbeat_interval_seconds: 60,
   sync_interval_seconds: 120,
+  // A3 (migration 121): "içeride" raporu / zaman aşımı, kopukluk uyarı sıklığı, sakin bildirimi için en eski olay yaşı.
+  inside_report_hours: 12,
+  inside_timeout_hours: 24,
+  alert_interval_minutes: 60,
+  resident_notify_max_age_minutes: 15,
 });
 /** Alan -> [en az, en çok] (CHECK aralıklarının aynası). */
 export const SETTING_RANGES = Object.freeze({
@@ -40,6 +50,10 @@ export const SETTING_RANGES = Object.freeze({
   heartbeat_crit_seconds: [60, 7200],
   heartbeat_interval_seconds: [10, 600],
   sync_interval_seconds: [30, 3600],
+  inside_report_hours: [1, 720],
+  inside_timeout_hours: [2, 720],
+  alert_interval_minutes: [5, 1440],
+  resident_notify_max_age_minutes: [1, 1440],
 });
 
 /** Daire başına park yeri üst sınırı: veri sağlığı (CHECK ile aynı); tek tük hatalı girişi engeller. */
@@ -245,6 +259,9 @@ export function mergeSettings(current, patch) {
   if (merged.heartbeat_crit_seconds <= merged.heartbeat_warn_seconds) {
     throw invalidField('Kırmızı eşik, sarı eşikten büyük olmalı.', 'heartbeat_crit_seconds');
   }
+  if (merged.inside_timeout_hours <= merged.inside_report_hours) {
+    throw invalidField('İçeride zaman aşımı, rapor eşiğinden büyük olmalı.', 'inside_timeout_hours');
+  }
   return merged;
 }
 
@@ -255,7 +272,7 @@ export function parseEdgeClientInput(body) {
 }
 
 function checkSchemaVersion(value) {
-  if (value === undefined || value === null) return PLATE_GATES_SCHEMA_VERSION;
+  if (value === undefined || value === null) return 1; // sürümsüz istek sürüm 1 sayılır (sözleşme belgesi)
   const n = Number(value);
   if (!Number.isInteger(n) || !SUPPORTED_SCHEMA_VERSIONS.includes(n)) throw unsupportedSchema();
   return n;
@@ -280,7 +297,9 @@ export function parseEdgeEvent(body, now = Date.now()) {
   const gateId = optionalId(body.gate_id, 'gate_id', 'Kapı');
   const plate = requireTrPlate(body.plate);
   const decision = String(body.decision ?? '');
-  if (!DECISION_KINDS.includes(decision)) throw invalidField('Karar açıldı, red ya da tanımsız olmalı.', 'decision');
+  if (!DECISION_KINDS.includes(decision) || schemaVersion < (DECISION_MIN_SCHEMA[decision] ?? 1)) {
+    throw invalidField('Karar açıldı, red, tanımsız ya da (sürüm 2) kara liste olmalı.', 'decision');
+  }
   let direction = null;
   if (body.direction !== undefined && body.direction !== null && body.direction !== '') {
     direction = String(body.direction);

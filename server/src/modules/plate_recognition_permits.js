@@ -208,7 +208,10 @@ export async function residentOverview(authUser, rawSiteCode) {
     [ctx.userCode],
   );
   const dailyUsed = used.rows[0]?.n ?? 0;
+  // A3: araç giriş / çıkış bildirimi tercihi (kişi bazında, satır yoksa KAPALI).
+  const pref = await pool.query(`SELECT movement_enabled FROM plate_notify_prefs WHERE site_code = $1 AND user_code = $2`, [ctx.siteCode, ctx.userCode]);
   return {
+    movement_notify: pref.rows[0]?.movement_enabled === true,
     apartments: ctx.apartments.map((a) => ({ id: a.id, label: a.label })),
     permits: permits.rows.map((row) => mapPermit(row)),
     daily_limit: RESIDENT_DAILY_PERMIT_LIMIT,

@@ -240,9 +240,11 @@ class PlateResidentOverview {
     required this.dailyLimit,
     required this.dailyRemaining,
     required this.maxDays,
+    this.movementNotify = false,
   });
 
   factory PlateResidentOverview.fromJson(Map<String, dynamic> json) => PlateResidentOverview(
+    movementNotify: json['movement_notify'] == true,
     apartments: <PlateApartment>[for (final raw in (json['apartments'] as List? ?? const <Object?>[])) if (raw is Map) PlateApartment.fromJson(Map<String, dynamic>.from(raw))],
     permits: <PlatePermit>[for (final raw in (json['permits'] as List? ?? const <Object?>[])) if (raw is Map) PlatePermit.fromJson(Map<String, dynamic>.from(raw))],
     dailyLimit: (json['daily_limit'] as num?)?.toInt() ?? 5,
@@ -255,6 +257,9 @@ class PlateResidentOverview {
   final int dailyLimit;
   final int dailyRemaining;
   final int maxDays;
+
+  /// Araç giriş / çıkış bildirimi tercihi (varsayılan kapalı).
+  final bool movementNotify;
 }
 
 /// Misafir izni formu çıktısı. duration: day | week | custom.
@@ -369,12 +374,30 @@ class PlateRecognitionApi {
 
   Future<PlateGatesOverview> deleteGatePoint(String token, int site, int id) async => PlateGatesOverview.fromJson(await _send('DELETE', _site(site, 'gates/$id'), token));
 
-  Future<void> saveGateSettings(String token, int site, {required String guestRule, required int warnSeconds, required int critSeconds}) async {
+  Future<void> saveGateSettings(
+    String token,
+    int site, {
+    required String guestRule,
+    required int warnSeconds,
+    required int critSeconds,
+    required int insideReportHours,
+    required int insideTimeoutHours,
+    required int alertIntervalMinutes,
+    required int notifyMaxAgeMinutes,
+  }) async {
     await _send(
       'PUT',
       _site(site, 'gate-settings'),
       token,
-      body: <String, Object?>{'guest_rule': guestRule, 'heartbeat_warn_seconds': warnSeconds, 'heartbeat_crit_seconds': critSeconds},
+      body: <String, Object?>{
+        'guest_rule': guestRule,
+        'heartbeat_warn_seconds': warnSeconds,
+        'heartbeat_crit_seconds': critSeconds,
+        'inside_report_hours': insideReportHours,
+        'inside_timeout_hours': insideTimeoutHours,
+        'alert_interval_minutes': alertIntervalMinutes,
+        'resident_notify_max_age_minutes': notifyMaxAgeMinutes,
+      },
     );
   }
 
@@ -406,6 +429,11 @@ class PlateRecognitionApi {
 
   Future<void> residentRevoke(String token, int site, int id) async {
     await _send('POST', '/app/plate-permits/$id/revoke', token, body: <String, Object?>{'site_code': site});
+  }
+
+  /// Aracım giriş / çıkış yaptığında bildirim (kişi bazında, varsayılan KAPALI).
+  Future<void> setMovementNotify(String token, int site, {required bool enabled}) async {
+    await _send('PUT', '/app/plate-permits/notify', token, body: <String, Object?>{'site_code': site, 'movement_enabled': enabled});
   }
 
   Future<Map<String, dynamic>> _send(
@@ -526,8 +554,28 @@ class PlateRecognitionService {
   Future<PlateGatesOverview> createGatePoint(int site, GateDraft draft) => _guard((t) => api.createGatePoint(t, site, draft));
   Future<PlateGatesOverview> updateGatePoint(int site, int id, GateDraft draft) => _guard((t) => api.updateGatePoint(t, site, id, draft));
   Future<PlateGatesOverview> deleteGatePoint(int site, int id) => _guard((t) => api.deleteGatePoint(t, site, id));
-  Future<void> saveGateSettings(int site, {required String guestRule, required int warnSeconds, required int critSeconds}) =>
-      _guard((t) => api.saveGateSettings(t, site, guestRule: guestRule, warnSeconds: warnSeconds, critSeconds: critSeconds));
+  Future<void> saveGateSettings(
+    int site, {
+    required String guestRule,
+    required int warnSeconds,
+    required int critSeconds,
+    required int insideReportHours,
+    required int insideTimeoutHours,
+    required int alertIntervalMinutes,
+    required int notifyMaxAgeMinutes,
+  }) => _guard(
+    (t) => api.saveGateSettings(
+      t,
+      site,
+      guestRule: guestRule,
+      warnSeconds: warnSeconds,
+      critSeconds: critSeconds,
+      insideReportHours: insideReportHours,
+      insideTimeoutHours: insideTimeoutHours,
+      alertIntervalMinutes: alertIntervalMinutes,
+      notifyMaxAgeMinutes: notifyMaxAgeMinutes,
+    ),
+  );
   Future<String> createEdgeClient(int site, String name) => _guard((t) => api.createEdgeClient(t, site, name));
   Future<String> rotateEdgeKey(int site, int id) => _guard((t) => api.rotateEdgeKey(t, site, id));
   Future<void> revokeEdgeClient(int site, int id) => _guard((t) => api.revokeEdgeClient(t, site, id));
@@ -536,4 +584,5 @@ class PlateRecognitionService {
   Future<PlateResidentOverview> residentOverview(int site) => _guard((t) => api.residentOverview(t, site));
   Future<void> residentCreate(int site, PermitDraft draft) => _guard((t) => api.residentCreate(t, site, draft));
   Future<void> residentRevoke(int site, int id) => _guard((t) => api.residentRevoke(t, site, id));
+  Future<void> setMovementNotify(int site, {required bool enabled}) => _guard((t) => api.setMovementNotify(t, site, enabled: enabled));
 }

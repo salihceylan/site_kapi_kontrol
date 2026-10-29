@@ -187,6 +187,12 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
     );
   }
 
+  /// Aracım giriş / çıkış yaptığında bildirim (kişi bazında, varsayılan kapalı).
+  Future<void> _setMovementNotify(PlateSite site, bool enabled) => _run(
+    () => _service.setMovementNotify(site.code, enabled: enabled),
+    enabled ? 'Araç giriş / çıkış bildirimi açıldı.' : 'Araç giriş / çıkış bildirimi kapatıldı.',
+  );
+
   // --- Kara liste ------------------------------------------------------------------------------------------------------
 
   Future<void> _addBlacklist(PlateSite site) async {
@@ -507,6 +513,13 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
       else if (_error != null)
         AppCard(child: Text(_error!))
       else if (data != null) ...<Widget>[
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Aracım giriş / çıkış yapınca bildir'),
+          subtitle: const Text('Kayıtlı aracınız siteye girdiğinde ya da çıktığında saatiyle birlikte bildirim alırsınız. Varsayılan kapalıdır.'),
+          value: data.movementNotify,
+          onChanged: (value) => unawaited(_setMovementNotify(site, value)),
+        ),
         _addButton('Misafir plakası ekle', () => _addPermit(site)),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),

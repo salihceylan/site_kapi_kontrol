@@ -30,6 +30,10 @@ String? plateActionLabel(String action) {
       return 'Plaka kenar istemcisi kaldırıldı';
     case 'plate.inside_cleared':
       return 'İçerideki araç elle düşürüldü';
+    case 'plate.edge_disconnected':
+      return 'Plaka tanıma bağlantısı koptu (kenar PC / kamera)';
+    case 'plate.inside_timeout':
+      return 'İçeride uzun süre kalan araçlar zaman aşımıyla düşürüldü';
   }
   return null;
 }

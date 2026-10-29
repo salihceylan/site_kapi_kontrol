@@ -26,6 +26,7 @@ import { isModuleEnabled } from './module_service.js';
 import { HOUR_MS, ipKey, respondError, userKey } from './route_helpers.js';
 import { PlatformError } from './errors.js';
 import { MAX_BODY_BYTES, PLATE_RECOGNITION_MODULE, bodyTooLarge, invalidField, moduleDisabled } from './plate_recognition_common.js';
+import { setMovementPref } from './plate_notify.js';
 import { addBlacklist, getSettings, listBlacklist, listDecisions, removeBlacklist, saveGateSettings } from './plate_recognition_service.js';
 import {
   createPermit,
@@ -261,6 +262,11 @@ plateRecognitionRouter.get('/app/plate-permits', ...residentHandler({ context: '
 plateRecognitionRouter.post(
   '/app/plate-permits',
   ...residentHandler({ context: 'plate_resident_create', fallback: 'Misafir plakası kaydedilemedi.', write: true, status: 201 }, (req) => residentCreate(req.authUser, bodyOf(req))),
+);
+// A3: aracım giriş / çıkış yaptığında bildirim (kişi bazında aç/kapa, varsayılan KAPALI). Mevcut plate-permits ailesinde (yeni rota ailesi değil).
+plateRecognitionRouter.put(
+  '/app/plate-permits/notify',
+  ...residentHandler({ context: 'plate_resident_notify', fallback: 'Bildirim tercihi kaydedilemedi.', write: true }, (req) => setMovementPref(req.authUser, bodyOf(req))),
 );
 plateRecognitionRouter.post(
   '/app/plate-permits/:id/revoke',

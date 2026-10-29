@@ -134,6 +134,8 @@ export const SITE_AUDIT_LABELS = Object.freeze({
   'plate.edge_client_rotated': 'Plaka kenar istemcisi anahtarı yenilendi',
   'plate.edge_client_revoked': 'Plaka kenar istemcisi kaldırıldı',
   'plate.inside_cleared': 'İçerideki araç elle düşürüldü',
+  'plate.edge_disconnected': 'Plaka tanıma bağlantısı koptu (kenar PC / kamera)',
+  'plate.inside_timeout': 'İçeride uzun süre kalan araçlar zaman aşımıyla düşürüldü',
   'device.ownership_released': 'Cihaz sahipliği sıfırlandı',
 
   // Kişi ve daire kayıtları

@@ -3,11 +3,9 @@
   "sunucu": {
     "etkin": false,
     "adres": "https://SUNUCU-ADRESI",
-    "site_kodu": "SITE-KODU",
-    "cihaz_anahtari": "KENAR-PC-ANAHTARI",
-    "site_baslik": "X-Site-Kodu",
-    "anahtar_baslik": "X-Cihaz-Anahtari",
-    "schema_version": 1,
+    "site_kodu": "",
+    "cihaz_anahtari": "KENAR-PC-ANAHTARI-ID.48-ONALTILIK",
+    "schema_version": 2,
     "zaman_asimi_sn": 8,
     "tls_dogrula": true,
     "senkron_aralik_sn": 60,
@@ -15,23 +13,22 @@
     "olay_toplu_adet": 50,
     "kalp_atisi_aralik_sn": 90,
     "olay_saklama_gun": 7,
-    "dogrulanmamis_olay_gonder": false,
     "uclar": {
       "kayit": {
         "etkin": true,
-        "yol": "/edge/sites/{site_kodu}/register"
+        "yol": "/edge/plate/v1/claim"
       },
       "senkron": {
         "etkin": true,
-        "yol": "/edge/sites/{site_kodu}/sync"
+        "yol": "/edge/plate/v1/sync"
       },
       "olay": {
         "etkin": true,
-        "yol": "/edge/sites/{site_kodu}/events"
+        "yol": "/edge/plate/v1/events"
       },
       "kalp_atisi": {
         "etkin": true,
-        "yol": "/edge/sites/{site_kodu}/heartbeat"
+        "yol": "/edge/plate/v1/heartbeat"
       }
     }
   },
@@ -43,6 +40,7 @@
       "mod": "akis",
       "fps": 3,
       "kapi_id": "ana_kapi",
+      "sunucu_id": 1,
       "yon": "giris",
       "etkin": true,
       "roi": [
@@ -59,6 +57,7 @@
       "mod": "akis",
       "fps": 3,
       "kapi_id": "ana_kapi",
+      "sunucu_id": 2,
       "yon": "cikis",
       "etkin": true,
       "roi": [
@@ -147,6 +146,7 @@
   },
   "karar": {
     "misafir_kurali": "tum_yerler_bos",
+    "kara_liste_cikis_acilir": false,
     "tanimsiz_kare_sakla": false,
     "tanimsiz_kare_gun": 7,
     "tanimsiz_kare_dizini": "veri/tanimsiz",

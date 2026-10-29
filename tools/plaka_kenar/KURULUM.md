@@ -9,7 +9,7 @@ Güvenlik kulübesindeki Windows PC'de çalışır: IP kameralardan plaka okur, 
 4. Testler: `python -m unittest discover -s testler -t .` (kamera/ağ gerekmez).
 
 ## 2. KALİBRASYON MODU (varsayılan açılış)
-`modeller/karakter.onnx` yoksa (ve `sablonlar/` onaylı/tam değilse) uygulama **kalibrasyon modunda** açılır: okumalar `dogrulanmamis` işaretlenir, **kapı hiçbir koşulda açılmaz**, sunucuya olay gönderilmez (`sunucu.dogrulanmamis_olay_gonder=false`). Pencerenin üstündeki şerit durumu gösterir.
+`modeller/karakter.onnx` yoksa (ve `sablonlar/` onaylı/tam değilse) uygulama **kalibrasyon modunda** açılır: okumalar `dogrulanmamis` işaretlenir, **kapı hiçbir koşulda açılmaz**, sunucuya olay gönderilmez (sözleşmede "doğrulanmamış" karar türü yoktur). Pencerenin üstündeki şerit durumu gösterir.
 - Çıkış: eğitilmiş ONNX modeli `modeller/karakter.onnx` yoluna koyun (`egitim/karakter_cnn_egit.py`; 33 sınıf, 28×28), ya da `sablonlar/<sınıf>/*.png` kapsamı tamamlanıp sahada doğrulanınca `tanima.sablon_onayli=true` yapın.
 - Yeni modeli sahada denemek için `tanima.model_onayli=false` (yüklenir, okumalar doğrulanmamış kalır).
 - Saha verisi toplamak için geçici olarak `karar.kalibrasyon_kare_kaydet=true` (yalnız perspektifi düzeltilmiş plaka kırpığı `veri/kalibrasyon/`'a yazılır; işiniz bitince kapatıp klasörü silin — KVKK).
@@ -44,11 +44,13 @@ Ayar değişikliğinden sonra `nssm restart PlakaKenar`. Günlük: `veri\plaka_k
 ## 6. SmartKeyPass yerel "aç" (gerçek protokol)
 `docs/YEREL_KONTROL_V2.md` (UDP 8765, challenge'a bağlı HMAC-SHA256) birebir uygulanır: discover → `ch` → `{"action":"open", device_uid, ch, sig}`; `challenge` hatasında tek yeniden deneme; `unauthorized`/`role_mesgul` kesin ret. Yalnız `open`/`pulse` gönderilir, **"kapat" komutu yoktur**. Hedef yalnız özel ağ (RFC1918/link-local) olabilir. Cihaz kimliği ve yerel kontrol anahtarı kapı satırında (`skp_uid`, `skp_token`); anahtar ağa çıkmaz, günlüğe yazılmaz. İmza hesabı belgedeki bilinen-cevap vektörüyle test edilir.
 
-## 7. Sunucu sözleşmesi (A1 ile uzlaşılacak taslak)
-Yollar `ayarlar.json > sunucu.uclar` içindedir ve **tek tek kapatılabilir** (sunucu hazır değilken `sunucu.etkin=false` ya da uç bazında `etkin=false`). Başlıklar `X-Site-Kodu` / `X-Cihaz-Anahtari` (adları ayarlanabilir); her gövdede `schema_version`.
-- `POST …/register` kamera+kapı listesi (token yok) · `GET …/sync?imlec=` delta: `{imlec, devam?, araclar:[{plaka, daire_id, tur: sakin|misafir, gecerli_bitis, kara_liste, iceride, silindi}], daireler:[{daire_id, park_yeri, iceride}]}`
-- `POST …/events` `{olaylar:[{event_id, zaman, kamera_id, kapi_id, yon, plaka, guven, karar: acildi|red|tanimsiz|acma_basarisiz, neden, arac_tur}]}` — `event_id` ile idempotent; 5xx/ağ hatasında SQLite kuyruğundan artan aralıkla yeniden denenir.
-- `POST …/heartbeat` kamera başına durum/son kare/son okuma + kuyruk sayıları (kalp atışı 90 sn).
+## 7. Sunucu sözleşmesi (A1, sürüm 2)
+Tam sözleşme: `docs/PLATFORM_PLAKA_KENAR_SOZLESMESI.md`. Kimlik: yönetici ekranında (Plaka Tanıma → Geçiş noktaları → Kenar istemci) üretilen anahtar `<id>.<48 onaltılık>` → `sunucu.cihaz_anahtari` (`Authorization: Bearer`). Anahtar hangi siteye bağlıysa kapsam odur; site kodu gerekmez. Yollar `ayarlar.json > sunucu.uclar` içindedir (`/edge/plate/v1/...`) ve **tek tek kapatılabilir**; her gövdede `schema_version` (2).
+- `POST claim` açılışta bir kez; yanıttaki `intervals` (kalp atışı / senkron saniyesi) yerel aralık ayarının yerine geçer (site ayarı sunucudadır).
+- `GET sync?updated_since&vehicles_rev&permits_rev&blacklist_rev`: araçlar, misafir izinleri, **kara liste**, daire kapasitesi (park yeri + içerideki sayı), "içeride" farkı. Bölüm `unchanged` ise yerel kopya geçerli. Gönderilmemiş yerel olay varken "içeride" görünümü uygulanmaz (yerel iyimser durum bozulmasın).
+- `POST events` **tek olay**: `{schema_version, event_id, camera_id, plate, decision: acildi|red|tanimsiz|kara_liste, seen_at, direction, confidence, reason}`. `camera_id` sunucudaki kamera kimliğidir: her kamera satırına **`sunucu_id`** yazın (yoksa o kameranın olayı gönderilemez, ayar penceresi uyarır). `event_id` olay başına sabit, yeniden gönderimde idempotent. Geçici hatada (ağ, 5xx, 401/403) olay kuyrukta kalır; kalıcı 4xx olayı "hatalı" işaretler; kuyruk kayıtları `olay_saklama_gun` sonra silinir. Doğrulanmamış (kalibrasyon) okuma sunucuya **hiç gitmez**.
+- `POST heartbeat`: kamera başına son kare / son okuma + kuyruk derinliği. Kenar PC veya kamera yönetici ekranındaki kırmızı eşiği aşarsa yöneticilere uygulama içi uyarı düşer (saatte en çok bir).
+- Kara listedeki plaka **asla açılmaz** (olay: `kara_liste`). İçeride kalan kara listeli aracın çıkışına izin vermek için `karar.kara_liste_cikis_acilir=true` (varsayılan kapalı).
 
 ## 8. KVKK
 Kareler yalnız bellekte işlenir. İstisna: `karar.tanimsiz_kare_sakla=true` ise **yalnız tanımsız** aracın karesi `veri/tanimsiz/`'a yazılır ve `tanimsiz_kare_gun` sonra silinir (varsayılan kapalı). Olay kuyruğu kayıtları `sunucu.olay_saklama_gun` sonra silinir. Günlüğe plaka dışında kişisel veri yazılmaz.

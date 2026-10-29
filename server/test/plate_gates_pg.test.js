@@ -182,7 +182,8 @@ describe('plaka geçiş noktaları + kenar istemci: gerçek PostgreSQL', { skip 
     assert.equal((await call('POST', '/edge/plate/v1/claim', { body: {} })).status, 401);
     const claim = await edge('POST', '/claim', { schema_version: 1, app_version: '0.1.0' });
     assert.equal(claim.status, 200, claim.text);
-    assert.equal(claim.json.schema_version, 1);
+    assert.equal(claim.json.schema_version, 2);
+    assert.deepEqual(claim.json.supported_schema_versions, [1, 2]);
     assert.equal(claim.json.intervals.heartbeat_seconds, 60);
     assert.equal((await edge('POST', '/claim', { schema_version: 9 })).json.code, 'UNSUPPORTED_SCHEMA');
     const beat = await edge('POST', '/heartbeat', {
@@ -272,5 +273,79 @@ describe('plaka geçiş noktaları + kenar istemci: gerçek PostgreSQL', { skip 
     for (const action of ['plate.gate_created', 'plate.gate_updated', 'plate.gate_deleted', 'plate.site_settings_changed', 'plate.edge_client_created', 'plate.edge_client_revoked', 'plate.inside_cleared']) {
       assert.ok(audits.includes(action), action);
     }
+  });
+
+  it('A3 (121): kara liste kararı (sözleşme v2), içeride raporu + zaman aşımı, kopukluk uyarısı sınırlayıcısı, sakin bildirim tercihi', async () => {
+    const created = await mgr('POST', '/edge-clients', { name: 'Kulübe PC 2' });
+    assert.equal(created.status, 201, created.text);
+    const key = created.json.edge_key;
+    const e2 = (method, suffix, body) => edge(method, suffix, body, key);
+    assert.equal((await e2('POST', '/claim', { schema_version: 2 })).json.schema_version, 2);
+
+    // Site ayarı: yeni eşikler (zaman aşımı rapor eşiğinden büyük olmalı) ve varsayılanlar
+    assert.equal((await mgr('PUT', '/gate-settings', { inside_report_hours: 4, inside_timeout_hours: 3 })).status, 400);
+    const saved = await mgr('PUT', '/gate-settings', { inside_report_hours: 2, inside_timeout_hours: 4 });
+    assert.equal(saved.status, 200, saved.text);
+    assert.deepEqual([saved.json.settings.inside_report_hours, saved.json.settings.inside_timeout_hours, saved.json.settings.alert_interval_minutes], [2, 4, 60]);
+
+    // Kara liste: tablo 073'te vardı; senkrona girer, v2 olay kara_liste karar türüyle kaydolur, içeri almaz
+    const added = await mgr('POST', '/blacklist', { plate: '34 KRA 999', reason: 'deneme' });
+    assert.equal(added.status, 201, added.text);
+    assert.ok((await e2('GET', '/sync')).json.blacklist.items.some((b) => b.plate === '34KRA999'));
+    assert.equal((await e2('POST', '/events', evt(20, { plate: '34KRA999', decision: 'kara_liste', schema_version: 1 }))).status, 400, 'v1 istemci kara_liste gönderemez');
+    const black = await e2('POST', '/events', evt(21, { plate: '34KRA999', decision: 'kara_liste', schema_version: 2 }));
+    assert.equal(black.status, 200, black.text);
+    assert.equal(black.json.inside, false);
+    assert.equal((await q(`SELECT decision_kind FROM plate_events WHERE client_event_id = 'evt-pg-000021'`)).rows[0].decision_kind, 'kara_liste');
+    const legacy = (await q(`SELECT decision, reason FROM plate_decisions WHERE plate = '34KRA999'`)).rows[0];
+    assert.deepEqual([legacy.decision, legacy.reason], ['DENIED', 'blacklist']);
+    assert.equal((await q(`SELECT 1 FROM plate_presence WHERE plate = '34KRA999'`)).rows.length, 0);
+
+    // Çıkışı olmayan girişler raporu (eşik site ayarı) + zaman aşımı bakımı (site ayarı: 4 saat)
+    await q(`INSERT INTO plate_presence (site_code, plate, apartment_id, kind, inside, since_at) VALUES ($1, '34OLD111', $2, 'resident', TRUE, NOW() - INTERVAL '5 hours'), ($1, '34NEW222', $2, 'resident', TRUE, NOW())`, [ids.site, ids.aptA]);
+    const report = (await mgr('GET', '/inside')).json;
+    assert.equal(report.overdue.after_hours, 2);
+    assert.deepEqual(report.overdue.items.map((i) => i.plate), ['34 OLD 111']);
+    assert.ok(report.overdue.items[0].inside_hours >= 5);
+    assert.ok(report.items.some((i) => i.plate === '34 NEW 222'));
+    const { expireStalePresence, checkEdgeHealth, notifyResidentMovement } = await import('../src/modules/plate_notify.js');
+    assert.equal(await expireStalePresence(pool), 1);
+    assert.deepEqual((await q(`SELECT plate, inside FROM plate_presence WHERE plate IN ('34OLD111', '34NEW222') ORDER BY plate`)).rows.map((r) => [r.plate, r.inside]), [['34NEW222', true], ['34OLD111', false]]);
+    const timeoutAudit = (await q(`SELECT details FROM audit_log WHERE site_code = $1 AND action = 'plate.inside_timeout'`, [ids.site])).rows[0];
+    assert.equal(timeoutAudit.details.count, 1);
+    assert.equal(timeoutAudit.details.timeout_hours, 4);
+    assert.equal(await expireStalePresence(pool), 0, 'ikinci tur bir şey düşürmez');
+
+    // Kopukluk uyarısı: kamera kırmızı eşiği aştı -> yöneticiye bir kez (kalıcı sınırlayıcı), tekrar çağrı sessiz
+    const beat = await e2('POST', '/heartbeat', { schema_version: 2, cameras: [{ camera_id: ids.camIn, last_frame_at: ago(5) }, { camera_id: ids.camOut, last_frame_at: ago(1800) }] });
+    assert.equal(beat.status, 200, beat.text);
+    assert.deepEqual(await checkEdgeHealth(pool, ids.site), { lost: true, alerted: true });
+    assert.deepEqual(await checkEdgeHealth(pool, ids.site), { lost: true, alerted: false });
+    const lostAudit = (await q(`SELECT details FROM audit_log WHERE site_code = $1 AND action = 'plate.edge_disconnected'`, [ids.site])).rows;
+    assert.equal(lostAudit.length, 1);
+    assert.ok(lostAudit[0].details.cameras.includes('Çıkış kamerası'));
+    const { runPlateHealthTick } = await import('../src/modules/plate_health_scheduler.js');
+    const tick = await runPlateHealthTick();
+    assert.deepEqual([tick.sites >= 1, tick.alerted, tick.expired], [true, 0, 0]);
+
+    // Sakin tercihi: kişi bazında, varsayılan KAPALI; açıkken kayıtlı aracın sahibi bildirim alıcısı olur
+    const resident = await q(
+      `INSERT INTO users (full_name, email, role, is_active, email_verified, approval_status, password_hash)
+       VALUES ('Sakin', 'sakin-plaka@example.com', 'individual', TRUE, TRUE, 'approved', $1) RETURNING user_code`,
+      [HASH],
+    );
+    const residentCode = resident.rows[0].user_code;
+    await q(`INSERT INTO apartment_memberships (apartment_id, user_code) VALUES ($1, $2)`, [ids.aptA, residentCode]);
+    const residentToken = signAccessToken({ id: residentCode }, { passwordHash: HASH });
+    const app = (method, path, body) => call(method, path, { token: residentToken, body });
+    assert.equal((await app('GET', `/app/plate-permits?site_code=${ids.site}`)).json.movement_notify, false);
+    assert.equal((await app('PUT', '/app/plate-permits/notify', { site_code: ids.site, movement_enabled: 'evet' })).status, 400);
+    const vehicle = (await q(`SELECT id, apartment_id, person_id FROM vehicles WHERE site_code = $1 AND plate = '34ABC123'`, [ids.site])).rows[0];
+    const movement = { siteCode: ids.site, vehicle, direction: 'giris', seenAt: new Date() };
+    assert.deepEqual(await notifyResidentMovement(movement), { skipped: 'no_opt_in' });
+    assert.equal((await app('PUT', '/app/plate-permits/notify', { site_code: ids.site, movement_enabled: true })).status, 200);
+    assert.equal((await app('GET', `/app/plate-permits?site_code=${ids.site}`)).json.movement_notify, true);
+    assert.equal((await notifyResidentMovement(movement)).recipients, 1);
+    assert.deepEqual(await notifyResidentMovement({ ...movement, seenAt: new Date(Date.now() - 3 * 3600_000) }), { skipped: 'stale' });
   });
 });
