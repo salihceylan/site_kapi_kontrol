@@ -75,6 +75,7 @@ import { teamRouter } from './modules/team_routes.js';
 import { personInviteRouter } from './modules/person_invite_routes.js';
 import { budgetRouter } from './modules/budget_routes.js';
 import { driveRouter } from './modules/drive_routes.js';
+import { messagingRouter } from './modules/messaging_routes.js';
 import { neighborBoardRouter } from './modules/neighbor_board_routes.js';
 import { paymentNoticeRouter } from './modules/payment_notice_routes.js';
 import { checkMarkRouter } from './modules/check_mark_routes.js';
@@ -219,6 +220,8 @@ app.use(personInviteRouter);
 app.use(budgetRouter);
 // Site Drive deposu (D1): /manager/sites/:siteCode/drive[...] + /drive/oauth/callback (modul drive_storage = Dosya Deposu, TEMEL modul: her sitede acik; yapilandirma yoksa Yakinda).
 app.use(driveRouter);
+// Site basina SMS + WhatsApp baglantisi (117): /manager/sites/:siteCode/messaging[/sms|/whatsapp[/test]] (sirlar sifreli; MESSAGING_SECRET_KEY yoksa yazma uclari 503).
+app.use(messagingRouter);
 // Komsu panosu: /app/neighbor-board[/:id/report|withdraw] + /manager/sites/:siteCode/neighbor-board[/:id/approve|reject|remove] (modul neighbor_board, varsayilan KAPALI).
 app.use(neighborBoardRouter);
 // Faaliyet raporu: /manager/sites/:siteCode/annual-report (modul annual_report, varsayilan KAPALI).

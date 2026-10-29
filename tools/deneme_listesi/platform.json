@@ -11570,6 +11570,29 @@
           "gelistirme": "hazir"
         }
       ]
+    },
+    {
+      "id": "F79",
+      "baslik": "SMS ve WhatsApp bağlantısı (site başına)",
+      "durum": "hazir",
+      "ozet": "Site yöneticisi, Duyurular ekranının altındaki \"SMS ve WhatsApp bağlantısı\" kartından kendi SMS sağlayıcısına (NetGSM) bağlanır: kullanıcı kodu, şifre ve mesaj başlığı girilir; kullanıcı kodu ve şifre veritabanında ŞİFRELİ saklanır (sunucuda MESSAGING_SECRET_KEY gerekir; yoksa kayıt 503 verir) ve ekranda hiç görünmez. \"Bağlantıyı sına\" yalnız sağlayıcının kimlik/bakiye sorgusunu yapar, GERÇEK SMS GÖNDERMEZ. SMS gönderiminde önce site ayarı, yoksa platformun ortak .env hesabı kullanılır. WhatsApp (Meta Cloud API) bu sürümde yalnız alan iskeletidir: bilgiler kaydedilir ve doğrulanır, ekran dürüstçe \"doğrulama modunda; Meta hesabı bağlanınca etkinleşir\" der, sahte bağlantı/gönderim yoktur; bildirim kanalı tercihinde WhatsApp seçeneği şimdilik görünmez. Yönetim kurulu üyesi kartı yalnız görür. Sunucuda migration 117 gerekir. Aynı konular SAHA_KONTROL_LISTESI.md 156. bölümündedir.",
+      "maddeler": [
+        {
+          "id": "F79.01",
+          "baslik": "SMS sağlayıcısına bağlan, sına; WhatsApp alanlarını doğrula",
+          "adimlar": [
+            "Site yöneticisiyle Duyurular ekranını açın, en alttaki \"SMS ve WhatsApp bağlantısı\" kartında \"NetGSM hesabına bağlan\"a basın; kendi kullanıcı kodunuz, şifreniz ve onaylı başlığınızı girip kaydedin.",
+            "\"Bağlantıyı sına\"ya basın (SMS gitmez, yalnız kimlik/bakiye sorgulanır); sonra şifreyi bilerek yanlış girip tekrar kaydedin ve yeniden sınayın.",
+            "WhatsApp bölümünde \"Bilgileri gir\" ile işletme adı, numara kimliği ve erişim belirtecini kaydedip \"Alanları doğrula\"ya basın.",
+            "Yönetim kurulu üyesi hesabıyla aynı ekrana bakın; \"Kaldır\" ile onaylı kaldırmayı deneyin."
+          ],
+          "beklenen": "Doğru bilgiyle sınama \"Kimlik doğrulandı\" der ve bakiyeyi gösterir, telefona SMS gelmez; yanlış şifrede sağlayıcının hata kodu ve açıklaması çıkar. Kaydedilen kullanıcı kodu ve şifre ekranda görünmez (yalnız maskeli ipucu). WhatsApp için \"doğrulama modunda; Meta hesabı bağlanınca etkinleşir\" notu görünür ve sınama bağlı olduğunu İDDİA ETMEZ. Kurul üyesi yalnız görür, düğme yoktur. Kaldırma onay penceresi ister.",
+          "rol_notu": "Site yöneticisi + yönetim kurulu üyesi",
+          "on_kosul": "Sunucuda migration 117 uygulanmış ve .env'de MESSAGING_SECRET_KEY tanımlı; yeni uygulama sürümü; NetGSM API erişimi açık bir hesap",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
     }
   ]
 }

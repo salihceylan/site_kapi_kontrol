@@ -9,6 +9,7 @@ import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/views/announcements_admin_list.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/messaging_connections_card.dart';
 
 /// Yönetici "Duyurular" ekranı (Platform Faz 3a): site seçici + [AnnouncementsAdminList].
 ///
@@ -246,6 +247,14 @@ class AnnouncementsAdminViewState extends State<AnnouncementsAdminView> {
           const SizedBox(height: AppSpace.md),
         ],
         AnnouncementsAdminList(key: _listKey, scope: scope),
+        // Bildirim kanalları bölgesi: site başına SMS + WhatsApp bağlantısı (yönetici yazar, kurul okur).
+        const SizedBox(height: AppSpace.xl),
+        MessagingConnectionsCard(
+          key: ValueKey<String>('announcements_messaging_${site.code}'),
+          authService: widget.authService,
+          siteCode: site.code,
+          canWrite: site.canWrite,
+        ),
       ],
     );
   }
