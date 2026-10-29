@@ -583,7 +583,7 @@ void main() {
     });
   });
 
-  group('tahsilat formu: Kasa', () {
+  group('tahsilat formu: İşletme / Fon hesabı (K3)', () {
     Future<_Out> open(WidgetTester t, FinanceFakeAuth auth, {LedgerEntry? correcting, double width = 420, double height = 2600, double scale = 1.0, bool dark = false}) async {
       final out = _Out();
       await openDialogAt(
@@ -613,18 +613,99 @@ void main() {
       await _tap(t, 'finance_payment_submit');
     }
 
-    testWidgets('varsayılan Otomatik (en eski vade önce): gövdede fund YOK; kayıttan sonra dağılım gösterilir', (t) async {
+    testWidgets('K3 açık borç yok: seçim zorunlu değil, "Hesap seçmeden (genel avans)" seçili; gövdede fund YOK; kayıttan sonra dağılım gösterilir', (t) async {
       final auth = _auth(accounts: false);
       auth.paymentFundSplit = <String, dynamic>{'operating_minor': 150000, 'capital_minor': 50000, 'advance_minor': 0};
       final out = await open(t, auth);
-      expect(find.text('Kasa'), findsOneWidget);
+      expect(find.text('İşletme / Fon hesabı'), findsOneWidget);
+      expect(find.text('Kasa'), findsNothing, reason: 'K9: kasa sözcüğü kullanılmaz');
+      expect(auth.f4.fundChoiceCalls.single['apartment_id'], 301, reason: 'durum sunucudan okunur');
       expect(_fundSelected(t, 'finance_payment_fund_auto'), isTrue);
-      expect(find.textContaining('Otomatik (en eski vade önce)'), findsOneWidget);
-      expect(find.textContaining('İşletme Projesi (Aidat) Hesabı — yalnız bu hesabın borçlarına uygulanır'), findsOneWidget);
+      expect(find.textContaining('Hesap seçmeden (genel avans)'), findsOneWidget);
+      expect(find.textContaining('İşletme Projesi (Aidat) Hesabı — açık borç yok'), findsOneWidget);
+      expect(find.textContaining('Açık borç yok. Hesap seçmezseniz tutar genel avans olarak kalır'), findsOneWidget);
       await pay(t, '2.000');
       expect(auth.paymentCalls.single.containsKey('fund'), isFalse);
       expect(out.result!.message, contains('Tahsilat kaydedildi: 2.000,00 ₺.'));
       expect(out.result!.message, contains('Dağıtım: Aidat Hesabı 1.500,00 ₺, Fon Hesabı 500,00 ₺, avans 0,00 ₺.'));
+    });
+
+    testWidgets('K3 TEK tür borç: önerilen hesap SEÇİLİ gelir ("Otomatik" yok); gövdede o hesap gider', (t) async {
+      final auth = _auth(accounts: false);
+      auth.f4.fundChoiceBodies[301] = FakeFinance4bApi.fundChoiceBody(operating: 50000);
+      await open(t, auth);
+      expect(_fundSelected(t, 'finance_payment_fund_operating'), isTrue);
+      expect(_fundSelected(t, 'finance_payment_fund_capital'), isFalse);
+      expect(find.byKey(const ValueKey<String>('finance_payment_fund_auto')), findsNothing, reason: 'yazılım kendiliğinden atamaz: "Otomatik" yok');
+      expect(find.byKey(const ValueKey<String>('finance_payment_fund_required')), findsNothing);
+      expect(find.textContaining('Açık borç yalnız Aidat Hesabı için; bu hesap seçili geldi'), findsOneWidget);
+      expect(find.textContaining('İşletme Projesi (Aidat) Hesabı — açık borç 500,00 ₺'), findsOneWidget);
+      await pay(t, '500');
+      expect(auth.paymentCalls.single['fund'], 'operating');
+    });
+
+    testWidgets('K3 tek tür borç: yönetici seçili öneriyi DEĞİŞTİREBİLİR (Fon Hesabı seçilirse gövdede capital)', (t) async {
+      final auth = _auth(accounts: false);
+      auth.f4.fundChoiceBodies[301] = FakeFinance4bApi.fundChoiceBody(capital: 80000);
+      await open(t, auth);
+      expect(_fundSelected(t, 'finance_payment_fund_capital'), isTrue);
+      await f4Tap(t, 'finance_payment_fund_operating');
+      expect(_fundSelected(t, 'finance_payment_fund_operating'), isTrue);
+      expect(_fundSelected(t, 'finance_payment_fund_capital'), isFalse);
+      await pay(t, '300');
+      expect(auth.paymentCalls.single['fund'], 'operating');
+    });
+
+    testWidgets('K3 İKİ tür borç: seçim ZORUNLU — önceden seçili değil, "Otomatik" yok; seçilmeden kayıt GÖNDERİLMEZ; seçilince fund gider', (t) async {
+      final auth = _auth(accounts: false);
+      auth.f4.fundChoiceBodies[301] = FakeFinance4bApi.fundChoiceBody(
+        operating: 100000,
+        capital: 300000,
+        proposal: <String, dynamic>{'operating_minor': 100000, 'capital_minor': 100000, 'advance_minor': 0},
+      );
+      await open(t, auth);
+      expect(find.byKey(const ValueKey<String>('finance_payment_fund_required')), findsOneWidget);
+      expect(find.textContaining('hem Aidat Hesabı (1.000,00 ₺) hem Fon Hesabı (3.000,00 ₺) için açık borç var'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('finance_payment_fund_auto')), findsNothing, reason: 'iki türde "Otomatik" sunulmaz');
+      expect(_fundSelected(t, 'finance_payment_fund_operating'), isFalse);
+      expect(_fundSelected(t, 'finance_payment_fund_capital'), isFalse);
+      expect(find.byKey(const ValueKey<String>('finance_payment_fund_proposal')), findsOneWidget, reason: 'otomatik dağıtım önerisi yalnız bilgi');
+      expect(find.textContaining('Aidat Hesabı 1.000,00 ₺, Fon Hesabı 1.000,00 ₺, avans 0,00 ₺ olurdu'), findsOneWidget);
+      await pay(t, '2.000');
+      expect(auth.paymentCalls, isEmpty, reason: 'seçim yokken sunucuya HİÇ gitmez');
+      expect(find.text('Ödemenin işleneceği İşletme / Fon hesabını seçin.'), findsWidgets);
+      await f4Tap(t, 'finance_payment_fund_capital');
+      expect(find.text('Ödemenin işleneceği İşletme / Fon hesabını seçin.'), findsNothing, reason: 'seçilince hata kalkar');
+      await _tap(t, 'finance_payment_submit');
+      expect(auth.paymentCalls.single['fund'], 'capital');
+    });
+
+    testWidgets('K3 bayat bilgi: form borçsuz sanırken sunucu iki tür görürse 400 FUND_CHOICE_REQUIRED => panel ZORUNLU kipe geçer, kayıt yazılmaz; seçilince yazılır', (t) async {
+      final auth = _auth();
+      auth.f4.serverFundChoice[301] = FakeFinance4bApi.fundChoiceBody(operating: 100000, capital: 300000); // GET borçsuz der, kayıt anında iki tür
+      await open(t, auth);
+      expect(find.byKey(const ValueKey<String>('finance_payment_fund_required')), findsNothing);
+      await f4Tap(t, 'finance_payment_account_1');
+      await pay(t, '1.000');
+      expect(auth.f4.paymentCalls, hasLength(1), reason: 'gönderildi ve sunucu reddetti');
+      expect(find.byKey(const ValueKey<String>('finance_payment_fund_required')), findsOneWidget, reason: 'sunucunun yetkili durumu panele işlendi');
+      expect(find.byKey(const ValueKey<String>('finance_payment_fund_auto')), findsNothing);
+      expect(find.text('Ödemenin işleneceği İşletme / Fon hesabını seçin.'), findsWidgets);
+      await f4Tap(t, 'finance_payment_fund_operating');
+      await _tap(t, 'finance_payment_submit');
+      expect(auth.f4.paymentCalls, hasLength(2));
+      expect(auth.f4.paymentCalls.last['fund'], 'operating');
+    });
+
+    testWidgets('K3 bilgi alınamazsa uyarı + Tekrar Dene gösterilir ve kayıt ENGELLENMEZ (sunucu gerekirse seçim ister)', (t) async {
+      final auth = _auth(accounts: false);
+      auth.f4.fundChoiceError = f4Coded('SERVER_DOWN', 500);
+      final out = await open(t, auth);
+      expect(find.byKey(const ValueKey<String>('finance_payment_fund_failed')), findsOneWidget);
+      expect(find.text('Tekrar Dene'), findsWidgets);
+      await pay(t, '300');
+      expect(auth.paymentCalls, hasLength(1), reason: 'bilgi yokken de kayıt denenebilir');
+      expect(out.result, isNotNull);
     });
 
     testWidgets('Fon Hesabı seçilirse gövdede fund=capital; farklı kasa = farklı işlem anahtarı', (t) async {
@@ -678,12 +759,54 @@ void main() {
       expect(auth.correctCalls.single.containsKey('fund'), isFalse, reason: 'değişmediyse sunucu asıl kısıtı korur');
     });
 
-    layoutMatrix('Tahsilat Ekle: Kasa seçimi (üç seçenek)', (t, w, h, s, dark) async {
+    testWidgets('K3 düzeltme: durum okunmaz (asıl kayıt hâlâ defterde); sunucu iki tür görüp 400 verirse panel zorunlu kipe geçer, seçilince düzeltme yazılır', (t) async {
+      final auth = _auth();
+      auth.f4.correctionFundChoice = FakeFinance4bApi.fundChoiceBody(operating: 100000, capital: 300000);
+      final entry = LedgerEntry.fromJson(<String, dynamic>{...auth.ledger.firstWhere((e) => e['id'] == 4), 'reversed_by_entry_id': null});
+      await open(t, auth, correcting: entry);
+      expect(auth.f4.fundChoiceCalls, isEmpty, reason: 'düzeltmede sunucu durumu okunmaz');
+      expect(_fundSelected(t, 'finance_payment_fund_auto'), isTrue);
+      await f4Tap(t, 'finance_payment_account_1');
+      await _tap(t, 'finance_payment_submit');
+      expect(auth.f4.correctPaymentCalls, hasLength(1), reason: 'gönderildi ve sunucu reddetti');
+      expect(find.byKey(const ValueKey<String>('finance_payment_fund_required')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('finance_payment_fund_auto')), findsNothing);
+      await f4Tap(t, 'finance_payment_fund_capital');
+      await _tap(t, 'finance_payment_submit');
+      expect(auth.f4.correctPaymentCalls, hasLength(2));
+      expect(auth.f4.correctPaymentCalls.last['fund'], 'capital');
+    });
+
+    layoutMatrix('Tahsilat Ekle: borçsuz hesap (seçim isteğe bağlı: üç seçenek)', (t, w, h, s, dark) async {
       final auth = _auth(accounts: false);
       await open(t, auth, width: w, height: h, scale: s, dark: dark);
       await scrollTo(t, find.byKey(const ValueKey<String>('finance_payment_fund_capital')));
       expect(find.byKey(const ValueKey<String>('finance_payment_fund_auto')), findsOneWidget);
       expect(find.byKey(const ValueKey<String>('finance_payment_fund_operating')), findsOneWidget);
+    });
+
+    layoutMatrix('Tahsilat Ekle: İKİ tür borç (zorunlu seçim, uyarı, öneri, hata) taşmaz', (t, w, h, s, dark) async {
+      final auth = _auth(accounts: false);
+      auth.f4.fundChoiceBodies[301] = FakeFinance4bApi.fundChoiceBody(
+        operating: 123456789,
+        capital: 987654321,
+        proposal: <String, dynamic>{'operating_minor': 123456789, 'capital_minor': 500, 'advance_minor': 0},
+      );
+      await open(t, auth, width: w, height: h, scale: s, dark: dark);
+      await pay(t, '1.000'); // seçimsiz gönderim: alan hatası
+      await scrollTo(t, find.byKey(const ValueKey<String>('finance_payment_fund_capital')));
+      expect(find.byKey(const ValueKey<String>('finance_payment_fund_required')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('finance_payment_fund_proposal')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('finance_payment_fund_auto')), findsNothing);
+      expect(auth.paymentCalls, isEmpty);
+    });
+
+    layoutMatrix('Tahsilat Ekle: TEK tür borç (öneri seçili) taşmaz', (t, w, h, s, dark) async {
+      final auth = _auth(accounts: false);
+      auth.f4.fundChoiceBodies[301] = FakeFinance4bApi.fundChoiceBody(capital: 99999999);
+      await open(t, auth, width: w, height: h, scale: s, dark: dark);
+      await scrollTo(t, find.byKey(const ValueKey<String>('finance_payment_fund_capital')));
+      expect(_fundSelected(t, 'finance_payment_fund_capital'), isTrue);
     });
 
     layoutMatrix('Tahsilatı Düzelt: kısıtlı asıl (Otomatik yok) ve uzun açıklamalar', (t, w, h, s, dark) async {

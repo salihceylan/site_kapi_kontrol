@@ -2,6 +2,8 @@
 //
 // Geri alma: defter yalnız eklemelidir; yükleme satırlarının her biri için (zaten ters kaydı olmayanlar) açık ayda, bugünün tarihiyle `reversal` yazılır.
 // Hesap (account_party) asıl kayıttan gelir. Tek geri alma: aynı anahtarla tekrar 200 (replayed), farklı anahtarla 409 OPENING_ALREADY_REVERTED.
+// Alacaklı devir (K16): yükleme hem BORÇ (`charge`) hem ALACAK (`payment`, source_kind='opening') kaydı içerebilir; geri alma ikisini de tersler. Onay toplamları AYRIDIR:
+// `expected_total_minor` = borç toplamı, `expected_credit_total_minor` = alacak toplamı (büyüklük); `finance_opening_reverts.reversed_total_minor` BORÇ toplamını tutar.
 // Kilit sırası finance_tx ile aynı: sites -> finance_post -> apartments (id sırasıyla) -> kullanıcı -> defter / finance_opening_reverts / audit.
 
 import { actorFromAuthUser } from './audit_service.js';
@@ -33,6 +35,9 @@ function mapRun(row) {
     row_count: Number(row.row_count),
     entry_count: Number(plan.opening_add ?? 0),
     total_minor: Number(plan.total_minor ?? 0),
+    // Alacaklı devir (K16): alacak kayıt sayısı ve alacak toplamı (büyüklük); eski yüklemelerde 0
+    credit_entry_count: Number(plan.opening_credit_add ?? 0),
+    credit_total_minor: Number(plan.credit_total_minor ?? 0),
     reverted: row.reverted_at !== null && row.reverted_at !== undefined,
     reverted_at: row.reverted_at ? isoOf(row.reverted_at) : null,
     reversed_count: row.reversed_count === null || row.reversed_count === undefined ? null : Number(row.reversed_count),
@@ -70,7 +75,7 @@ async function loadRun(db, siteCode, runId) {
 
 const ACTIVE_SQL = `
   FROM ledger_entries l
-  WHERE l.site_code = $1 AND l.source_kind = 'opening' AND l.source_id = $2 AND l.kind = 'charge'
+  WHERE l.site_code = $1 AND l.source_kind = 'opening' AND l.source_id = $2 AND l.kind IN ('charge', 'payment')
     AND NOT EXISTS (SELECT 1 FROM ledger_entries r WHERE r.reverses_entry_id = l.id)
 `;
 
@@ -79,17 +84,29 @@ export async function getOpeningRun(siteCode, rawRunId, db = pool) {
   const runId = parseRunId(rawRunId);
   const run = runId === null ? null : await loadRun(db, siteCode, runId);
   if (!run) throw runNotFound();
-  const active = await db.query(`SELECT COUNT(*)::INT AS n, COALESCE(SUM(l.amount_minor), 0)::TEXT AS total ${ACTIVE_SQL}`, [siteCode, runId]);
+  // Borç (charge) toplamı ve alacak (payment) toplamı (büyüklük) AYRI: onay toplamları ayrıdır (K16).
+  const active = await db.query(
+    `
+      SELECT COUNT(*)::INT AS n,
+             COALESCE(SUM(l.amount_minor) FILTER (WHERE l.kind = 'charge'), 0)::TEXT AS total,
+             (COUNT(*) FILTER (WHERE l.kind = 'payment'))::INT AS credit_n,
+             COALESCE(-SUM(l.amount_minor) FILTER (WHERE l.kind = 'payment'), 0)::TEXT AS credit_total
+      ${ACTIVE_SQL}
+    `,
+    [siteCode, runId],
+  );
   const all = await db.query(
-    `SELECT COUNT(*)::INT AS n FROM ledger_entries WHERE site_code = $1 AND source_kind = 'opening' AND source_id = $2 AND kind = 'charge'`,
+    `SELECT COUNT(*)::INT AS n FROM ledger_entries WHERE site_code = $1 AND source_kind = 'opening' AND source_id = $2 AND kind IN ('charge', 'payment')`,
     [siteCode, runId],
   );
   const cutover = run.counts?.cutover_date ?? null;
+  // "Sonradan tahsilat": devir alacağı (source_kind 'opening') tahsilat DEĞİLDİR; yalnız gerçek tahsilatlar sayılır.
   const later = await db.query(
     `
       SELECT COUNT(DISTINCT l.apartment_id)::INT AS paid_apartments
       ${ACTIVE_SQL}
         AND EXISTS (SELECT 1 FROM ledger_entries p WHERE p.site_code = l.site_code AND p.apartment_id = l.apartment_id AND p.kind = 'payment'
+                    AND p.source_kind IS DISTINCT FROM 'opening'
                     AND p.entry_date >= $3::DATE AND NOT EXISTS (SELECT 1 FROM ledger_entries pr WHERE pr.reverses_entry_id = p.id))
     `,
     [siteCode, runId, cutover ?? '1900-01-01'],
@@ -110,6 +127,9 @@ export async function getOpeningRun(siteCode, rawRunId, db = pool) {
     revert: {
       entries_to_reverse: run.reverted_at ? 0 : activeCount,
       total_minor: run.reverted_at ? 0 : Number(active.rows[0].total),
+      // Alacaklı devir (K16): ters kaydı yazılacak alacak kayıtları ve alacak toplamı (büyüklük); entries_to_reverse bunları da içerir
+      credit_entries_to_reverse: run.reverted_at ? 0 : Number(active.rows[0].credit_n),
+      credit_total_minor: run.reverted_at ? 0 : Number(active.rows[0].credit_total),
       individually_cancelled: Math.max(0, total - activeCount),
       apartments_with_later_payments: Number(later.rows[0].paid_apartments),
       late_fee_entries_after: Number(late.rows[0].n),
@@ -125,7 +145,10 @@ function parseRevertInput(body) {
   }
   if (!Number.isSafeInteger(body.expected_count) || body.expected_count < 0) throw invalidBody('expected_count zorunludur.');
   if (!Number.isSafeInteger(body.expected_total_minor) || body.expected_total_minor < 0) throw invalidBody('expected_total_minor zorunludur.');
-  return { reason, key: body.idempotency_key, count: body.expected_count, total: body.expected_total_minor };
+  // Alacaklı devir (K16): alacak toplamı (büyüklük) ayrıca onaylanır; verilmezse 0 (alacak kaydı olmayan yükleme; alacaklı yüklemede OPENING_CHANGED döner).
+  const credit = body.expected_credit_total_minor;
+  if (credit !== undefined && credit !== null && (!Number.isSafeInteger(credit) || credit < 0)) throw invalidBody('expected_credit_total_minor geçersiz.');
+  return { reason, key: body.idempotency_key, count: body.expected_count, total: body.expected_total_minor, creditTotal: credit ?? 0 };
 }
 
 /** POST finance/opening-balances/:runId/revert -> { replayed, reversed_count, reversed_total_minor }. */
@@ -167,9 +190,11 @@ export async function revertOpeningRun({ siteCode, rawRunId, body, actor, now = 
       [siteCode, runId, openPeriod, today(now), input.reason, actorInfo.userCode],
     );
     const count = inserted.rows.length;
-    const total = inserted.rows.reduce((sum, row) => sum + -Number(row.amount_minor), 0);
-    if (count !== input.count || total !== input.total) {
-      throw changed({ entries_to_reverse: count, total_minor: total });
+    // Ters kayıt işareti asılın tersidir: borcun ters kaydı (-), alacağın ters kaydı (+). Toplamlar büyüklüktür ve AYRI ayrı onaylanır.
+    const total = inserted.rows.reduce((sum, row) => (Number(row.amount_minor) < 0 ? sum - Number(row.amount_minor) : sum), 0);
+    const creditTotal = inserted.rows.reduce((sum, row) => (Number(row.amount_minor) > 0 ? sum + Number(row.amount_minor) : sum), 0);
+    if (count !== input.count || total !== input.total || creditTotal !== input.creditTotal) {
+      throw changed({ entries_to_reverse: count, total_minor: total, credit_total_minor: creditTotal });
     }
     await client.query(
       `INSERT INTO finance_opening_reverts (run_id, site_code, reversed_count, reversed_total_minor, idempotency_key, reverted_by) VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -179,8 +204,9 @@ export async function revertOpeningRun({ siteCode, rawRunId, body, actor, now = 
       run_id: runId,
       reversed_count: count,
       reversed_total_minor: total,
+      reversed_credit_total_minor: creditTotal,
       period: periodLabel(openPeriod),
     });
-    return { replayed: false, reversed_count: count, reversed_total_minor: total };
+    return { replayed: false, reversed_count: count, reversed_total_minor: total, reversed_credit_total_minor: creditTotal };
   });
 }

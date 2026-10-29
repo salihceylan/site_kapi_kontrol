@@ -655,4 +655,127 @@ void main() {
       expect(calls, 2);
     });
   });
+
+  // K3 (P1-3): yazılım ödemeyi kendiliğinden İşletme / Fon hesabına atamaz.
+  group('FundChoiceInfo (K3 hesap seçimi): model', () {
+    Map<String, dynamic> body({int operating = 0, int capital = 0, bool? required, String? suggested, Object? proposal, String party = 'owner'}) => <String, dynamic>{
+      'apartment_id': 7,
+      'account_party': party,
+      'open': <String, dynamic>{'operating_minor': operating, 'capital_minor': capital},
+      'advance_minor': 250,
+      'choice_required': required ?? (operating > 0 && capital > 0),
+      'suggested_fund': suggested,
+      'proposal': proposal,
+    };
+
+    test('iki tür açık borç: seçim zorunlu, öneri yok; tek tür: öneri o hesap; borçsuz: ikisi de yok', () {
+      final both = FundChoiceInfo.tryParse(body(operating: 100000, capital: 300000))!;
+      expect(both.choiceRequired, isTrue);
+      expect(both.suggestedFund, isNull);
+      expect(both.hasOpenDebt, isTrue);
+      expect(both.openOf(FinanceFund.operating), 100000);
+      expect(both.openOf(FinanceFund.capital), 300000);
+      expect(both.advanceMinor, 250);
+      final single = FundChoiceInfo.tryParse(body(capital: 5000, suggested: 'capital'))!;
+      expect(single.choiceRequired, isFalse);
+      expect(single.suggestedFund, FinanceFund.capital);
+      final none = FundChoiceInfo.tryParse(body())!;
+      expect([none.choiceRequired, none.suggestedFund, none.hasOpenDebt], [false, null, false]);
+    });
+
+    test('otomatik dağıtım önerisi (proposal) FundSplit olarak okunur; bozuksa null; hesap kiracı olabilir', () {
+      final info = FundChoiceInfo.tryParse(
+        body(operating: 100, capital: 100, party: 'tenant', proposal: <String, dynamic>{'operating_minor': 100, 'capital_minor': 20, 'advance_minor': 0}),
+      )!;
+      expect(info.accountParty, 'tenant');
+      expect(info.proposal, const FundSplit(operatingMinor: 100, capitalMinor: 20, advanceMinor: 0));
+      expect(FundChoiceInfo.tryParse(body(operating: 100, capital: 100, proposal: <String, dynamic>{'operating_minor': 'x'}))!.proposal, isNull);
+    });
+
+    test('bozuk ya da eksik gövde null (uydurma 0 yazılmaz); bilinmeyen öneri değeri yok sayılır', () {
+      expect(FundChoiceInfo.tryParse(null), isNull);
+      expect(FundChoiceInfo.tryParse(<String, dynamic>{'choice_required': true}), isNull);
+      expect(FundChoiceInfo.tryParse(<String, dynamic>{'open': <String, dynamic>{'operating_minor': 1}}), isNull);
+      expect(FundChoiceInfo.tryParse(<String, dynamic>{'open': <String, dynamic>{'operating_minor': -5, 'capital_minor': 1}}), isNull);
+      expect(FundChoiceInfo.tryParse(body(operating: 5, suggested: 'kasa'))!.suggestedFund, isNull);
+    });
+
+    test('eşitlik değerle: aynı alanlar eşit', () {
+      expect(FundChoiceInfo.tryParse(body(operating: 5, suggested: 'operating')), FundChoiceInfo.tryParse(body(operating: 5, suggested: 'operating')));
+      expect(FundChoiceInfo.tryParse(body(operating: 5, suggested: 'operating')), isNot(FundChoiceInfo.tryParse(body(operating: 6, suggested: 'operating'))));
+    });
+  });
+
+  group('Finance4bApi.getFundChoice (K3)', () {
+    const token = 'tok';
+
+    test('GET .../finance/payments/fund-choice: sorgu yalnız verilenleri taşır; yanıt ayrıştırılır', () async {
+      final rec = _Rec();
+      final api = _api(
+        rec,
+        (r) => _json(<String, dynamic>{
+          'apartment_id': 7,
+          'account_party': 'owner',
+          'open': <String, dynamic>{'operating_minor': 100000, 'capital_minor': 300000},
+          'advance_minor': 0,
+          'choice_required': true,
+          'suggested_fund': null,
+          'proposal': <String, dynamic>{'operating_minor': 100000, 'capital_minor': 50000, 'advance_minor': 0},
+        }),
+      );
+      final info = await api.getFundChoice(token: token, siteCode: 11, apartmentId: 7);
+      expect(rec.last.method, 'GET');
+      expect(rec.last.url.path, '/manager/sites/11/finance/payments/fund-choice');
+      expect(rec.last.url.queryParameters, <String, String>{'apartment_id': '7'});
+      expect(info.choiceRequired, isTrue);
+      expect(info.proposal, const FundSplit(operatingMinor: 100000, capitalMinor: 50000, advanceMinor: 0));
+      await api.getFundChoice(token: token, siteCode: 11, apartmentId: 7, accountParty: AccountParty.tenant, amountMinor: 150000, paidOn: DateTime(2026, 10, 20));
+      expect(rec.last.url.queryParameters, <String, String>{'apartment_id': '7', 'account_party': 'tenant', 'amount_minor': '150000', 'paid_on': '2026-10-20'});
+      await api.getFundChoice(token: token, siteCode: 11, apartmentId: 7, amountMinor: 0);
+      expect(rec.last.url.queryParameters.containsKey('amount_minor'), isFalse, reason: 'sıfır / eksik tutar gönderilmez');
+    });
+
+    test('okunamayan yanıt Türkçe hata verir; 403 (kurul / yetkisiz) yazma yetkisi hatası olarak yükselir', () async {
+      final bad = _api(_Rec(), (r) => _json(<String, dynamic>{'choice_required': true}));
+      await expectLater(bad.getFundChoice(token: token, siteCode: 11, apartmentId: 7), throwsA(isA<ApiException>().having((e) => e.message, 'message', contains('Hesap bilgisi'))));
+      final forbidden = _api(_Rec(), (r) => _json(<String, dynamic>{'error': 'Bu işlem için yetkiniz yok.', 'code': 'FORBIDDEN_ROLE'}, 403));
+      await expectLater(forbidden.getFundChoice(token: token, siteCode: 11, apartmentId: 7), throwsA(isA<ApiException>().having((e) => e.statusCode, 'status', 403)));
+    });
+
+    test('tahsilat 400 FUND_CHOICE_REQUIRED: hata gövdesi `fund_choice` payload olarak KORUNUR (panel zorunlu kipe geçer) ve Türkçe metin kasa sözcüğü içermez', () async {
+      final rec = _Rec();
+      final choice = <String, dynamic>{
+        'apartment_id': 7,
+        'account_party': 'owner',
+        'open': <String, dynamic>{'operating_minor': 100000, 'capital_minor': 300000},
+        'advance_minor': 0,
+        'choice_required': true,
+        'suggested_fund': null,
+        'proposal': null,
+      };
+      final api = _api(rec, (r) => _json(<String, dynamic>{'error': 'sunucu metni', 'code': 'FUND_CHOICE_REQUIRED', 'fund_choice': choice}, 400));
+      Object? caught;
+      try {
+        await api.recordPayment(
+          token: token,
+          siteCode: 11,
+          apartmentId: 7,
+          amountMinor: 1000,
+          entryDate: DateTime(2026, 10, 20),
+          method: PaymentMethod.cash,
+          idempotencyKey: 'k1',
+        );
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught, isA<ApiException>());
+      final error = caught! as ApiException;
+      expect(error.code, 'FUND_CHOICE_REQUIRED');
+      expect(error.statusCode, 400);
+      expect(error.message.toLowerCase(), isNot(contains('kasa')));
+      expect(error.message, contains('Yatırım ve Demirbaş (Fon) Hesabı'));
+      expect(FundChoiceInfo.tryParse(error.payload?['fund_choice'])!.choiceRequired, isTrue);
+      expect(rec.body.containsKey('fund'), isFalse, reason: 'seçim yoksa fund gövdede yok');
+    });
+  });
 }

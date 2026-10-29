@@ -444,7 +444,7 @@ export async function sectionDecisionBook(ctx) {
     truncate: await failMessage(`TRUNCATE board_decisions`),
   };
   check('X1: kesin karar dogrudan SQL ile UPDATE (baslik, geri alma, yeniden numara, gorunurluk, kullanici yasarken *_by NULL, toplu) / DELETE (tek, toplu) / TRUNCATE REDDEDILIR',
-    Object.entries(immutable).every(([key, message]) => message !== null && (key.startsWith('truncate') ? /cannot be truncated/.test(message) : /final board decisions are immutable/.test(message))),
+    Object.entries(immutable).every(([key, message]) => message !== null && (key.startsWith('truncate') ? /cannot be truncated|cannot truncate a table referenced in a foreign key constraint/.test(message) : /final board decisions are immutable/.test(message))),
     immutable);
   check('X2: reddedilen girisimlerden sonra kesin satir AYNEN duruyor; taslak (D6) toplu UPDATE icinde de degismedi', (await snapshot(D1)) === snapD1x
     && (await snapshot(D6)) === snapD6, { before: snapD1x, after: await snapshot(D1) });

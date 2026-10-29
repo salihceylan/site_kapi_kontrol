@@ -1,23 +1,40 @@
 // Banka satırını daireye işle (Dalga 2 / 2C): aynı pencerede daire + hesap (kiracı / ev sahibi) seçimi ve "Bu IBAN'ı kaydet".
 // Aynı tutarda mevcut bir tahsilat varsa sunucu yeni kayıt açmaz, ona bağlar (çift işleme yok).
+// K3 (P1-3): yazılım ödemeyi kendiliğinden İşletme / Fon hesabına atamaz. Dairenin hesabında İKİ türün de açık borcu varsa hangisine işleneceği
+// burada SEÇİLİR (seçim olmadan "İşle" gönderilmez; sunucu da 400 FUND_CHOICE_REQUIRED ile reddeder); tek türde önerilen hesap seçili gelir.
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/bank_import.dart';
+import 'package:site_kapi_kontrol/models/finance.dart' show AccountParty;
+import 'package:site_kapi_kontrol/models/finance_funds.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/bank_import_api.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_pickers.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_fund_choice_panel.dart';
 
 class BankLineAssignDialog extends StatefulWidget {
-  const BankLineAssignDialog({super.key, required this.scope, required this.line});
+  const BankLineAssignDialog({super.key, required this.scope, required this.line, this.fundChoiceLoader});
 
   final PeopleScope scope;
   final BankLineItem line;
 
+  /// K3: İşletme / Fon hesabı bilgisi yükleyicisi (testlerde sahte verilir); null ise `GET payments/fund-choice`.
+  final Future<FundChoiceInfo> Function({required int apartmentId, AccountParty? accountParty, int? amountMinor, DateTime? paidOn})? fundChoiceLoader;
+
   /// İşlenirse true.
-  static Future<bool> show(BuildContext context, {required PeopleScope scope, required BankLineItem line}) async {
-    final r = await showDialog<bool>(context: context, barrierDismissible: false, builder: (_) => BankLineAssignDialog(scope: scope, line: line));
+  static Future<bool> show(
+    BuildContext context, {
+    required PeopleScope scope,
+    required BankLineItem line,
+    Future<FundChoiceInfo> Function({required int apartmentId, AccountParty? accountParty, int? amountMinor, DateTime? paidOn})? fundChoiceLoader,
+  }) async {
+    final r = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => BankLineAssignDialog(scope: scope, line: line, fundChoiceLoader: fundChoiceLoader),
+    );
     return r == true;
   }
 
@@ -33,6 +50,24 @@ class _BankLineAssignDialogState extends State<BankLineAssignDialog> {
   bool _busy = false;
   String? _error;
 
+  // K3: tahsilatın gireceği İşletme / Fon hesabı.
+  FinanceFund? _fund;
+  FundChoiceState _fundState = const FundChoiceState();
+  FundChoiceInfo? _forcedFundInfo;
+  bool _fundRequiredByServer = false;
+  String? _fundError;
+
+  static const String _fundPendingMessage = 'İşletme / Fon hesabı bilgisi yükleniyor; birkaç saniye sonra yeniden deneyin.';
+  static const String _fundMissingMessage = 'Ödemenin işleneceği İşletme / Fon hesabını seçin.';
+
+  bool get _fundRequired => (_forcedFundInfo ?? _fundState.info)?.choiceRequired == true || _fundRequiredByServer;
+
+  void _resetFundContext() {
+    _forcedFundInfo = null;
+    _fundRequiredByServer = false;
+    _fundError = null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -45,6 +80,7 @@ class _BankLineAssignDialogState extends State<BankLineAssignDialog> {
     final picked = await showApartmentPicker(context, widget.scope);
     if (picked == null || !mounted) return;
     setState(() {
+      if (_apartmentId != picked.id) _resetFundContext();
       _apartmentId = picked.id;
       _label = picked.fullLabel;
     });
@@ -52,6 +88,18 @@ class _BankLineAssignDialogState extends State<BankLineAssignDialog> {
 
   Future<void> _save() async {
     if (_busy || _apartmentId == null) return;
+    // K3: bilgi yüklenirken gönderilmez (önerilen hesap seçili gelmeden işleme kısıtsız giderdi); iki türlü borçta seçim olmadan gönderilmez.
+    if (_fundState.loading) {
+      setState(() => _error = _fundPendingMessage);
+      return;
+    }
+    if (_fundRequired && _fund == null) {
+      setState(() {
+        _error = null;
+        _fundError = _fundMissingMessage;
+      });
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -65,6 +113,7 @@ class _BankLineAssignDialogState extends State<BankLineAssignDialog> {
           apartmentId: _apartmentId!,
           party: _party,
           saveIban: _saveIban,
+          fund: _fund,
         ),
       );
       if (mounted) Navigator.of(context).pop(true);
@@ -73,6 +122,12 @@ class _BankLineAssignDialogState extends State<BankLineAssignDialog> {
         setState(() {
           _busy = false;
           _error = e.message;
+          // sunucu iki türlü borç nedeniyle seçim istedi (bilgi bayattı): yetkili durum panele işlenir
+          if (e.code == 'FUND_CHOICE_REQUIRED') {
+            _forcedFundInfo = FundChoiceInfo.tryParse(e.payload?['fund_choice']);
+            _fundRequiredByServer = true;
+            _fundError = _fundMissingMessage;
+          }
         });
       }
     }
@@ -108,7 +163,34 @@ class _BankLineAssignDialogState extends State<BankLineAssignDialog> {
                   ButtonSegment<String?>(value: 'owner', label: Text('Ev sahibi')),
                 ],
                 selected: <String?>{_party},
-                onSelectionChanged: _busy ? null : (s) => setState(() => _party = s.first),
+                onSelectionChanged: _busy
+                    ? null
+                    : (s) => setState(() {
+                        if (_party != s.first) _resetFundContext();
+                        _party = s.first;
+                      }),
+              ),
+              const SizedBox(height: AppSpace.md),
+              FundChoicePanel(
+                key: const ValueKey<String>('bank_assign_fund'),
+                scope: widget.scope,
+                apartmentId: _apartmentId,
+                accountParty: AccountParty.tryParse(_party),
+                amountMinor: widget.line.amountMinor > 0 ? widget.line.amountMinor : null,
+                paidOn: DateTime.tryParse(widget.line.valueDate),
+                selected: _fund,
+                enabled: !_busy,
+                loader: widget.fundChoiceLoader,
+                forcedInfo: _forcedFundInfo,
+                errorText: _fundError,
+                keyPrefix: 'bank_assign_fund',
+                onChanged: (value) => setState(() {
+                  _fund = value;
+                  _fundError = null;
+                }),
+                onStateChanged: (state) {
+                  if (mounted && state != _fundState) setState(() => _fundState = state);
+                },
               ),
               if (iban != null)
                 CheckboxListTile(

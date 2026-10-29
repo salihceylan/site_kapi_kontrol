@@ -43,6 +43,7 @@ import 'package:site_kapi_kontrol/ui/dialogs/payment_notice_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/force_change_password_dialog.dart';
 import 'package:site_kapi_kontrol/models/bulk_import.dart' show ImportKind;
 import 'package:site_kapi_kontrol/ui/views/bulk_import_view.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/finance_liability_candidates_dialog.dart';
 import 'package:site_kapi_kontrol/ui/views/bank_lines_view.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/person_account_dialog.dart';
@@ -1740,6 +1741,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             builder: (_) => BankLinesView(scope: scope),
           ),
         );
+        if (mounted) setState(() {});
+      },
+      onOpenLiabilityTransfer: (site) async {
+        final role = widget.authService.session?.role;
+        final scope = PeopleScope(
+          authService: widget.authService,
+          siteCode: site.code,
+          siteName: site.name,
+          canWrite: role == UserRole.superUser || role == UserRole.siteManager,
+        );
+        await FinanceLiabilityCandidatesDialog.show(context, scope: scope);
         if (mounted) setState(() {});
       },
     );

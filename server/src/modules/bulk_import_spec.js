@@ -134,8 +134,8 @@ const OPENING_COLUMNS = Object.freeze([
   BLOCK_COLUMN(true, 'Sitedeki blok adı: «A», «A Blok» ya da «Blok A» aynı sayılır.'),
   APARTMENT_NO_COLUMN(true, 'Daire numarası: «5», «05» ya da «Daire 5».'),
   col('hesap', 'Hesap', false, 'enum', 40, ['Ev Sahibi', 'Malik', 'Mal Sahibi', 'Kiracı', 'Borçlu', 'Hesap Türü'], 'Listeden seçin: Ev sahibi ya da Kiracı. Boşsa ev sahibi hesabına yazılır.', ACCOUNT_CHOICES),
-  col('tutar', 'Tutar', true, 'text', 40, ['Devir Tutarı', 'Devir Bakiyesi', 'Borç', 'Bakiye', 'Tutar TL'], 'Devreden borç, TL: 1.250,50 ya da 1250,5. Eksi (alacak) desteklenmez.'),
-  col('vade', 'Vade', false, 'date', 20, ['Vade Tarihi', 'Son Ödeme Tarihi'], 'GG.AA.YYYY. Boşsa devir tarihi.'),
+  col('tutar', 'Tutar', true, 'text', 40, ['Devir Tutarı', 'Devir Bakiyesi', 'Borç', 'Bakiye', 'Tutar TL'], 'Devreden borç, TL: 1.250,50 ya da 1250,5. Daire ALACAKLIYSA eksi işaretle yazın: -500,00 (devir alacağı).'),
+  col('vade', 'Vade', false, 'date', 20, ['Vade Tarihi', 'Son Ödeme Tarihi'], 'GG.AA.YYYY. Boşsa devir tarihi. Alacaklı (eksi) satırda vade kullanılmaz.'),
   col('aciklama', 'Açıklama', false, 'text', 200, ['Not', 'Notlar'], 'En çok 200 karakter (yalnız yönetici ekstresinde görünür).'),
 ]);
 

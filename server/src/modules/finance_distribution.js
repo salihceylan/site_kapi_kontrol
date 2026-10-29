@@ -5,10 +5,11 @@
 //   equal      ağırlık 1
 //   land_share ağırlık numerator/denominator (ortak payda ile TAMSAYI ağırlık)
 //   area       ağırlık = seçili m² x 100 (brüt veya net; SQL'de NUMERIC(8,2) x 100 -> tamsayı)
+//   person_count ağırlık = dairedeki güncel kişi sayısı (apartment_residencies.is_current; çağıran `personCount` verir; 0 / yok = eksik veri)
 //   fixed      her daireye amount_minor
 //   category   dairenin category'sine karşılık gelen daire başı tutar
-// Eksik veri (arsa payı / m² / kategori tanımsız ya da kategori haritada yok) `missing` listesine girer; karar (409 PREVIEW_INCOMPLETE
-// ya da skip_missing) çağıranındır.
+// Eksik veri (arsa payı / m² / kişi sayısı / kategori tanımsız ya da kategori haritada yok) `missing` listesine girer; karar (409 PREVIEW_INCOMPLETE
+// ya da skip_missing) çağıranındır. Taban (equal / land_share / person_count ...) YÖNETİMİN açık seçimidir; bu dosya hiçbir koşulda taban seçmez (K5).
 
 import { createHash } from 'node:crypto';
 import { PlatformError } from './errors.js';
@@ -22,7 +23,19 @@ export const MISSING_REASON_CODES = Object.freeze({
   area_missing: 'Alan (m²) tanımsız',
   category_missing: 'Kategori tanımsız',
   category_amount_missing: 'Kategori için tutar tanımlı değil',
+  person_count_missing: 'Kişi sayısı tanımsız (dairede kayıtlı güncel kişi yok)',
 });
+
+/**
+ * Yönetimin tahakkuk / gider / ısı payı için SEÇEBİLECEĞİ dağıtım tabanları (karar K5: KOD formül seçmez, taban yönetimin açık seçimidir; ilki varsayılandır).
+ * `area` (m²) listede YOKTUR: daire alanı sistemde tutulmuyor (migration 078; AGENTS.md "m² geri eklenmez"); `buildDistributionPlan` yalnız eski satırlar için
+ * m² ağırlığını hesaplayabilir ve alan verisi verilmediği sürece (sunucu hiç vermez) daireyi eksik veri sayar.
+ */
+export const SELECTABLE_DISTRIBUTIONS = Object.freeze(['equal', 'fixed', 'category', 'land_share', 'person_count']);
+/** Varsayılan taban: EŞİT (K5). Form önseçimi ve ısı payı alan payı tabanı bu değerdir; API'de `distribution` yine açıkça gönderilir. */
+export const DEFAULT_DISTRIBUTION = 'equal';
+/** Ağırlıkla bölünen (toplam tutarı paylaştıran) tabanlar; skip_missing ile hariç tutulanın payı kalanlara yeniden dağıtılır. */
+export const PROPORTIONAL_DISTRIBUTIONS = Object.freeze(['equal', 'land_share', 'person_count', 'area']);
 
 export function landShareUnsupported() {
   return new PlatformError(
@@ -153,8 +166,8 @@ function positiveBigOrNull(value) {
  *           categoryAmounts?: Record<string, number>|null }} definition
  * @param {Array<{ id: number, label: string, blockName: string|null, blockSort: number, aptSort: number, payerParty: string,
  *                 category?: string|null, grossX100?: string|null, netX100?: string|null,
- *                 landNumerator?: number|string|null, landDenominator?: number|string|null }>} apartments hedefteki AKTİF daireler
- * @returns {{ lines: Array<{ apartmentId: number, label: string, blockName: string|null, payerParty: string, amount: bigint }>,
+ *                 landNumerator?: number|string|null, landDenominator?: number|string|null, personCount?: number|string|null }>} apartments hedefteki AKTİF daireler
+ * @returns {{ lines: Array<{ apartmentId: number, label: string, blockName: string|null, payerParty: string, amount: bigint, basisValue?: (string|number) }>,
  *            missing: Array<{ apartmentId: number, label: string, reasonCode: string, reason: string }>,
  *            total: bigint, zeroAmountCount: number, includedCount: number }}
  * `lines` yalnız tutarı > 0 olan daireleri içerir (defter satırı sıfır olamaz); `includedCount` eksik verisi olmayan daire sayısıdır.
@@ -183,6 +196,8 @@ export function buildDistributionPlan(definition, apartments) {
 
   const weights = [];
   const shares = [];
+  // Önizlemede satır başına gösterilen taban değeri (arsa payı kesri / kişi sayısı): yönetici tutarların NEDEN farklı olduğunu görür.
+  const basisValues = new Map();
   for (const apartment of ordered) {
     if (distribution === 'category') {
       const key = categoryKey(apartment.category);
@@ -202,6 +217,7 @@ export function buildDistributionPlan(definition, apartments) {
       } else {
         included.push({ apartment });
         shares.push({ id: apartment.id, numerator, denominator });
+        basisValues.set(apartment.id, `${numerator}/${denominator}`);
       }
     } else if (distribution === 'area') {
       const raw = definition.areaBasis === 'net' ? apartment.netX100 : apartment.grossX100;
@@ -215,6 +231,16 @@ export function buildDistributionPlan(definition, apartments) {
     } else if (distribution === 'equal') {
       included.push({ apartment });
       weights.push({ id: apartment.id, weight: 1n });
+    } else if (distribution === 'person_count') {
+      // Kişi sayısı = dairenin güncel (taşınmamış) kişi kayıtları. Kayıt yok / 0 -> eksik veri (sessizce 1 kişi sayılmaz: kod ağırlık uydurmaz).
+      const weight = positiveBigOrNull(apartment.personCount);
+      if (weight === null) {
+        missing.push(missingEntry(apartment, 'person_count_missing'));
+      } else {
+        included.push({ apartment });
+        weights.push({ id: apartment.id, weight });
+        basisValues.set(apartment.id, Number(weight));
+      }
     } else if (distribution === 'fixed') {
       included.push({ apartment, direct: toBigInt(definition.amountMinor) });
     } else {
@@ -261,15 +287,19 @@ export function buildDistributionPlan(definition, apartments) {
     if (apartment.accountParty !== undefined) {
       line.accountParty = apartment.accountParty;
     }
+    // Taban değeri (yalnız önizleme gösterimi için; planHash'e GİRMEZ: tutarlar zaten tabana bağlıdır).
+    if (basisValues.has(apartment.id)) {
+      line.basisValue = basisValues.get(apartment.id);
+    }
     lines.push(line);
   }
   missing.sort((a, b) => a.apartmentId - b.apartmentId);
   return { lines, missing, total, zeroAmountCount, includedCount: included.length };
 }
 
-/** skip_missing ile hariç tutulan dairelerin payı kalanlara yeniden dağıtılır mı? (fixed / category: hayır; equal / land_share / area: evet) */
+/** skip_missing ile hariç tutulan dairelerin payı kalanlara yeniden dağıtılır mı? (fixed / category: hayır; equal / land_share / person_count / area: evet) */
 export function redistributesOnSkip(distribution) {
-  return distribution === 'equal' || distribution === 'land_share' || distribution === 'area';
+  return PROPORTIONAL_DISTRIBUTIONS.includes(distribution);
 }
 
 /**

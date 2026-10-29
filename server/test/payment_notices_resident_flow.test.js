@@ -22,7 +22,7 @@ let originalConnect;
 let db;
 
 /** Durumlu sahte veritabanı: tek işleyici listesi hem pool.query hem de pool.connect() istemcisi için kullanılır. */
-function makeDb({ views, dupCount = 0 } = {}) {
+function makeDb({ views, dupCount = 0, fundRows = [] } = {}) {
   const state = {
     notice: null,
     insertParams: null,
@@ -153,6 +153,8 @@ function makeDb({ views, dupCount = 0 } = {}) {
     // --- onay: postPayment
     [/^SELECT id, responsible_party FROM apartments WHERE id = \$1 AND site_code = \$2 FOR KEY SHARE$/, () => ok([{ id: '7', responsible_party: 'both' }])],
     [/FROM ledger_entries l WHERE l\.site_code = \$1 AND l\.idempotency_key = \$2/, () => ok([])],
+    // K3: hesap (İşletme / Fon) seçimi denetiminin okuduğu defter (allocateFunds girdisi); varsayılan borçsuz
+    [/LEFT JOIN fee_definitions fd ON fd\.id = l\.definition_id WHERE l\.site_code = \$1 AND \(\$2::BIGINT\[\] IS NULL/, () => ok(fundRows)],
     [/^SELECT m\.id, m\.account_id/, () => ok([])],
     [/SELECT bool_or\(is_active\) AS has_active FROM finance_accounts/, () => ok([])],
     [
@@ -285,5 +287,74 @@ describe('sakin -> bildirim -> onay zinciri', () => {
     assert.equal(db.state.ledgerInsertParams, null, 'kabul edilmeden tahsilat yazılmaz');
     const approved = await approveNotice({ siteCode: SITE, rawId: '55', body: { acknowledged: ['POSSIBLE_DUPLICATE'] }, actor: MANAGER, now: NOW });
     assert.equal(approved.notice.status, 'approved');
+  });
+});
+
+// K3 (P1-3): dekont onayı da hesap (İşletme / Fon) seçimine tabidir.
+describe('dekont onayı: hesap (İşletme / Fon) seçimi (K3)', () => {
+  const debt = (id, fund, amount) => ({
+    id: String(id),
+    apartment_id: '7',
+    kind: 'charge',
+    amount_minor: String(amount),
+    entry_date: '2026-09-01',
+    due_date: '2026-09-05',
+    reverses_entry_id: null,
+    fund,
+    source_kind: null,
+    late_fee_run_id: null,
+    definition_id: null,
+    def_charge_party: null,
+    def_kind: null,
+    account_party: 'owner',
+  });
+  const twoTypes = [debt(1, 'operating', 100000), debt(2, 'capital', 300000)];
+
+  afterEach(() => {
+    pool.query = originalQuery;
+    pool.connect = originalConnect;
+  });
+
+  async function pendingNotice(options) {
+    install(options);
+    await createMyNotice(RESIDENT, residentBody(), { now: NOW });
+    await completeUpload({ id: 55, sha256: 'b'.repeat(64) });
+  }
+
+  it('iki türün de açık borcu varken seçimsiz onay 400 FUND_CHOICE_REQUIRED; bildirim beklemede kalır, tahsilat yazılmaz', async () => {
+    await pendingNotice({ fundRows: twoTypes });
+    await assert.rejects(
+      () => approveNotice({ siteCode: SITE, rawId: '55', body: {}, actor: MANAGER, now: NOW }),
+      (e) => {
+        assert.equal(e.statusCode, 400);
+        assert.equal(e.code, 'FUND_CHOICE_REQUIRED');
+        assert.deepEqual(e.extra.fund_choice.open, { operating_minor: 100000, capital_minor: 300000 });
+        return true;
+      },
+    );
+    assert.equal(db.state.ledgerInsertParams, null, 'tahsilat yazılmadı');
+    assert.equal(db.state.approveUpdateParams, null, 'bildirim approved olmadı');
+    assert.equal(db.state.notice.status, 'pending');
+  });
+
+  it('seçimle onay: fund kısıtı deftere yazılır (son parametre) ve bildirim approved olur', async () => {
+    await pendingNotice({ fundRows: twoTypes });
+    const approved = await approveNotice({ siteCode: SITE, rawId: '55', body: { fund: 'capital' }, actor: MANAGER, now: NOW });
+    assert.equal(approved.notice.status, 'approved');
+    assert.equal(db.state.ledgerInsertParams.at(-1), 'capital');
+    assert.deepEqual(db.state.ledgerInsertParams.slice(10), ['owner', 'payment_notice', 55, 'capital']);
+  });
+
+  it('geçersiz fund değeri 400 INVALID_BODY (bildirim değişmez)', async () => {
+    await pendingNotice({ fundRows: twoTypes });
+    await assert.rejects(() => approveNotice({ siteCode: SITE, rawId: '55', body: { fund: 'kasa' }, actor: MANAGER, now: NOW }), (e) => e.code === 'INVALID_BODY');
+    assert.equal(db.state.ledgerInsertParams, null);
+  });
+
+  it('tek tür borçta seçimsiz onay eskisi gibi geçer (kısıt NULL: öneriyi istemci seçili gönderir)', async () => {
+    await pendingNotice({ fundRows: [debt(1, 'operating', 100000)] });
+    const approved = await approveNotice({ siteCode: SITE, rawId: '55', body: {}, actor: MANAGER, now: NOW });
+    assert.equal(approved.notice.status, 'approved');
+    assert.equal(db.state.ledgerInsertParams.at(-1), null);
   });
 });

@@ -35,7 +35,10 @@ export const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Yalnız devir bakiyesi: options.cutover_date (YYYY-MM-DD, bugün ya da önce, en çok 5 yıl geri) ve commit'te options.expected_total_minor. */
+/**
+ * Yalnız devir bakiyesi: options.cutover_date (YYYY-MM-DD, bugün ya da önce, en çok 5 yıl geri) ve commit'te options.expected_total_minor (BORÇ toplamı) ile
+ * isteğe bağlı options.expected_credit_total_minor (ALACAK toplamı; K16).
+ */
 function parseOptions(body, kind, commit) {
   const raw = body.options;
   if (kind !== 'opening_balances') {
@@ -63,6 +66,12 @@ function parseOptions(body, kind, commit) {
       throw invalid('options.expected_total_minor zorunludur (kuruş, tam sayı).');
     }
     options.expected_total_minor = total;
+    // Alacaklı devir (K16): alacak toplamı (büyüklük, kuruş) AYRI onaylanır; verilmezse 0 (alacak satırı yok demektir, alacaklı dosyada TOTAL_MISMATCH).
+    const credit = raw.expected_credit_total_minor;
+    if (credit !== undefined && credit !== null && (!Number.isSafeInteger(credit) || credit < 0)) {
+      throw invalid('options.expected_credit_total_minor geçersiz (kuruş, tam sayı, 0 ya da büyük).');
+    }
+    options.expected_credit_total_minor = credit ?? 0;
   }
   return options;
 }

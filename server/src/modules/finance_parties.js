@@ -35,6 +35,7 @@ import {
   periodOfDate,
   today,
 } from './finance_common.js';
+import { assertFundChoice } from './finance_fund_choice.js';
 import { parseFundField } from './finance_funds.js';
 import { minorToNumber, parseMinor, toBigInt } from './finance_money.js';
 import { activeReceiptRef, ensureReceiptForPayment, receiptRef } from './finance_receipts.js';
@@ -377,6 +378,7 @@ async function loadPaymentByKey(client, siteCode, key) {
  *    aynı anahtar farklı daire / tutar / tarih / yöntem / hesap / kaynak ile gelirse 409 IDEMPOTENCY_CONFLICT.
  *  - İsteğe bağlı `cashAccountId` (kasa / banka hesabı; Faz 4b): sitede etkin hesap varsa zorunludur (409 ACCOUNT_REQUIRED); `collection` hareketi AYNI işlemde.
  *  - Site ayarı açıksa makbuz AYNI işlemde düzenlenir. Dönem = tahsilat tarihinin ayı; kapalıysa 409 PERIOD_CLOSED.
+ *  - K3: `fund` (İşletme / Fon hesabı kısıtı) verilmediyse ve hesapta iki türün de açık borcu varsa 400 FUND_CHOICE_REQUIRED (finance_fund_choice.js).
  */
 export async function postPayment(client, request) {
   const now = request.now ?? new Date();
@@ -426,6 +428,12 @@ export async function postPayment(client, request) {
   }
   const cashAccount = await resolvePaymentAccount(client, siteCode, { accountId: input.cashAccountId, entryDate: input.paidOn });
   const accountParty = input.accountParty ?? (await defaultPaymentParty(client, { siteCode, apartmentId: input.apartmentId, onDate: input.paidOn }));
+  // K3 (P1-3): yazılım ödemeyi kendiliğinden İşletme / Fon hesabına atamaz. Hesap kısıtı (`fund`) verilmediyse ve bu daire hesabında İKİ türün de açık borcu
+  // varsa kayıt 400 FUND_CHOICE_REQUIRED ile reddedilir (hiçbir satır yazılmaz). Tek tür borçta ya da borçsuzda kısıtsız kayıt kabul edilir (öneriyi istemci
+  // seçili getirir). TÜM tahsilat yolları (elle, düzeltme, dekont onayı, banka satırı / dosyası) buradan geçer.
+  if (input.fund === null) {
+    await assertFundChoice(client, { siteCode, apartmentId: input.apartmentId, accountParty });
+  }
   const inserted = await client.query(
     `
       INSERT INTO ledger_entries (

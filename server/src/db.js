@@ -49,6 +49,10 @@ import { ensureBankImportSchema } from './modules/bank_import_schema.js';
 import { ensureOAuthSchema } from './modules/oauth_schema.js';
 import { ensureIntegritySchema } from './modules/integrity_schema.js';
 import { ensureFinanceFundsSchema } from './modules/finance_funds_schema.js';
+import { ensureFinanceRefundsSchema } from './modules/finance_refunds_schema.js';
+import { ensureFinanceLiabilitySchema } from './modules/finance_liability_schema.js';
+import { ensureFinanceRunDecisionSchema } from './modules/finance_run_decision_schema.js';
+import { ensureFeeDistributionSchema } from './modules/finance_distribution_schema.js';
 import { ensureWorkCategoriesSchema } from './modules/work_categories_schema.js';
 import { ensureAuthAttemptLimitsSchema } from './modules/auth_attempt_limits_schema.js';
 import { ensureMenuLayoutSchema } from './modules/menu_layout_schema.js';
@@ -2020,6 +2024,23 @@ export async function ensureDbSchema() {
     // 080 (iki kasa: Isletme / Yatirim ve Demirbas Fon): 040 (expense_categories, expenses, trg_finance_immutable) ve ledger_entries SONRASI; dev blokta DEGIL; katalog kontrolu
     // + her adim kendi otomatik onayli ifadesi (finance_funds_schema.js = migrations/080). Her sey varsa hicbir ifade / kilit yok; sistem kategorisi "Yatirim ve demirbas" veri adimidir.
     await ensureFinanceFundsSchema(client);
+    // 088 (alacak iadesi, K4): 080'den SONRA (ledger_entries.fund, trg_receipt_counters_guard, account_movements); dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi
+    // (finance_refunds_schema.js = migrations/088). account_movements 'refund' turu + ledger_entries.source_kind CHECK'i ('refund', 'liability_transfer') TEK ALTER ile yenilenir.
+    await ensureFinanceRefundsSchema(client);
+    // 089 (kiraci borcunun malike devri, K1): 088'den SONRA (ledger_entries.source_kind 'liability_transfer' kabulu); dev blokta DEGIL; katalog kontrolu
+    // + her adim kendi otomatik onayli ifadesi (finance_liability_schema.js = migrations/089).
+    await ensureFinanceLiabilitySchema(client);
+    // 090 (demirbas / fon tahakkukunun dayanagi: Karar Defteri kaydi ya da gerekce): 034 (fee_runs) ve 050 (board_decisions) SONRASI; dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli
+    // ifadesi (finance_run_decision_schema.js = migrations/090). Her sey varsa hicbir ifade / kilit yok. Geri doldurma yok (eski calistirmalar dayanaksiz kalir).
+    await ensureFinanceRunDecisionSchema(client);
+    // 091 (aidat dagitim tabani: 'person_count' = kisi sayisina gore): fee_definitions (034) SONRASI; dev blokta DEGIL; kisit zaten guncelse tek katalog sorgusu, kilit yok
+    // (finance_distribution_schema.js = migrations/091). fee_definitions yoksa hicbir sey yapmaz. Hata acilisi durdurmaz (yalniz 'person_count' tanimi yazilamaz; sonraki acilis yeniden dener).
+    try {
+      await ensureFeeDistributionSchema(client);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[DB] 091 aidat dagitim tabani (person_count) hatasi:', e?.code || e?.message);
+    }
     // 085 (kalici deneme sinirlari: 4 haneli ilk PIN girisi, e-posta / SMS dogrulama kodu): dev blokta DEGIL; tek katalog sorgusu, tablo varsa hicbir ifade / kilit yok
     // (auth_attempt_limits_schema.js = migrations/085). Yeni, FK'siz tablo: baska hicbir semaya bagimli degil.
     await ensureAuthAttemptLimitsSchema(client);

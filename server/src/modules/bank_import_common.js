@@ -4,6 +4,9 @@ import { normalizeIban } from './bank_line_match.js';
 
 export const MAX_LINES = 1500; // gövde genel 1 MB ayrıştırıcının altında kalsın diye (5 MB kapısı bu işte YOK)
 export const MAX_AUTO_POST = 1000;
+// Satır notları (bank_statement_lines.note): C-26 "tek tek gözden geçir" ile bekletilen güçlü eşleşme / K3 hesap (İşletme / Fon) seçimi gereken satır.
+export const NOTE_REVIEW_EACH = 'REVIEW_EACH';
+export const NOTE_FUND_CHOICE = 'FUND_CHOICE_REQUIRED';
 export const DESCRIPTION_MAX = 200;
 export const FORMATS = Object.freeze(['xlsx', 'csv', 'mt940']);
 export const PROFILE_FORMATS = Object.freeze(['xlsx', 'csv']);
@@ -87,8 +90,16 @@ export function parseStatementBody(body, { commit = false, todayIso }) {
     if (!/^[0-9a-f]{64}$/.test(hash)) throw invalid('Önizleme özeti eksik; önce önizleyin.');
     result.idempotencyKey = key;
     result.expectedHash = hash;
+    // C-26: açıkça true ise güçlü eşleşmeler yüklemede OTOMATİK işlenmez, tek tek onaya bırakılır (varsayılan false: eski davranış).
+    result.reviewEach = parseReviewEach(input.review_each);
   }
   return result;
+}
+
+function parseReviewEach(value) {
+  if (value === undefined || value === null || value === false) return false;
+  if (value === true) return true;
+  throw invalid('"Tek tek gözden geçir" seçeneği geçersiz.');
 }
 
 export function parseProfileBody(body) {

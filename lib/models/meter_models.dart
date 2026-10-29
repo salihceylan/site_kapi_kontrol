@@ -219,8 +219,25 @@ class BillingMissing {
     'no_opening' => 'başlangıç okuması yok',
     'no_closing' => 'bitiş okuması yok',
     'decreasing' => 'okuma azalmış',
+    // Alan payı tabanı (K5): seçilen tabanın verisi eksik daire eşit paya DÜŞÜRÜLMEZ, eksik veri olarak listelenir
+    'land_share_missing' => 'arsa payı tanımlı değil',
+    'person_count_missing' => 'dairede kayıtlı güncel kişi yok',
     _ => 'eksik',
   };
+}
+
+/// Isı payının "alan payı" kısmının dağıtım tabanı (karar K5): YÖNETİM seçer, varsayılan EŞİT; kod taban seçmez.
+/// m² yoktur (daire alanı sistemde tutulmuyor). Seçilen tabanın verisi eksik daire eksik veri sayılır.
+enum HeatAreaBasis {
+  equal('equal', 'Eşit', 'Alan payı tüm dairelere eşit dağıtılır (varsayılan).'),
+  landShare('land_share', 'Arsa payı', 'Alan payı dairelerin arsa payına göre dağıtılır; arsa payı girilmemiş daire eksik sayılır.'),
+  personCount('person_count', 'Kişi sayısı', 'Alan payı dairedeki güncel kişi sayısına göre dağıtılır; kişi kaydı olmayan daire eksik sayılır.');
+
+  const HeatAreaBasis(this.api, this.label, this.help);
+
+  final String api;
+  final String label;
+  final String help;
 }
 
 /// Faturalandırma önizlemesi (`POST .../meter-billings/preview`).
@@ -235,6 +252,7 @@ class BillingPreview {
     required this.previewHash,
     required this.canPost,
     required this.params,
+    this.areaBasis,
   });
 
   final int totalMinor;
@@ -246,6 +264,9 @@ class BillingPreview {
   final bool canPost;
   final Map<String, dynamic> params;
 
+  /// Yönetimin seçtiği alan payı tabanı (`area_basis`; yalnız ısı payı); eski sunucuda ve diğer yöntemlerde null.
+  final HeatAreaBasis? areaBasis;
+
   factory BillingPreview.fromJson(Map<String, dynamic> json) => BillingPreview(
     totalMinor: _int(json['total_minor']),
     apartmentCount: _int(json['apartment_count']),
@@ -255,6 +276,7 @@ class BillingPreview {
     previewHash: _str(json['preview_hash']),
     canPost: json['can_post'] == true,
     params: _map(json['params']),
+    areaBasis: HeatAreaBasis.values.where((basis) => basis.api == json['area_basis']).firstOrNull,
   );
 }
 

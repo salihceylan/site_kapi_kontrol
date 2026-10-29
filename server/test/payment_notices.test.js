@@ -130,6 +130,12 @@ describe('ayrıştırma', () => {
     const approve = parseApproveInput({ account_id: 3, book_in_open_period: true, acknowledged: ['POSSIBLE_DUPLICATE', 5] });
     assert.deepEqual([approve.accountId, approve.bookInOpenPeriod, approve.acknowledged], [3, true, ['POSSIBLE_DUPLICATE']]);
     assert.throws(() => parseApproveInput({ account_id: 'x' }));
+    // K3: İşletme / Fon hesabı seçimi (isteğe bağlı; geçersiz değer 400)
+    assert.equal(approve.fund, null);
+    assert.equal(parseApproveInput({ fund: 'capital' }).fund, 'capital');
+    assert.equal(parseApproveInput({ fund: 'operating' }).fund, 'operating');
+    assert.equal(parseApproveInput({ fund: null }).fund, null);
+    assert.throws(() => parseApproveInput({ fund: 'kasa' }), (e) => e.statusCode === 400 && e.code === 'INVALID_BODY');
     assert.deepEqual(parseIdList({ ids: [1, '2', 2] }), [1, 2]);
     assert.throws(() => parseIdList({ ids: [] }));
     assert.throws(() => parseIdList({ ids: Array.from({ length: 51 }, (_, i) => i + 1) }));

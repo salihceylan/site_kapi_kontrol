@@ -228,6 +228,9 @@ class MeterApi {
     kReadingJumpCode => serverText ?? 'Olağan dışı tüketim: bu okuma son dönemlerin çok üzerinde. Değeri kontrol edin; doğruysa onaylayın.',
     'PREVIEW_STALE' => 'Okumalar önizlemeden sonra değişti. Önizlemeyi yenileyip tekrar deneyin.',
     'READINGS_INCOMPLETE' => 'Bazı dairelerin okuması eksik. Eksikleri tamamlayın ya da "eksikleri atla" seçeneğini işaretleyin.',
+    'AREA_BASIS_INCOMPLETE' =>
+      'Seçilen alan payı tabanı için bazı dairelerin verisi eksik (arsa payı ya da kişi sayısı). Eksikleri tamamlayın, tabanı değiştirin ya da "eksikleri atla" seçeneğini işaretleyin.',
+    'AREA_BASIS_UNUSABLE' => 'Seçilen alan payı tabanında dağıtılacak pay yok (tüm arsa payları 0). Başka bir taban seçin.',
     'BILLING_OVERLAP' => 'Seçilen tarih aralığı daha önce faturalandırılmış bir aralıkla çakışıyor.',
     'NO_CONSUMPTION' => 'Seçilen aralıkta dağıtılacak tüketim yok.',
     'NOTHING_TO_POST' => 'Borçlandırılacak daire yok.',

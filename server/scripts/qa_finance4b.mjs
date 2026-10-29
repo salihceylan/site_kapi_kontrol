@@ -306,10 +306,11 @@ async function startHttp(pool) {
   const { financeRouter } = await import('../src/modules/finance_routes.js');
   const { finance4bRouter } = await import('../src/modules/finance_4b_routes.js');
   const { financeFundsRouter } = await import('../src/modules/finance_funds_routes.js');
+  const { financeFundChoiceRouter } = await import('../src/modules/finance_fund_choice_routes.js'); // K3: GET payments/fund-choice
   const { moduleRouter } = await import('../src/modules/module_routes.js');
   const { adminRouter } = await import('../src/routes/admin_routes.js');
   const keep = new Set([requireSiteManager, requireSuperUser]);
-  for (const router of [financeRouter, finance4bRouter, financeFundsRouter, moduleRouter, adminRouter]) {
+  for (const router of [financeRouter, finance4bRouter, financeFundsRouter, financeFundChoiceRouter, moduleRouter, adminRouter]) {
     for (const layer of router.stack) {
       if (!layer.route) continue;
       const stack = layer.route.stack;
@@ -323,6 +324,7 @@ async function startHttp(pool) {
   app.use(financeRouter);
   app.use(finance4bRouter);
   app.use(financeFundsRouter);
+  app.use(financeFundChoiceRouter);
   app.use(moduleRouter);
   app.use(adminRouter);
   const server = await new Promise((resolve) => {
@@ -337,12 +339,21 @@ async function startHttp(pool) {
     }
     return tokens.get(userCode);
   };
-  async function call(method, urlPath, userCode, body, rawBody) {
+  // Tahakkuk dayanagi (K2, 090): Fon hesabi borcu yazan POST'lar (ek borc `.../finance/charges`, aylik borclandirma `.../definitions/:id/post`) dayanak ister. Bu bolumlerin konusu
+  // dayanak DEGIL: govdede `decision_id` / `decision_reason` hic yoksa (null dahil "var" sayilir) Karar Defteri KAPALI sitelerde gecerli bir gerekce eklenir. Dayanagi sinayan bolum
+  // (run_decision) kendi alanlarini acikca verir.
+  const withRunDecision = (method, urlPath, body) => {
+    if (method !== 'POST' || !body || typeof body !== 'object' || Array.isArray(body)) return body;
+    if (!/\/finance\/(charges|definitions\/\d+\/post)$/.test(urlPath.split('?')[0])) return body;
+    if (body.decision_id !== undefined || body.decision_reason !== undefined) return body;
+    return { ...body, decision_reason: 'QA tahakkuk gerekcesi' };
+  };
+  async function callOnce(method, urlPath, userCode, body, rawBody) {
     const headers = { 'content-type': 'application/json' };
     if (userCode !== null) headers.authorization = `Bearer ${await tokenFor(userCode)}`;
     let response;
     try {
-      response = await fetch(`${base}${urlPath}`, { method, headers, body: rawBody !== undefined ? rawBody : body === undefined ? undefined : JSON.stringify(body) });
+      response = await fetch(`${base}${urlPath}`, { method, headers, body: rawBody !== undefined ? rawBody : body === undefined ? undefined : JSON.stringify(withRunDecision(method, urlPath, body)) });
     } catch (error) {
       throw new Error(`istek basarisiz: ${method} ${urlPath} (${error?.cause?.code || error?.cause?.message || error?.message})`);
     }
@@ -353,6 +364,18 @@ async function startHttp(pool) {
       // govdesiz yanit
     }
     return { status: response.status, body: json, headers: response.headers };
+  }
+  // K3 (P1-3): eski senaryolar KISITSIZ tahsilat yazar; iki turlu (Isletme + Fon) borclu hesapta sunucu 400 FUND_CHOICE_REQUIRED der (yazilim hesabi atamaz).
+  // Bu yardimci (YALNIZ test duzenegi; uretim kodu degil) o yanita BIR kez Isletme Hesabi secimiyle yeniden dener; senaryolarin asil konusu tahsilat hesabi
+  // secimi degildir. K3'u sinayan kontroller ham yaniti `__strict: true` ile gorur (alan gonderilmeden once atilir).
+  async function call(method, urlPath, userCode, body, rawBody) {
+    const strict = body !== null && typeof body === 'object' && body.__strict === true;
+    const payload = strict ? Object.fromEntries(Object.entries(body).filter(([k]) => k !== '__strict')) : body;
+    const first = await callOnce(method, urlPath, userCode, payload, rawBody);
+    const retryable =
+      !strict && rawBody === undefined && method === 'POST' && /\/finance\/(payments|entries\/\d+\/correct)$/.test(urlPath) && payload && typeof payload === 'object' && payload.fund === undefined &&
+      first.status === 400 && first.body?.code === 'FUND_CHOICE_REQUIRED';
+    return retryable ? callOnce(method, urlPath, userCode, { ...payload, fund: 'operating' }, rawBody) : first;
   }
   async function callRaw(method, urlPath, userCode, buffer, headers = {}) {
     const h = { ...headers };

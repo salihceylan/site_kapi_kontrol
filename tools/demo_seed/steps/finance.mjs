@@ -8,13 +8,14 @@ import {
 } from '../lib/finance_plan.mjs';
 import { addDays, monthsBetween, noonIstanbul, ymOf } from '../lib/util.mjs';
 
+// `decision`: Karar Defteri'ndeki KESIN kararin basligi (steps/decisions.mjs genel kurul kararlari); Fon ek borcunun dayanagi (K2).
 const EXTRA_CHARGES = [
-  { date: '2024-03-04', due: '2024-03-25', name: 'Asansör Modernizasyonu Katkı Payı (1/2)', mult: 2.0 },
-  { date: '2024-04-04', due: '2024-04-25', name: 'Asansör Modernizasyonu Katkı Payı (2/2)', mult: 2.0 },
-  { date: '2025-05-06', due: '2025-05-26', name: 'Dış Cephe Boya ve Onarım Katkı Payı (1/4)', mult: 2.0 },
-  { date: '2025-06-05', due: '2025-06-25', name: 'Dış Cephe Boya ve Onarım Katkı Payı (2/4)', mult: 2.0 },
-  { date: '2025-07-07', due: '2025-07-25', name: 'Dış Cephe Boya ve Onarım Katkı Payı (3/4)', mult: 2.0 },
-  { date: '2025-08-05', due: '2025-08-25', name: 'Dış Cephe Boya ve Onarım Katkı Payı (4/4)', mult: 2.0 },
+  { date: '2024-03-04', due: '2024-03-25', name: 'Asansör Modernizasyonu Katkı Payı (1/2)', mult: 2.0, decision: 'Asansör modernizasyonu için katkı payı' },
+  { date: '2024-04-04', due: '2024-04-25', name: 'Asansör Modernizasyonu Katkı Payı (2/2)', mult: 2.0, decision: 'Asansör modernizasyonu için katkı payı' },
+  { date: '2025-05-06', due: '2025-05-26', name: 'Dış Cephe Boya ve Onarım Katkı Payı (1/4)', mult: 2.0, decision: 'Dış cephe boya ve onarım işi' },
+  { date: '2025-06-05', due: '2025-06-25', name: 'Dış Cephe Boya ve Onarım Katkı Payı (2/4)', mult: 2.0, decision: 'Dış cephe boya ve onarım işi' },
+  { date: '2025-07-07', due: '2025-07-25', name: 'Dış Cephe Boya ve Onarım Katkı Payı (3/4)', mult: 2.0, decision: 'Dış cephe boya ve onarım işi' },
+  { date: '2025-08-05', due: '2025-08-25', name: 'Dış Cephe Boya ve Onarım Katkı Payı (4/4)', mult: 2.0, decision: 'Dış cephe boya ve onarım işi' },
 ];
 const EXPENSE_RATIO = { 2023: 0.97, 2024: 1.03, 2025: 0.96, 2026: 0.95 };
 
@@ -88,11 +89,18 @@ export async function seedFinance(ctx) {
       charge_party: 'owner',
     };
     const preview = await svc.finance_service.previewCharge({ siteCode, body, now });
+    // K2 (090): Fon (malik oder) borcu dayanaksiz yazilamaz. Karar Defteri aciksa genel kurulun KESIN kararina baglanir (decisions adimi finanstan once calisir), kapaliysa serbest metin gerekce.
+    let basis = { decision_reason: `Genel kurul kararı: ${extra.decision}` };
+    if (ctx.enabled?.decision_book) {
+      const decided = (await q(`SELECT id FROM board_decisions WHERE site_code = $1 AND status = 'kesin' AND title = $2 ORDER BY id LIMIT 1`, [siteCode, extra.decision])).rows[0];
+      if (!decided) throw new Error(`Karar Defteri acik ama "${extra.decision}" kesin karari yok: --only kullaniyorsaniz decisions adimini finanstan once ekleyin`);
+      basis = { decision_id: Number(decided.id) };
+    }
     await svc.finance_service.postCharge({
       siteCode,
       actor,
       now,
-      body: { ...body, expected_total_minor: preview.total_minor, expected_apartment_count: preview.apartment_count, expected_hash: preview.preview_hash, idempotency_key: key('charge', extra.date) },
+      body: { ...body, ...basis, expected_total_minor: preview.total_minor, expected_apartment_count: preview.apartment_count, expected_hash: preview.preview_hash, idempotency_key: key('charge', extra.date) },
     });
   }
   const chargeRows = (
@@ -132,12 +140,12 @@ export async function seedFinance(ctx) {
         const method = profile === 'prepay' ? (rng.chance(0.15) ? 'cheque' : 'transfer') : pref ? 'cash' : rng.chance(0.02) ? 'cheque' : 'transfer';
         const date = adjustPaymentDate(p.date, method);
         if (date > TODAY) continue;
-        payEvents.push({ kind: 'payment', date, amountMinor: p.amountMinor, aptId, party: c.account_party, method, chargeId: c.id, period: c.entry_date.slice(0, 7), profile });
+        payEvents.push({ kind: 'payment', date, amountMinor: p.amountMinor, aptId, party: c.account_party, method, chargeId: c.id, period: c.entry_date.slice(0, 7), profile, fund: c.isMonthly ? 'operating' : 'capital' });
       }
     }
     for (const p of chronicPartial(profileBase, list, TODAY)) {
       const charge = list.find((c) => c.id === p.chargeId);
-      payEvents.push({ kind: 'payment', date: adjustPaymentDate(p.date, 'transfer'), amountMinor: p.amountMinor, aptId, party: charge.account_party, method: 'transfer', chargeId: p.chargeId, period: charge.entry_date.slice(0, 7), profile: 'partial' });
+      payEvents.push({ kind: 'payment', date: adjustPaymentDate(p.date, 'transfer'), amountMinor: p.amountMinor, aptId, party: charge.account_party, method: 'transfer', chargeId: p.chargeId, period: charge.entry_date.slice(0, 7), profile: 'partial', fund: charge.isMonthly ? 'operating' : 'capital' });
     }
   }
   const collectionsByYear = {};
@@ -252,6 +260,8 @@ export async function seedFinance(ctx) {
             body: {
               apartment_id: e.aptId, amount_minor: e.amountMinor, entry_date: date, method: e.method, account_party: e.party,
               account_id: accountId(e.method === 'cash' ? 'cash' : 'bank'), description: desc, idempotency_key: key('pay', payN),
+              // K3 (P1-3): yazilim odemeyi hesaba kendiliginden atamaz; aidat odemesi Isletme (Aidat), Fon katki payi odemesi Fon hesabina yazilir
+              fund: e.fund,
             },
           });
           stats.payments += 1;

@@ -7,9 +7,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_MIGRATIONS_DIR, findUnsafeStatements } from '../scripts/migrate.js';
 import { METERING_DDL, METERING_STEP_NAMES, ensureMeteringSchema, schemaTuning } from '../src/modules/metering_schema.js';
-import { areaShareItems, buildMeterPlan, consumptionByApartment, consumptionOfMeter, priceOf } from '../src/modules/metering_calc.js';
+import { areaShareGaps, areaShareItems, buildMeterPlan, consumptionByApartment, consumptionOfMeter, priceOf } from '../src/modules/metering_calc.js';
 import { computeBillingPlan, parseBillingInput } from '../src/modules/metering_billing.js';
 import { milliOf, milliText, parseReadingValue } from '../src/modules/metering_common.js';
+import { invalidateRuleCache } from '../src/modules/platform_rules.js';
 import { MODULE_CATALOG } from '../src/modules/catalog.js';
 
 schemaTuning.retryDelayMs = 1;
@@ -134,38 +135,74 @@ describe('dagitim', () => {
     assert.equal(plan.areaBasis, 'equal');
     assert.equal('areaMissing' in plan, false);
   });
-  it('isi: TUM dairelerin arsa payi tanimliysa alan payi arsa payina gore dagitilir', () => {
+  it('isi: arsa payi SECILIRSE alan payi arsa payina gore dagitilir', () => {
+    const withShare = [
+      { id: 1, landShareNumerator: 1, landShareDenominator: 4 },
+      { id: 2, landShareNumerator: 1, landShareDenominator: 4 },
+      { id: 3, landShareNumerator: 2, landShareDenominator: 4 },
+    ];
+    const plan = buildMeterPlan({ method: 'heat', apartments: withShare, consumption, totalMinor: 100000, measuredPct: 70, areaBasis: 'land_share' });
+    // olcum 70000: 1 -> 17500, 2 -> 52500; alan payi 30000 arsa payina gore: 1 -> 7500, 2 -> 7500, 3 -> 15000
+    assert.deepEqual(plan.lines.map((l) => [l.apartmentId, l.amount]), [[1, 25000n], [2, 60000n], [3, 15000n]]);
+    assert.equal(plan.total, 100000n);
+    assert.equal(plan.areaBasis, 'land_share');
+  });
+  it('K5: tum dairelerin arsa payi tanimli olsa bile taban SECILMEDIYSE (varsayilan) alan payi ESIT dagitilir; kod arsa payina gecmez', () => {
     const withShare = [
       { id: 1, landShareNumerator: 1, landShareDenominator: 4 },
       { id: 2, landShareNumerator: 1, landShareDenominator: 4 },
       { id: 3, landShareNumerator: 2, landShareDenominator: 4 },
     ];
     const plan = buildMeterPlan({ method: 'heat', apartments: withShare, consumption, totalMinor: 100000, measuredPct: 70 });
-    // olcum 70000: 1 -> 17500, 2 -> 52500; alan payi 30000 arsa payina gore: 1 -> 7500, 2 -> 7500, 3 -> 15000
-    assert.deepEqual(plan.lines.map((l) => [l.apartmentId, l.amount]), [[1, 25000n], [2, 60000n], [3, 15000n]]);
+    // olcum 70000: 1 -> 17500, 2 -> 52500; alan payi 30000 ESIT: her daire 10000
+    assert.deepEqual(plan.lines.map((l) => [l.apartmentId, l.amount]), [[1, 27500n], [2, 62500n], [3, 10000n]]);
+    assert.equal(plan.areaBasis, 'equal');
+    assert.equal(areaShareItems(withShare).basis, 'equal');
+  });
+  it('isi: kisi sayisi SECILIRSE alan payi guncel kisi sayisina gore dagitilir (3 kisi : 1 kisi : 2 kisi)', () => {
+    const withPeople = [{ id: 1, personCount: 3 }, { id: 2, personCount: 1 }, { id: 3, personCount: 2 }];
+    const plan = buildMeterPlan({ method: 'heat', apartments: withPeople, consumption, totalMinor: 100000, measuredPct: 70, areaBasis: 'person_count' });
+    // olcum 70000: 1 -> 17500, 2 -> 52500; alan payi 30000 kisi sayisina gore (3/6, 1/6, 2/6): 1 -> 15000, 2 -> 5000, 3 -> 10000
+    assert.deepEqual(plan.lines.map((l) => [l.apartmentId, l.amount]), [[1, 32500n], [2, 57500n], [3, 10000n]]);
     assert.equal(plan.total, 100000n);
-    assert.equal(plan.areaBasis, 'land_share');
+    assert.equal(plan.areaBasis, 'person_count');
   });
   it('isi: farkli paydalar ortak paydaya getirilir (1/2, 1/3, 1/6)', () => {
     const items = areaShareItems([
       { id: 1, landShareNumerator: 1, landShareDenominator: 2 },
       { id: 2, landShareNumerator: 1, landShareDenominator: 3 },
       { id: 3, landShareNumerator: 1, landShareDenominator: 6 },
-    ]);
+    ], 'land_share');
     assert.equal(items.basis, 'land_share');
     assert.deepEqual(items.items.map((i) => [i.id, i.weight]), [[1, 3n], [2, 2n], [3, 1n]]);
   });
-  it('isi: tek dairenin bile arsa payi eksikse (ya da gecersizse) herkese ESIT; karma dagitim yok', () => {
+  it('K5: secilen tabanin verisi eksik daire sessizce esit paya DUSURULMEZ; eksik veri olarak raporlanir (areaShareGaps), areaShareItems reddeder', () => {
     const missingOne = [
       { id: 1, landShareNumerator: 1, landShareDenominator: 4 },
       { id: 2, landShareNumerator: null, landShareDenominator: null },
       { id: 3, landShareNumerator: 2, landShareDenominator: 4 },
     ];
+    assert.deepEqual(areaShareGaps(missingOne, 'land_share'), [{ id: 2, reason: 'land_share_missing' }]);
+    assert.deepEqual(areaShareGaps([{ id: 1, landShareNumerator: 1, landShareDenominator: 0 }], 'land_share'), [{ id: 1, reason: 'land_share_missing' }]);
+    assert.throws(() => areaShareItems(missingOne, 'land_share'), RangeError);
+    // esit tabanin verisi gerekmez; ayni daireler esit tabanda eksik sayilmaz
+    assert.deepEqual(areaShareGaps(missingOne, 'equal'), []);
     assert.equal(areaShareItems(missingOne).basis, 'equal');
     assert.deepEqual(areaShareItems(missingOne).items.map((i) => i.weight), [1n, 1n, 1n]);
-    assert.equal(areaShareItems([{ id: 1, landShareNumerator: 1, landShareDenominator: 0 }]).basis, 'equal');
-    // tum paylar 0: agirlik toplami 0 -> dagitilamaz, esit paya duser
-    assert.equal(areaShareItems([{ id: 1, landShareNumerator: 0, landShareDenominator: 4 }, { id: 2, landShareNumerator: 0, landShareDenominator: 4 }]).basis, 'equal');
+    // kisi sayisi: kayit yok (null) ve 0 eksik veridir
+    const people = [{ id: 1, personCount: 2 }, { id: 2, personCount: 0 }, { id: 3 }, { id: 4, personCount: null }];
+    assert.deepEqual(areaShareGaps(people, 'person_count'), [
+      { id: 2, reason: 'person_count_missing' },
+      { id: 3, reason: 'person_count_missing' },
+      { id: 4, reason: 'person_count_missing' },
+    ]);
+    assert.throws(() => areaShareItems(people, 'person_count'), RangeError);
+    // tum paylar 0: dagitilacak pay yok -> 409 (sessiz esit paya dusulmez)
+    assert.throws(
+      () => areaShareItems([{ id: 1, landShareNumerator: 0, landShareDenominator: 4 }, { id: 2, landShareNumerator: 0, landShareDenominator: 4 }], 'land_share'),
+      { code: 'AREA_BASIS_UNUSABLE' },
+    );
+    assert.throws(() => areaShareItems([{ id: 1 }], 'm2'), RangeError);
   });
   it('isi: alan payi tuketimden bagimsizdir; olcum payi %0 iken tuketim olmasa da hata vermez (yaniltici NO_CONSUMPTION yok)', () => {
     const plan = buildMeterPlan({ method: 'heat', apartments, consumption: new Map([[1, 0n], [2, 0n], [3, 0n]]), totalMinor: 9001, measuredPct: 0 });
@@ -191,10 +228,10 @@ describe('dagitim', () => {
   });
 });
 
-describe('isi plani (computeBillingPlan, sahte istemci): m2 yok, alan payi arsa payi ya da esit', () => {
+describe('isi plani (computeBillingPlan, sahte istemci): m2 yok, alan payi tabani YONETIMIN secimi (esit / arsa payi / kisi sayisi; varsayilan esit)', () => {
   const meterRow = (id, extra = {}) => ({
     meter_id: id, apartment_id: id, responsible_party: 'both', unit_label: String(id), block_name: 'A', has_tenant: false,
-    land_share_numerator: null, land_share_denominator: null,
+    land_share_numerator: null, land_share_denominator: null, person_count: null,
     opening: '0', opening_date: '2026-01-01', closing: String(id * 10), closing_date: '2026-02-01', ...extra,
   });
   // meters sorgusu satir dondurur; kural (heat.measured_share_pct) sorgusu satirsiz: varsayilan %70
@@ -221,24 +258,70 @@ describe('isi plani (computeBillingPlan, sahte istemci): m2 yok, alan payi arsa 
     assert.doesNotMatch(client.sql.find((t) => /FROM meters m/.test(t)), /AS area/);
   });
 
-  it('tum dairelerin arsa payi varsa area_basis=land_share ve plan ozeti esit paydakinden farklidir', async () => {
-    const withShare = [
-      meterRow(1, { land_share_numerator: 1, land_share_denominator: 6 }),
-      meterRow(2, { land_share_numerator: 2, land_share_denominator: 6 }),
-      meterRow(3, { land_share_numerator: 3, land_share_denominator: 6 }),
-    ];
-    const byShare = await computeBillingPlan(fakeClient(withShare), 1, input, { entryDate: '2026-02-05', lock: true });
+  const shareRows = () => [
+    meterRow(1, { land_share_numerator: 1, land_share_denominator: 6 }),
+    meterRow(2, { land_share_numerator: 2, land_share_denominator: 6 }),
+    meterRow(3, { land_share_numerator: 3, land_share_denominator: 6 }),
+  ];
+
+  it('arsa payi SECILIRSE area_basis=land_share ve plan ozeti esit paydakinden farklidir', async () => {
+    const byShare = await computeBillingPlan(fakeClient(shareRows()), 1, { ...input, areaBasis: 'land_share' }, { entryDate: '2026-02-05', lock: true });
     const equal = await computeBillingPlan(fakeClient([meterRow(1), meterRow(2), meterRow(3)]), 1, input, { entryDate: '2026-02-05', lock: true });
     assert.equal(byShare.params.area_basis, 'land_share');
     // alan payi 30000 arsa payina gore: 5000, 10000, 15000 (+ olcum 11667, 23333, 35000)
     assert.deepEqual(byShare.lines.map((l) => l.amount), [16667n, 33333n, 50000n]);
     assert.notEqual(byShare.hash, equal.hash);
+    assert.deepEqual(byShare.missing, []);
   });
 
-  it('tek dairenin arsa payi eksikse herkese esit (karma dagitim yok)', async () => {
-    const rows = [meterRow(1, { land_share_numerator: 1, land_share_denominator: 6 }), meterRow(2), meterRow(3, { land_share_numerator: 3, land_share_denominator: 6 })];
-    const plan = await computeBillingPlan(fakeClient(rows), 1, input, { entryDate: '2026-02-05', lock: true });
+  it('K5: arsa payi TUM dairelerde tanimli olsa bile taban secilmediyse esit dagitilir (kod arsa payina gecmez)', async () => {
+    const plan = await computeBillingPlan(fakeClient(shareRows()), 1, input, { entryDate: '2026-02-05', lock: true });
     assert.equal(plan.params.area_basis, 'equal');
+    assert.deepEqual(plan.lines.map((l) => l.amount), [21667n, 33333n, 45000n]);
+  });
+
+  it('arsa payi secildi ama tek dairenin arsa payi eksik: o daire eksik veri (area basis), esit paya DUSURULMEZ; kalanlar arsa payiyla dagitilir', async () => {
+    const rows = [meterRow(1, { land_share_numerator: 1, land_share_denominator: 6 }), meterRow(2), meterRow(3, { land_share_numerator: 3, land_share_denominator: 6 })];
+    const plan = await computeBillingPlan(fakeClient(rows), 1, { ...input, areaBasis: 'land_share' }, { entryDate: '2026-02-05', lock: true });
+    assert.equal(plan.params.area_basis, 'land_share');
+    assert.deepEqual(plan.missing, [{ apartment_id: 2, label: 'A - 2', reason: 'land_share_missing' }]);
+    assert.deepEqual(plan.lines.map((l) => l.apartmentId), [1, 3]);
+    assert.equal(plan.total, 100000n, 'toplam birebir: eksik dairenin payi kalanlara dagitilir (atlama karari yoneticide)');
+  });
+
+  it('kisi sayisi SECILIRSE yalniz o durumda kisi sayisi okunur; kayit yok / 0 olan daire eksik veri', async () => {
+    const equalClient = fakeClient([meterRow(1), meterRow(2), meterRow(3)]);
+    await computeBillingPlan(equalClient, 1, input, { entryDate: '2026-02-05', lock: true });
+    assert.doesNotMatch(equalClient.sql.find((t) => /FROM meters m/.test(t)), /COUNT\(\*\)::INTEGER FROM apartment_residencies r/, 'esit tabanda kisi sayisi alt sorgusu yok');
+    const rows = [meterRow(1, { person_count: 3 }), meterRow(2, { person_count: 0 }), meterRow(3, { person_count: 1 })];
+    const client = fakeClient(rows);
+    const plan = await computeBillingPlan(client, 1, { ...input, areaBasis: 'person_count' }, { entryDate: '2026-02-05', lock: true });
+    assert.match(client.sql.find((t) => /FROM meters m/.test(t)), /apartment_residencies r WHERE r\.apartment_id = a\.id AND r\.is_current = TRUE/);
+    assert.equal(plan.params.area_basis, 'person_count');
+    assert.deepEqual(plan.missing, [{ apartment_id: 2, label: 'A - 2', reason: 'person_count_missing' }]);
+    assert.deepEqual(plan.lines.map((l) => l.apartmentId), [1, 3]);
+    assert.equal(plan.total, 100000n);
+  });
+
+  it('olcum payi %100 ise (alan payi yok) secilen tabanin verisi eksik olsa da eksik veri olusmaz ve taban parametrelere yazilmaz', async () => {
+    const client = {
+      sql: [],
+      async query(text) {
+        this.sql.push(text);
+        if (/FROM meters m/.test(text)) return { rows: [meterRow(1), meterRow(2)] };
+        if (/platform_rule_values/.test(text)) return { rows: [{ id: '1', site_code: null, value: 100, inherit: false, valid_from: '2026-01-01' }] };
+        return { rows: [] };
+      },
+    };
+    invalidateRuleCache();
+    try {
+      const plan = await computeBillingPlan(client, 1, { ...input, areaBasis: 'land_share' }, { entryDate: '2026-02-05', lock: true });
+      assert.equal(plan.params.measured_pct, 100);
+      assert.deepEqual(plan.missing, []);
+      assert.equal('area_basis' in plan.params, false);
+    } finally {
+      invalidateRuleCache();
+    }
   });
 
   it('olcum payi disindaki tum dairelerin tuketimi sifirsa olcum payi icin NO_CONSUMPTION (alan payiyla karismaz)', async () => {
@@ -259,6 +342,19 @@ describe('fatura girdisi', () => {
     assert.throws(() => parseBillingInput(ok, { commit: true }), { code: 'INVALID_BODY' });
     const heat = parseBillingInput({ kind: 'heat', method: 'heat', period_from: '2026-01-01', period_to: '2026-02-01', total_minor: 500000 });
     assert.equal(heat.totalMinor, 500000);
+    assert.equal(heat.areaBasis, 'equal', 'K5: taban verilmezse varsayilan ESIT (kod arsa payini kendiliginden secmez)');
+    assert.equal(parseBillingInput(ok).areaBasis, null, 'isi payi disindaki yontemlerde alan payi tabani yok');
+  });
+  it('alan payi tabani (K5): esit / arsa payi / kisi sayisi; m2 ve bilinmeyen deger reddedilir; yalniz isi payi yonteminde verilebilir', () => {
+    const heatBody = { kind: 'heat', method: 'heat', period_from: '2026-01-01', period_to: '2026-02-01', total_minor: 500000 };
+    for (const basis of ['equal', 'land_share', 'person_count']) {
+      assert.equal(parseBillingInput({ ...heatBody, area_basis: basis }).areaBasis, basis);
+    }
+    for (const bad of ['area', 'm2', 'gross', 'EQUAL', 5, true]) {
+      assert.throws(() => parseBillingInput({ ...heatBody, area_basis: bad }), { code: 'INVALID_BODY' }, String(bad));
+    }
+    assert.throws(() => parseBillingInput({ ...ok, area_basis: 'land_share' }), { code: 'INVALID_BODY' });
+    assert.equal(parseBillingInput({ ...heatBody, area_basis: null }).areaBasis, 'equal');
   });
   it('kayit icin onizleme bilgisi ve anahtar zorunlu', () => {
     const commit = parseBillingInput(

@@ -30,6 +30,7 @@ class ManagerAttentionBar extends StatefulWidget {
     required this.fetch,
     required this.onOpenFinance,
     this.onOpenBankLines,
+    this.onOpenLiabilityTransfer,
   });
 
   /// Yazma yetkili finans siteleri.
@@ -41,6 +42,10 @@ class ManagerAttentionBar extends StatefulWidget {
 
   /// Banka hareketleri ekranını (BankLinesView) doğrudan açar.
   final Future<void> Function(PeopleSite site)? onOpenBankLines;
+
+  /// Malike devredilebilir kiracı borçları penceresini (K17: `tenant_debt_overdue_transfer` / `tenant_debt_pending_transfer`) doğrudan açar;
+  /// verilmezse düğme Daireler sekmesine götürür (orada öneri şeridi aynı pencereyi açar).
+  final Future<void> Function(PeopleSite site)? onOpenLiabilityTransfer;
 
   @override
   State<ManagerAttentionBar> createState() => _ManagerAttentionBarState();
@@ -99,10 +104,16 @@ class _ManagerAttentionBarState extends State<ManagerAttentionBar> {
     if (a.key == 'bank_lines' && widget.onOpenBankLines != null) {
       await widget.onOpenBankLines!(site);
       if (mounted) unawaited(_load());
+    } else if (_isLiabilityKey(a.key) && widget.onOpenLiabilityTransfer != null) {
+      await widget.onOpenLiabilityTransfer!(site);
+      if (mounted) unawaited(_load());
     } else {
       widget.onOpenFinance(site.code, _describe(a).$2);
     }
   }
+
+  /// K17: kiracı borcu malike devredilebilir (gecikmede ya da kiracı çıkışında) dikkat satırları.
+  static bool _isLiabilityKey(String key) => key == 'tenant_debt_overdue_transfer' || key == 'tenant_debt_pending_transfer';
 
   static (String, int, String) _describe(FinanceHomeAttention a) {
     switch (a.key) {
@@ -119,6 +130,19 @@ class _ManagerAttentionBarState extends State<ManagerAttentionBar> {
           'Sakinlerden gelen ${a.count} dekont / ödeme bildirimi onay bekliyor',
           FinanceHomeTab.notices,
           'Dekontları Gör',
+        );
+      case 'tenant_debt_overdue_transfer':
+        // Sayı kesilmiş bir listeden çıktıysa "en az" yazılır (yönetici eksik sayıyı tam sanmasın).
+        return (
+          '${a.atLeast ? 'En az ' : ''}${a.count} dairede kiracının borcu gecikti; ev sahibine devredilebilir',
+          FinanceHomeTab.balances,
+          'Devri İncele',
+        );
+      case 'tenant_debt_pending_transfer':
+        return (
+          '${a.count} dairede kiracı ayrıldı, borcu kiracı hesabında duruyor; ev sahibine devredilebilir',
+          FinanceHomeTab.balances,
+          'Devri İncele',
         );
       default:
         return ('${a.count} bekleyen iş var', FinanceHomeTab.balances, 'İncele');

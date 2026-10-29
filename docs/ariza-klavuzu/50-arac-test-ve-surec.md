@@ -287,7 +287,7 @@ ssh-keygen -R "[178.210.161.55]:22667"
 | [server/src/routes/company_routes.js:326](../../server/src/routes/company_routes.js#L326) | <code>return res.status(400).json({ error: 'device_uid 12 haneli hex (0-9, A-F) olmalidir.' });</code> | Sunucu UID'yi 12 haneli büyük harf hex ister (":" ve "-" ayırıcıları tolere edilir) |
 | [server/src/routes/company_routes.js:110](../../server/src/routes/company_routes.js#L110) | <code>export function resolveCompanyHardwareType(body) {</code> | hardware_type/hardware_target/chip alanlarından türü çıkarır; çıkaramazsa null |
 | [server/src/routes/company_routes.js:127](../../server/src/routes/company_routes.js#L127) | <code>const DEFAULT_COMPANY_HARDWARE_TYPE = 'esp32_c3';</code> | Tür belirlenemezse varsayılan esp32_c3 yazılır; cihaz MQTT bildirimi sonradan düzeltir |
-| [server/src/server.js:130](../../server/src/server.js#L130) | <code>app.post('/api/company/labeled-devices', companyAccessLimiter, requireCompanyAccess, expr…</code> | Bu uca özel 5 MB JSON limiti (QR PNG base64); hız sınırı yetkiden ÖNCE çalışır |
+| [server/src/server.js:133](../../server/src/server.js#L133) | <code>app.post('/api/company/labeled-devices', companyAccessLimiter, requireCompanyAccess, expr…</code> | Bu uca özel 5 MB JSON limiti (QR PNG base64); hız sınırı yetkiden ÖNCE çalışır |
 
 **Olası nedenler**
 - UID 12 haneli değil (ör. eski firmware farklı uzunlukta UID bildiriyor) → 400

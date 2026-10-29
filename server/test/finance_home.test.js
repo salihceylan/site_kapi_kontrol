@@ -28,4 +28,14 @@ describe('finance_home', () => {
     const items = (await collectAttention(1, { query: async () => ({ rows: [] }) })).filter((i) => i.key.startsWith('t_'));
     assert.deepEqual(items, [{ key: 't_ok', module: null, count: 2, total_minor: 500 }]);
   });
+
+  it('attention kaydi: kaynak sayiyi kesilmis listeden cikardiysa at_least=true satira gecer (istemci "en az" yazar); false/yok gecmez', async () => {
+    registerAttentionSource({ key: 't_least', module: null, run: async () => ({ count: 500, total_minor: 9, at_least: true }) });
+    registerAttentionSource({ key: 't_exact', module: null, run: async () => ({ count: 3, at_least: false }) });
+    const items = (await collectAttention(1, { query: async () => ({ rows: [] }) })).filter((i) => i.key === 't_least' || i.key === 't_exact');
+    assert.deepEqual(items, [
+      { key: 't_least', module: null, count: 500, total_minor: 9, at_least: true },
+      { key: 't_exact', module: null, count: 3 },
+    ]);
+  });
 });

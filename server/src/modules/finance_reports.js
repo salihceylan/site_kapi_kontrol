@@ -376,9 +376,9 @@ export async function computeIncomeExpense(db, siteCode, months) {
   const ledger = await db.query(
     `
       SELECT to_char(period, 'YYYY-MM-DD') AS period,
-        COALESCE(SUM(amount_minor) FILTER (WHERE late_fee_run_id IS NULL AND source_kind IS DISTINCT FROM 'opening' AND (kind = 'charge' OR (kind = 'reversal' AND amount_minor < 0))), 0)::TEXT AS charged,
+        COALESCE(SUM(amount_minor) FILTER (WHERE late_fee_run_id IS NULL AND COALESCE(source_kind, '') NOT IN ('opening', 'refund', 'liability_transfer') AND (kind = 'charge' OR (kind = 'reversal' AND amount_minor < 0))), 0)::TEXT AS charged,
         COALESCE(SUM(amount_minor) FILTER (WHERE late_fee_run_id IS NOT NULL AND (kind = 'charge' OR (kind = 'reversal' AND amount_minor < 0))), 0)::TEXT AS late_fee,
-        COALESCE(-SUM(amount_minor) FILTER (WHERE kind = 'payment' OR (kind = 'reversal' AND amount_minor > 0)), 0)::TEXT AS collected
+        (COALESCE(-SUM(amount_minor) FILTER (WHERE source_kind IS DISTINCT FROM 'opening' AND (kind = 'payment' OR (kind = 'reversal' AND amount_minor > 0))), 0) - COALESCE(SUM(amount_minor) FILTER (WHERE source_kind = 'refund'), 0))::TEXT AS collected
       FROM ledger_entries WHERE site_code = $1 AND period BETWEEN $2::DATE AND $3::DATE GROUP BY period
     `,
     [siteCode, first, last],
@@ -469,6 +469,8 @@ export async function incomeExpenseReport(siteCode, query = {}, now = new Date()
 
 // --- 3. Kasa durumu ---------------------------------------------------------------------------------------------------------------------------
 
+// Not: "Giderler" (expenses) sütunu hesaptan çıkan ALACAK İADESİNİ (account_movements.kind = 'refund', 088) de içerir; böylece açılış + tahsilat - çıkış ± aktarım ± düzeltme = bakiye
+// denklemi her istemcide / dışa aktarmada tutar. Gider raporu (expenses tablosu) iadeyi içermez; iade gelir-gider raporunda net tahsilatı düşürür (computeIncomeExpense.collected).
 export async function computeCashPosition(db, siteCode, asOf) {
   const result = await db.query(
     `
@@ -476,7 +478,7 @@ export async function computeCashPosition(db, siteCode, asOf) {
         a.id, a.name, a.kind, a.is_active, to_char(a.opening_date, 'YYYY-MM-DD') AS opening_date,
         COALESCE(SUM(m.amount_minor) FILTER (WHERE m.kind = 'opening'), 0)::TEXT AS opening,
         COALESCE(SUM(m.amount_minor) FILTER (WHERE m.kind = 'collection'), 0)::TEXT AS collections,
-        COALESCE(SUM(m.amount_minor) FILTER (WHERE m.kind = 'expense'), 0)::TEXT AS expenses,
+        COALESCE(SUM(m.amount_minor) FILTER (WHERE m.kind IN ('expense', 'refund')), 0)::TEXT AS expenses,
         COALESCE(SUM(m.amount_minor) FILTER (WHERE m.kind = 'transfer_in'), 0)::TEXT AS transfers_in,
         COALESCE(SUM(m.amount_minor) FILTER (WHERE m.kind = 'transfer_out'), 0)::TEXT AS transfers_out,
         COALESCE(SUM(m.amount_minor) FILTER (WHERE m.kind = 'adjustment'), 0)::TEXT AS adjustments,
@@ -515,6 +517,7 @@ export async function computeCashPosition(db, siteCode, asOf) {
       SELECT COUNT(*)::INTEGER AS n, COALESCE(SUM(-l.amount_minor), 0)::TEXT AS total
       FROM ledger_entries l
       WHERE l.site_code = $1 AND l.kind = 'payment' AND $3::DATE IS NOT NULL AND l.period >= date_trunc('month', $3::DATE)::DATE AND l.entry_date >= $3::DATE AND l.entry_date <= $2::DATE
+        AND l.source_kind IS DISTINCT FROM 'opening'
         AND NOT EXISTS (SELECT 1 FROM ledger_entries rv WHERE rv.reverses_entry_id = l.id)
         AND NOT EXISTS (SELECT 1 FROM account_movements m WHERE m.kind = 'collection' AND m.ledger_entry_id = l.id)
     `,

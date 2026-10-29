@@ -963,11 +963,16 @@ class BulkImportController extends ChangeNotifier {
     return <String, Object?>{
       'cutover_date': cutoverDate,
       if (withTotal) 'expected_total_minor': openingTotalMinor,
+      // Alacaklı devir (K16): alacak toplamı borç toplamından AYRI onaylanır (yalnız alacaklı satır varsa gönderilir).
+      if (withTotal && openingCreditTotalMinor > 0) 'expected_credit_total_minor': openingCreditTotalMinor,
     };
   }
 
-  /// Önizlemedeki devir toplamı (kuruş).
+  /// Önizlemedeki devir BORÇ toplamı (kuruş).
   int get openingTotalMinor => preview?.plan['total_minor'] ?? 0;
+
+  /// Önizlemedeki devir ALACAK toplamı (büyüklük, kuruş); alacaklı satır yoksa 0.
+  int get openingCreditTotalMinor => preview?.plan['credit_total_minor'] ?? 0;
 
   void setStrict(bool value) {
     if (value == strict || committing) return;

@@ -5,6 +5,7 @@ import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/finance_liability_transfer_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_payment_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_reminder_exempt_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_receipt_dialog.dart';
@@ -262,6 +263,23 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
     showFinanceSnack(context, message);
   }
 
+  /// Kiracı borcunu malike devretme penceresi (K1 / K17: önizleme + neden + onay + iz + geri alma). Yazma sonrası ekstre tazelenir.
+  Future<void> _openLiabilityTransfer() async {
+    if (_opening || _issuing) return;
+    _opening = true;
+    try {
+      await FinanceLiabilityTransferDialog.show(
+        context,
+        scope: widget.scope,
+        apartmentId: widget.apartmentId,
+        apartmentLabel: _title,
+        onChanged: _refreshOnly,
+      );
+    } finally {
+      _opening = false;
+    }
+  }
+
   /// Makbuzu olmayan tahsilat için makbuz düzenler (sunucuda idempotent: aktif makbuz varsa onu döndürür).
   Future<void> _issueReceipt(LedgerEntry entry) async {
     if (_opening || _issuing) return;
@@ -349,7 +367,7 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
   /// Makbuz düzenlenebilir tahsilat: iptal edilmemiş, ters kayıt olmayan ve AKTİF makbuzu bulunmayan ödeme. Makbuzu
   /// "hatalı düzenlendi" diye iptal edilmiş ödeme için yeni makbuz düzenlenebilir (iptal penceresinin vaadi; sunucu izin verir).
   static bool _canIssueReceipt(LedgerEntry e) =>
-      e.kind == LedgerKind.payment && !e.isReversal && !e.isReversed && (e.receipt == null || e.receipt!.isCancelled);
+      e.kind == LedgerKind.payment && !e.isOpeningCredit && !e.isReversal && !e.isReversed && (e.receipt == null || e.receipt!.isCancelled);
 
   String get _title {
     final header = _header;
@@ -420,6 +438,17 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
               icon: Icons.do_not_disturb_on_rounded,
               variant: AppButtonVariant.tonal,
               onPressed: _opening || _issuing ? null : _openExempt,
+            ),
+          ],
+          // Kiracı hesabı olan dairede (iki hesap): gecikmiş / ayrılmış kiracının ödenmemiş borcu malike devredilebilir (karar K1 + K17).
+          if (header != null && _canWrite && _twoAccounts) ...[
+            const SizedBox(height: AppSpace.sm),
+            PrimaryActionButton(
+              key: const ValueKey<String>('finance_account_liability_transfer'),
+              label: 'Kiracı Borcunu Malike Devret',
+              icon: Icons.swap_horiz_rounded,
+              variant: AppButtonVariant.tonal,
+              onPressed: _opening || _issuing ? null : _openLiabilityTransfer,
             ),
           ],
           if (_actionError != null) ...[

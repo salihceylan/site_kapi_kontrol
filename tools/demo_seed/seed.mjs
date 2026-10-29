@@ -155,6 +155,8 @@ try {
   if (peopleResult) {
     // sayac faturalandirmasi borc yazar: finans tahsilat planindan ONCE
     await runFile('metering', 'metering');
+    // Karar Defteri finanstan ONCE: Fon (malik oder) ek borclari kesinlesmis bir karara dayanir (K2, migration 090); Karar Defteri kapaliysa finans serbest metin gerekce yazar
+    await runFile('decisions', 'decision_book');
 
     const fin = await import('./steps/finance.mjs');
     financeResult = await runStep('finance', 'finance', () => fin.seedFinance(ctx));
@@ -162,7 +164,7 @@ try {
 
     for (const [file, moduleCode] of [
       ['budget', 'budget'], ['announcements', 'announcements'], ['neighbor', 'neighbor_board'], ['documents', 'drive_storage'], ['work', 'work_tracking'],
-      ['reservation', 'reservation'], ['visitors', 'visitor_log'], ['contracts', 'contracts'], ['decisions', 'decision_book'], ['surveys', 'survey'],
+      ['reservation', 'reservation'], ['visitors', 'visitor_log'], ['contracts', 'contracts'], ['surveys', 'survey'],
       ['equipment', 'equipment'], ['devices', null], ['annual_report', 'annual_report'],
     ]) {
       await runFile(file, moduleCode);

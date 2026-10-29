@@ -40,12 +40,13 @@ const LOCK_TIMEOUT = '8s';
 const SYNC_KINDS = new Set(['people', 'vehicles', 'all_in_one']);
 const FINANCE_LOCK_KINDS = new Set(['apartments', 'all_in_one', 'opening_balances']);
 const APARTMENT_WRITE_KINDS = new Set(['apartments', 'all_in_one']);
-const totalError = (plan, expected) =>
+const totalError = (plan, expected, expectedCredit = 0) =>
   new PlatformError(409, 'TOTAL_MISMATCH', 'Toplam tutar onaylanan tutarla uyuşmuyor. Önizleme yenilendi, tekrar inceleyin.', {
     totals: plan.totals,
     plan: plan.counts,
     preview_hash: plan.previewHash,
     expected_total_minor: expected,
+    expected_credit_total_minor: expectedCredit,
   });
 const MAX_CONCURRENT_COMMITS = 2;
 const MAX_CONCURRENT_PREVIEWS = 4;
@@ -358,8 +359,13 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor, hashes =
         preview_hash: plan.previewHash,
       });
     }
-    if (kind === 'opening_balances' && plan.counts.total_minor !== parsed.options.expected_total_minor) {
-      throw totalError(plan, parsed.options.expected_total_minor);
+    // Devir toplamları: BORÇ toplamı ve ALACAK toplamı AYRI ayrı onaylanır (K16): ikisi de uyuşmazsa hiçbir şey yazılmaz.
+    if (
+      kind === 'opening_balances' &&
+      (plan.counts.total_minor !== parsed.options.expected_total_minor ||
+        (plan.counts.credit_total_minor ?? 0) !== (parsed.options.expected_credit_total_minor ?? 0))
+    ) {
+      throw totalError(plan, parsed.options.expected_total_minor, parsed.options.expected_credit_total_minor ?? 0);
     }
     if (parsed.strict && plan.totals.error > 0) {
       throw new PlatformError(409, 'IMPORT_HAS_ERRORS', 'Hatalı satırlar var. Düzeltip yeniden yükleyin.', {
@@ -412,7 +418,14 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor, hashes =
         action: 'finance.opening.imported',
         target_type: 'finance',
         target_id: String(runId),
-        details: { run_id: runId, rows: plan.counts.opening_add, total_minor: written.total, cutover_date: parsed.options.cutover_date },
+        details: {
+          run_id: runId,
+          rows: plan.counts.opening_add,
+          total_minor: written.total,
+          credit_rows: plan.counts.opening_credit_add ?? 0,
+          credit_total_minor: written.creditTotal ?? 0,
+          cutover_date: parsed.options.cutover_date,
+        },
       });
     } else {
       if (APARTMENT_WRITE_KINDS.has(kind)) {

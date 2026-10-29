@@ -86,6 +86,30 @@ void main() {
       expect(preview.lines.single.amountMinor, 10000);
       expect(preview.missing.single.reasonText, 'başlangıç okuması yok');
       expect(preview.canPost, isFalse);
+      expect(preview.areaBasis, isNull, reason: 'eski sunucu / ısı payı dışı yöntem');
+    });
+
+    test('K5 ısı payı alan payı tabanı: seçenekler eşit (varsayılan), arsa payı, kişi sayısı (m² yok); önizleme seçilen tabanı ve eksik veri nedenlerini taşır', () {
+      expect(HeatAreaBasis.values.first, HeatAreaBasis.equal, reason: 'varsayılan taban EŞİT');
+      expect(HeatAreaBasis.values.map((b) => b.api).toList(), <String>['equal', 'land_share', 'person_count']);
+      expect(HeatAreaBasis.values.every((b) => b.label.isNotEmpty && b.help.isNotEmpty), isTrue);
+      final preview = BillingPreview.fromJson(<String, dynamic>{
+        'total_minor': 600000,
+        'apartment_count': 2,
+        'zero_count': 0,
+        'preview_hash': 'h',
+        'can_post': false,
+        'area_basis': 'person_count',
+        'params': <String, dynamic>{'area_basis': 'person_count'},
+        'lines': <Object>[],
+        'missing': <Object>[
+          <String, dynamic>{'label': 'A - 3', 'reason': 'person_count_missing'},
+          <String, dynamic>{'label': 'A - 4', 'reason': 'land_share_missing'},
+        ],
+      });
+      expect(preview.areaBasis, HeatAreaBasis.personCount);
+      expect(preview.missing.map((m) => m.reasonText).toList(), <String>['dairede kayıtlı güncel kişi yok', 'arsa payı tanımlı değil']);
+      expect(BillingPreview.fromJson(<String, dynamic>{'area_basis': 'area'}).areaBasis, isNull, reason: 'm² tabanı tanınmaz');
     });
 
     test('içe aktarma satır nedenleri Türkçe', () {
@@ -98,6 +122,8 @@ void main() {
     test('bilinen kodlar düz Türkçe, bilinmeyen null', () {
       expect(MeterApi.meterErrorMessage('SERIAL_TAKEN'), contains('seri numaralı'));
       expect(MeterApi.meterErrorMessage('BILLING_OVERLAP'), contains('çakışıyor'));
+      expect(MeterApi.meterErrorMessage('AREA_BASIS_INCOMPLETE'), contains('alan payı tabanı'));
+      expect(MeterApi.meterErrorMessage('AREA_BASIS_UNUSABLE'), contains('dağıtılacak pay yok'));
       expect(MeterApi.meterErrorMessage('BAMBASKA'), isNull);
     });
   });

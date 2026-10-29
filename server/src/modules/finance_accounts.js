@@ -179,6 +179,7 @@ export async function mirrorCollectionForEntry(client, { siteCode, entryId, open
  */
 const UNASSIGNED_WHERE = `
   l.site_code = $1 AND l.kind = 'payment' AND l.period >= $2::DATE AND l.entry_date >= $3::DATE
+  AND l.source_kind IS DISTINCT FROM 'opening'
   AND NOT EXISTS (SELECT 1 FROM ledger_entries rv WHERE rv.reverses_entry_id = l.id)
   AND NOT EXISTS (SELECT 1 FROM account_movements m WHERE m.kind = 'collection' AND m.ledger_entry_id = l.id)
 `;
@@ -453,6 +454,7 @@ const MOVEMENT_SELECT = `
     CASE
       WHEN m.kind = 'collection' THEN (SELECT b.block_name || ' - ' || a.unit_label FROM ledger_entries l INNER JOIN apartments a ON a.id = l.apartment_id INNER JOIN site_blocks b ON b.id = a.block_id WHERE l.id = m.ledger_entry_id)
       WHEN m.kind = 'expense' THEN (SELECT e.description FROM expenses e WHERE e.id = m.expense_id)
+      WHEN m.kind = 'refund' THEN (SELECT 'Alacak iadesi: ' || b.block_name || ' - ' || a.unit_label FROM finance_refunds r INNER JOIN apartments a ON a.id = r.apartment_id INNER JOIN site_blocks b ON b.id = a.block_id WHERE r.id = m.refund_id)
       WHEN m.kind IN ('transfer_out', 'transfer_in') THEN (SELECT fa.name FROM account_transfers t INNER JOIN finance_accounts fa ON fa.id = CASE WHEN m.kind = 'transfer_out' THEN t.to_account_id ELSE t.from_account_id END WHERE t.id = m.transfer_id)
       ELSE NULL
     END AS label

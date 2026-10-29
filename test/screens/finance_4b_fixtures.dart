@@ -16,6 +16,7 @@ import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/finance_4b.dart';
 import 'package:site_kapi_kontrol/models/finance_charts.dart';
 import 'package:site_kapi_kontrol/models/finance_funds.dart';
+import 'package:site_kapi_kontrol/models/finance_liability.dart';
 import 'package:site_kapi_kontrol/models/fund_models.dart';
 import 'package:site_kapi_kontrol/models/late_fee_models.dart';
 import 'package:site_kapi_kontrol/models/receipt_models.dart';
@@ -1077,6 +1078,56 @@ class FakeFinance4bApi extends Finance4bApi {
     );
   }
 
+  // --- Hesap (İşletme / Fon) seçimi (K3) ------------------------------------------------------
+  final List<Map<String, Object?>> fundChoiceCalls = <Map<String, Object?>>[];
+
+  /// Daire kimliği -> `GET payments/fund-choice` yanıtı (sunucu biçimi, bkz. [fundChoiceBody]). Yoksa borçsuz yanıt.
+  final Map<int, Map<String, dynamic>> fundChoiceBodies = <int, Map<String, dynamic>>{};
+
+  /// Sunucunun KAYIT anında gördüğü durum (GET'in söylediğinden farklıysa: bayat bilgi). Yoksa [fundChoiceBodies] geçerli.
+  final Map<int, Map<String, dynamic>> serverFundChoice = <int, Map<String, dynamic>>{};
+
+  /// Düzeltme (asıl kayıt hâlâ defterde, okunan durum yanıltır): doluysa `fund` verilmeyen düzeltme 400 FUND_CHOICE_REQUIRED alır.
+  Map<String, dynamic>? correctionFundChoice;
+  Object? fundChoiceError;
+  F4Gate? fundChoiceGate;
+
+  /// Sunucu `GET payments/fund-choice` yanıtı: [operating] / [capital] açık borç (kuruş). İkisi de > 0 ise seçim zorunlu; yalnız biri > 0 ise öneri o.
+  static Map<String, dynamic> fundChoiceBody({int operating = 0, int capital = 0, String party = 'owner', Map<String, dynamic>? proposal}) => <String, dynamic>{
+    'apartment_id': 0,
+    'account_party': party,
+    'open': <String, dynamic>{'operating_minor': operating, 'capital_minor': capital},
+    'advance_minor': 0,
+    'choice_required': operating > 0 && capital > 0,
+    'suggested_fund': operating > 0 && capital == 0 ? 'operating' : (capital > 0 && operating == 0 ? 'capital' : null),
+    'proposal': proposal,
+  };
+
+  @override
+  Future<FundChoiceInfo> getFundChoice({
+    required String token,
+    required int siteCode,
+    required int apartmentId,
+    AccountParty? accountParty,
+    int? amountMinor,
+    DateTime? paidOn,
+  }) async {
+    await _enter('getFundChoice');
+    fundChoiceCalls.add(<String, Object?>{'apartment_id': apartmentId, 'account_party': accountParty?.apiValue, 'amount_minor': amountMinor});
+    await fundChoiceGate?.future;
+    final error = fundChoiceError;
+    if (error != null) throw error;
+    return FundChoiceInfo.tryParse(fundChoiceBodies[apartmentId] ?? fundChoiceBody())!;
+  }
+
+  /// Sunucunun K3 kuralı: hesap (fund) verilmediyse ve iki türün de açık borcu varsa 400 FUND_CHOICE_REQUIRED.
+  void _enforceFundChoice(int apartmentId, FinanceFund? fund) {
+    final body = serverFundChoice[apartmentId] ?? fundChoiceBodies[apartmentId];
+    if (fund == null && body != null && body['choice_required'] == true) {
+      throw f4Coded('FUND_CHOICE_REQUIRED', 400, payload: <String, dynamic>{'fund_choice': body});
+    }
+  }
+
   // --- Hesap seçimli tahsilat ---------------------------------------------------------------
   final List<Map<String, Object?>> paymentCalls = <Map<String, Object?>>[];
   Object? paymentError;
@@ -1123,6 +1174,9 @@ class FakeFinance4bApi extends Finance4bApi {
       final account = _account(accountId);
       if (account == null) throw f4Coded('ACCOUNT_NOT_FOUND', 404);
       if (account['is_active'] != true) throw f4Coded('ACCOUNT_INACTIVE', 409);
+    }
+    _enforceFundChoice(apartmentId, fund);
+    if (accountId != null) {
       _addMovement(accountId, 'collection', amountMinor, _iso(entryDate), label: 'A Blok - 5');
     }
     final result = LedgerWriteResult.fromJson(<String, dynamic>{
@@ -1174,6 +1228,10 @@ class FakeFinance4bApi extends Finance4bApi {
     await paymentGate?.future;
     final error = paymentError;
     if (error != null) throw error;
+    final required = correctionFundChoice;
+    if (fund == null && required != null && required['choice_required'] == true) {
+      throw f4Coded('FUND_CHOICE_REQUIRED', 400, payload: <String, dynamic>{'fund_choice': required});
+    }
     return LedgerWriteResult.fromJson(<String, dynamic>{
       'entry': <String, dynamic>{
         'id': 9500 + correctPaymentCalls.length,
@@ -2183,6 +2241,174 @@ class FakeFinance4bApi extends Finance4bApi {
     stats['pending'] = 0;
     run['stats'] = stats;
     return ReminderRun.fromJson(run);
+  }
+
+  // --- Kiracı borcunun malike devri (K1) ve gecikmede öneri (K17) ----------------------------
+  // Sunucuyu taklit eder (docs/PLATFORM_FINANS.md "Kiracı borcunun malike devri"): aday listesi, daire başına önizleme + geçmiş; devir listeden düşürür,
+  // geri alma geçmişi işaretler; önizleme özeti bayatsa 409 LIABILITY_TRANSFER_CHANGED.
+  Map<String, dynamic> liabilityCandidatesJson = <String, dynamic>{
+    'items': <Map<String, dynamic>>[],
+    'count': 0,
+    'total_minor': 0,
+    'truncated': false,
+  };
+  Object? liabilityCandidatesError;
+  F4Gate? liabilityCandidatesGate;
+  final Map<int, Map<String, dynamic>> liabilityPreviews = <int, Map<String, dynamic>>{};
+  final Map<int, List<Map<String, dynamic>>> liabilityHistory = <int, List<Map<String, dynamic>>>{};
+  Object? liabilityPreviewError;
+  Object? liabilityCreateError;
+  Object? liabilityReverseError;
+  int _liabilityNextId = 1;
+
+  @override
+  Future<LiabilityCandidatePage> listLiabilityCandidates({required String token, required int siteCode}) async {
+    await _enter('listLiabilityCandidates');
+    final result = LiabilityCandidatePage.fromJson(liabilityCandidatesJson);
+    await liabilityCandidatesGate?.future;
+    final error = liabilityCandidatesError;
+    if (error != null) throw error;
+    return result;
+  }
+
+  @override
+  Future<LiabilityPreview> previewLiabilityTransfer({required String token, required int siteCode, required int apartmentId}) async {
+    await _enter('previewLiabilityTransfer');
+    final error = liabilityPreviewError;
+    if (error != null) throw error;
+    return LiabilityPreview.fromJson(
+      liabilityPreviews[apartmentId] ??
+          <String, dynamic>{
+            'apartment_id': apartmentId,
+            'has_owner': true,
+            'can_transfer': false,
+            'items': <dynamic>[],
+            'excluded_late_fee': <dynamic>[],
+            'item_count': 0,
+            'total_minor': 0,
+            'preview_hash': 'a' * 64,
+            'tenant_balance_minor': 0,
+            'owner_balance_minor': 0,
+          },
+    );
+  }
+
+  @override
+  Future<List<LiabilityTransfer>> listLiabilityTransfers({required String token, required int siteCode, required int apartmentId}) async {
+    await _enter('listLiabilityTransfers');
+    return <LiabilityTransfer>[for (final row in liabilityHistory[apartmentId] ?? const <Map<String, dynamic>>[]) LiabilityTransfer.fromJson(row)];
+  }
+
+  @override
+  Future<LiabilityTransferResult> createLiabilityTransfer({
+    required String token,
+    required int siteCode,
+    required int apartmentId,
+    required int expectedTotalMinor,
+    required String expectedHash,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    await _enter('createLiabilityTransfer', <String, Object?>{
+      'apartment_id': apartmentId,
+      'expected_total_minor': expectedTotalMinor,
+      'expected_hash': expectedHash,
+      'reason': reason,
+      'key': idempotencyKey,
+    });
+    final error = liabilityCreateError;
+    if (error != null) {
+      liabilityCreateError = null;
+      throw error;
+    }
+    final preview = liabilityPreviews[apartmentId];
+    if (preview == null || preview['preview_hash'] != expectedHash || preview['total_minor'] != expectedTotalMinor) {
+      throw ApiException(
+        'Kiracı borçları önizlemeden sonra değişti. Önizlemeyi yenileyip tekrar inceleyin.',
+        statusCode: 409,
+        code: 'LIABILITY_TRANSFER_CHANGED',
+      );
+    }
+    final id = _liabilityNextId++;
+    final row = <String, dynamic>{
+      'id': id,
+      'apartment_id': apartmentId,
+      'kind': 'transfer',
+      'from_party': 'tenant',
+      'to_party': 'owner',
+      'total_minor': expectedTotalMinor,
+      'item_count': (preview['items'] as List).length,
+      'reason': reason,
+      'reverses_transfer_id': null,
+      'reversed_by_transfer_id': null,
+      'created_by_name': 'Yönetici',
+      'created_at': '2026-10-29T09:00:00.000Z',
+      'reversible': true,
+    };
+    liabilityHistory.putIfAbsent(apartmentId, () => <Map<String, dynamic>>[]).insert(0, row);
+    // devirden sonra daire öneri listesinden ve önizlemeden düşer
+    liabilityPreviews[apartmentId] = <String, dynamic>{
+      ...preview,
+      'items': <dynamic>[],
+      'item_count': 0,
+      'total_minor': 0,
+      'can_transfer': false,
+      'preview_hash': 'b' * 64,
+      'tenant_balance_minor': 0,
+      'owner_balance_minor': expectedTotalMinor,
+    };
+    final candidates = (liabilityCandidatesJson['items'] as List).cast<Map<String, dynamic>>().where((c) => c['apartment_id'] != apartmentId).toList();
+    liabilityCandidatesJson = <String, dynamic>{
+      'items': candidates,
+      'count': candidates.length,
+      'total_minor': candidates.fold<int>(0, (sum, c) => sum + (c['total_minor'] as int)),
+      'truncated': false,
+    };
+    return LiabilityTransferResult.fromJson(
+      <String, dynamic>{'transfer': row, 'tenant_balance_minor': 0, 'owner_balance_minor': expectedTotalMinor},
+      replayed: false,
+    );
+  }
+
+  @override
+  Future<LiabilityTransferResult> reverseLiabilityTransfer({
+    required String token,
+    required int siteCode,
+    required int transferId,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    await _enter('reverseLiabilityTransfer', <String, Object?>{'transfer_id': transferId, 'reason': reason, 'key': idempotencyKey});
+    final error = liabilityReverseError;
+    if (error != null) {
+      liabilityReverseError = null;
+      throw error;
+    }
+    for (final entry in liabilityHistory.entries) {
+      for (final row in entry.value) {
+        if (row['id'] != transferId) continue;
+        final reverseId = _liabilityNextId++;
+        row['reversed_by_transfer_id'] = reverseId;
+        row['reversible'] = false;
+        final reversal = <String, dynamic>{
+          ...row,
+          'id': reverseId,
+          'kind': 'reversal',
+          'from_party': 'owner',
+          'to_party': 'tenant',
+          'reason': reason,
+          'reverses_transfer_id': transferId,
+          'reversed_by_transfer_id': null,
+          'reversible': false,
+        };
+        entry.value.insert(0, reversal);
+        return LiabilityTransferResult.fromJson(
+          <String, dynamic>{'transfer': reversal, 'tenant_balance_minor': row['total_minor'], 'owner_balance_minor': 0},
+          replayed: false,
+        );
+      }
+    }
+    throw ApiException('Devir kaydı bulunamadı.', statusCode: 404, code: 'LIABILITY_TRANSFER_NOT_FOUND');
   }
 }
 

@@ -178,6 +178,11 @@ enum FeeDistribution {
     'Arsa payına göre',
     'Toplam tutar, dairelerin arsa paylarına göre bölünür.',
   ),
+  personCount(
+    'person_count',
+    'Kişi sayısına göre',
+    'Toplam tutar, dairelerde kayıtlı güncel kişi sayısına göre bölünür (Kişiler ekranı). Kişi kaydı olmayan daire eksik veri sayılır.',
+  ),
   area('area', 'Metrekareye göre', 'Toplam tutar, dairelerin metrekarelerine göre bölünür.'),
   unknown('', 'Dağıtım bilinmiyor', '');
 
@@ -655,6 +660,8 @@ class ExtraChargeInput {
     this.dueDate,
     this.chargeParty,
     this.fund,
+    this.decisionId,
+    this.decisionReason,
   });
 
   final String name;
@@ -671,6 +678,26 @@ class ExtraChargeInput {
   /// Borcun kasası; verilirse `fund` gönderilir (sunucu varsayılanı: Yatırım ve Demirbaş (Fon) Hesabı).
   final FinanceFund? fund;
 
+  /// Tahakkuk dayanağı (K2): Karar Defteri kaydı (`decision_id`; modül açık sitede Fon borcu için zorunlu) ve/veya serbest metin
+  /// gerekçe (`decision_reason`; modül kapalı sitede zorunlu). Önizlemede gönderilmez; onay isteğinde [withBasis] ile eklenir.
+  final int? decisionId;
+  final String? decisionReason;
+
+  /// Aynı ek borç + dayanak (onay isteği için).
+  ExtraChargeInput withBasis({int? decisionId, String? decisionReason}) => ExtraChargeInput(
+    name: name,
+    distribution: distribution,
+    areaBasis: areaBasis,
+    amountMinor: amountMinor,
+    categoryAmounts: categoryAmounts,
+    target: target,
+    dueDate: dueDate,
+    chargeParty: chargeParty,
+    fund: fund,
+    decisionId: decisionId,
+    decisionReason: decisionReason,
+  );
+
   Map<String, dynamic> toJson() => <String, dynamic>{
     'name': name.trim(),
     'distribution': distribution.apiValue,
@@ -682,6 +709,8 @@ class ExtraChargeInput {
     if (dueDate != null) 'due_date': crmDateParam(dueDate!),
     if (chargeParty != null) 'charge_party': chargeParty!.apiValue,
     if (fund != null) 'fund': fund!.apiValue,
+    'decision_id': ?decisionId,
+    if (decisionReason != null && decisionReason!.trim().isNotEmpty) 'decision_reason': decisionReason!.trim(),
   };
 }
 
@@ -697,6 +726,7 @@ class FeePreviewLine {
     this.payerParty = ResponsibleParty.both,
     required this.amountMinor,
     this.accountParty,
+    this.basisValue,
   });
 
   final int apartmentId;
@@ -708,6 +738,9 @@ class FeePreviewLine {
   /// Borcun yazılacağı hesap (İP-1A); eski sunucuda null.
   final AccountParty? accountParty;
 
+  /// Dağıtım tabanının daire için değeri (K5): arsa payı kesri ("35/1000") ya da kişi sayısı ("3"); eşit / sabit / kategoride ve eski sunucuda null.
+  final String? basisValue;
+
   factory FeePreviewLine.fromJson(Map<String, dynamic> json) => FeePreviewLine(
     apartmentId: crmInt(json['apartment_id']),
     label: json['label']?.toString() ?? '',
@@ -715,6 +748,7 @@ class FeePreviewLine {
     payerParty: ResponsibleParty.fromApi(json['payer_party']),
     amountMinor: _requiredMinor(json, 'amount_minor'),
     accountParty: AccountParty.tryParse(json['account_party']),
+    basisValue: json['basis_value'] == null ? null : crmText(json['basis_value']?.toString()),
   );
 }
 
@@ -738,7 +772,7 @@ class FeeMissingData {
   /// Sunucudaki neden metni (Türkçe) ya da kod; ekranda [financeMissingReason] ile gösterilir.
   final String reason;
 
-  /// Makine kodu (`land_share_missing`, `area_missing`, `category_missing`, `category_amount_missing`).
+  /// Makine kodu (`land_share_missing`, `person_count_missing`, `area_missing`, `category_missing`, `category_amount_missing`).
   final String reasonCode;
 
   factory FeeMissingData.fromJson(Map<String, dynamic> json) => FeeMissingData(
@@ -757,6 +791,8 @@ String financeMissingReason(String reason, {String code = ''}) {
   switch (code.trim()) {
     case 'land_share_missing':
       return 'Arsa payı tanımlı değil.';
+    case 'person_count_missing':
+      return 'Dairede kayıtlı güncel kişi yok (kişi sayısı tanımsız).';
     case 'area_missing':
       return 'Metrekare bilgisi tanımlı değil.';
     case 'category_missing':
@@ -797,7 +833,12 @@ class FeePreview {
     this.redistributed = false,
     this.skippedCount = 0,
     this.duplicateOfRunId,
+    this.decisionRequirement,
   });
+
+  /// Tahakkuk dayanağı gereksinimi (K2, `decision_requirement`): Fon hesabı borcunda Karar Defteri kaydı (modül açık) ya da
+  /// gerekçe (modül kapalı) istenir. Eski sunucuda null: dayanak istenmez.
+  final DecisionRequirement? decisionRequirement;
 
   final FinancePeriod? period;
   final int? definitionId;
@@ -846,6 +887,7 @@ class FeePreview {
       redistributed: json['redistributed'] == true,
       skippedCount: crmInt(json['skipped_count']),
       duplicateOfRunId: crmIntOrNull(json['duplicate_of_run_id']),
+      decisionRequirement: DecisionRequirement.tryParse(json['decision_requirement']),
     );
   }
 }
@@ -970,7 +1012,11 @@ class LedgerEntry {
     this.sourceKind,
     this.fund,
     this.fundSplit,
+    this.decision,
   });
+
+  /// Borcun tahakkuk dayanağı (K2): çalıştırmanın karar kaydı ("2026/4") ve/veya gerekçesi; yoksa (eski kayıt, işletme hesabı, tahsilat) null.
+  final LedgerDecision? decision;
 
   final int id;
   final LedgerKind kind;
@@ -1017,8 +1063,12 @@ class LedgerEntry {
   /// Yönetici bu kaydı iptal edebilir mi? (Ters kayıt ve zaten iptal edilmiş kayıt iptal edilemez.)
   bool get canReverse => !isReversal && !isReversed && kind != LedgerKind.unknown;
 
-  /// Yalnız tahsilat düzeltilebilir (ters kayıt + yeni tahsilat).
-  bool get canCorrect => canReverse && kind == LedgerKind.payment;
+  /// Devir alacağı (K16; alacaklı devir): önceki dönemden devredilen ALACAK. Defterde tahsilat (`payment`) türündedir ama kaynak izi `opening`dir;
+  /// gerçek bir nakit / havale tahsilatı DEĞİLDİR (makbuz düzenlenmez, düzeltilemez, kasaya eşlenmez).
+  bool get isOpeningCredit => kind == LedgerKind.payment && sourceKind == 'opening';
+
+  /// Yalnız tahsilat düzeltilebilir (ters kayıt + yeni tahsilat); devir alacağı düzeltilemez (iptal edilir ya da devir yüklemesi geri alınır).
+  bool get canCorrect => canReverse && kind == LedgerKind.payment && !isOpeningCredit;
 
   factory LedgerEntry.fromJson(Map<String, dynamic> json) => LedgerEntry(
     id: crmInt(json['id']),
@@ -1045,6 +1095,7 @@ class LedgerEntry {
     sourceKind: crmText(json['source_kind']),
     fund: FinanceFund.tryParse(json['fund']),
     fundSplit: FundSplit.tryParse(json['fund_split']),
+    decision: LedgerDecision.tryParse(json['decision']),
   );
 
   /// Tazminat kalemi: `kind = charge` VE (açık bayrak / harita ya da `late_fee_run_id`). Sunucu tazminatın TERS kaydına da
@@ -1433,7 +1484,11 @@ class MyFinanceAccount {
     this.recent = const <LedgerEntry>[],
     this.funds,
     this.advanceMinor,
+    this.breakdown,
   });
+
+  /// Kalem dökümü (P2-1): ödenmemiş her borç kaleminin kaynağı (dönem, tür, hesap) ve dayanağı (karar no / gerekçe); eski sunucuda null.
+  final DebtBreakdown? breakdown;
 
   /// Kasa bazında açık borç / vadesi geçen / avans (bu hesabın); eski sunucuda null. Kiracı hesabında Fon Hesabı, kiracılı
   /// dairede malik hesabında Aidat Hesabı sıfır gelir (ekran sıfır kasayı göstermez).
@@ -1467,6 +1522,7 @@ class MyFinanceAccount {
     recent: _listOf(json['recent'], LedgerEntry.fromJson),
     funds: FundBreakdown.tryParse(json['funds']),
     advanceMinor: json['advance_minor'] == null ? null : fundMinor(json['advance_minor']),
+    breakdown: DebtBreakdown.tryParse(json['breakdown']),
   );
 }
 
@@ -1495,7 +1551,11 @@ class MyFinanceApartment {
     this.accounts = const <MyFinanceAccount>[],
     this.funds,
     this.advanceMinor,
+    this.breakdown,
   });
+
+  /// Kişinin KENDİ hesabının kalem dökümü (üst düzey `breakdown`); eski sunucuda null.
+  final DebtBreakdown? breakdown;
 
   /// Kişinin KENDİ hesabının kasa kırılımı (üst düzey `funds`); eski sunucuda null.
   final FundBreakdown? funds;
@@ -1521,6 +1581,7 @@ class MyFinanceApartment {
     recent: recent,
     funds: funds,
     advanceMinor: advanceMinor,
+    breakdown: breakdown,
   );
 
   /// Salt okunur görünümler (borç sorumlusu "malik ve kiracı" olan dairede malike kiracı hesabı).
@@ -1570,6 +1631,7 @@ class MyFinanceApartment {
     accounts: _listOf(json['accounts'], MyFinanceAccount.fromJson),
     funds: FundBreakdown.tryParse(json['funds']),
     advanceMinor: json['advance_minor'] == null ? null : fundMinor(json['advance_minor']),
+    breakdown: DebtBreakdown.tryParse(json['breakdown']),
   );
 }
 
@@ -1596,6 +1658,203 @@ class MyFinance {
 
   factory MyFinance.fromJson(Map<String, dynamic> json) =>
       MyFinance(items: _listOf(json['items'], MyFinanceApartment.fromJson));
+}
+
+// --- Tahakkuk dayanağı ve kalem dökümü (K2, P1-2 / P2-1; sözleşme: docs/PLATFORM_FINANS_KARAR_BAGI.md) -----------
+
+/// Fon (demirbaş) tahakkukunun dayanağında istenen girdi: Karar Defteri açık sitede [decision] (kesinleşmiş bir karar seç),
+/// kapalı sitede [reason] (serbest metin gerekçe), işletme (Aidat) hesabında [none].
+enum RunBasisMode {
+  decision,
+  reason,
+  none;
+
+  static RunBasisMode fromApi(Object? value) {
+    switch (value) {
+      case 'decision':
+        return RunBasisMode.decision;
+      case 'reason':
+        return RunBasisMode.reason;
+      default:
+        return RunBasisMode.none;
+    }
+  }
+}
+
+/// Önizlemedeki `decision_requirement`: bu tahakkuk için dayanak zorunlu mu, hangi girdi istenir. Alan yoksa (eski sunucu) null:
+/// ekran dayanak göstermez ve göndermez.
+@immutable
+class DecisionRequirement {
+  const DecisionRequirement({
+    required this.isRequired,
+    required this.mode,
+    this.moduleEnabled = false,
+    this.reasonMin = 3,
+    this.reasonMax = 300,
+  });
+
+  final bool isRequired;
+  final RunBasisMode mode;
+
+  /// Karar Defteri modülü bu sitede açık mı.
+  final bool moduleEnabled;
+  final int reasonMin;
+  final int reasonMax;
+
+  static DecisionRequirement? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final isRequired = raw['required'] == true;
+    final mode = RunBasisMode.fromApi(raw['mode']);
+    return DecisionRequirement(
+      isRequired: isRequired,
+      // Zorunluysa ve mod bilinmiyorsa en güvenli girdi (gerekçe) istenir; zorunlu değilse hiçbiri.
+      mode: isRequired && mode == RunBasisMode.none ? RunBasisMode.reason : mode,
+      moduleEnabled: raw['module_enabled'] == true,
+      reasonMin: crmIntOrNull(raw['reason_min']) ?? 3,
+      reasonMax: crmIntOrNull(raw['reason_max']) ?? 300,
+    );
+  }
+}
+
+/// Bir borç satırının / kaleminin dayanağı (`decision`): Karar Defteri kaydı ("2026/4") ve/veya gerekçe. Sakin görünümünde yalnız numara,
+/// (sakinlere açık kararın) başlığı ve gerekçe gelir; [id] yalnız yönetim görünümündedir.
+@immutable
+class LedgerDecision {
+  const LedgerDecision({this.id, this.numberLabel, this.title, this.reason});
+
+  final int? id;
+
+  /// Karar numarası ("2026/4"); yalnız gerekçe varsa null.
+  final String? numberLabel;
+  final String? title;
+  final String? reason;
+
+  /// Gösterilecek bir şey var mı?
+  bool get hasContent => numberLabel != null || reason != null;
+
+  /// Tek satır özet: "Karar 2026/4 · Asansör yenileme" ya da "Gerekçe: ...".
+  String get summary {
+    final parts = <String>[
+      if (numberLabel != null) 'Karar $numberLabel${title == null ? '' : ' · $title'}',
+      if (reason != null) numberLabel == null ? 'Gerekçe: $reason' : reason!,
+    ];
+    return parts.join(' · ');
+  }
+
+  static LedgerDecision? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final decision = LedgerDecision(
+      id: crmIntOrNull(raw['id']),
+      numberLabel: crmText(raw['number_label']),
+      title: crmText(raw['title']),
+      reason: crmText(raw['reason']),
+    );
+    return decision.hasContent ? decision : null;
+  }
+}
+
+/// Borç kaleminin türü (`type`).
+enum DebtItemType {
+  monthly('Aylık borç'),
+  oneTime('Ek borç'),
+  lateFee('Gecikme tazminatı'),
+  opening('Devir bakiyesi'),
+  other('Diğer borç');
+
+  const DebtItemType(this.label);
+
+  final String label;
+
+  static DebtItemType fromApi(Object? value) {
+    switch (value) {
+      case 'monthly':
+        return DebtItemType.monthly;
+      case 'one_time':
+        return DebtItemType.oneTime;
+      case 'late_fee':
+        return DebtItemType.lateFee;
+      case 'opening':
+        return DebtItemType.opening;
+      default:
+        return DebtItemType.other;
+    }
+  }
+}
+
+/// Sakin "Borçlarım" kalem dökümünün bir satırı: ödenmemiş bir borç kaleminin KAYNAĞI (dönem, tür, hesap) ve dayanağı.
+@immutable
+class DebtBreakdownItem {
+  const DebtBreakdownItem({
+    required this.entryId,
+    this.type = DebtItemType.other,
+    this.name,
+    this.fund,
+    this.period,
+    this.dueDate,
+    this.overdue = false,
+    required this.amountMinor,
+    required this.remainingMinor,
+    this.decision,
+  });
+
+  final int entryId;
+  final DebtItemType type;
+
+  /// Borçlandırma anındaki tanım adı ("Aidat", "Asansör yenileme"); yoksa null.
+  final String? name;
+
+  /// Borcun hesabı (İşletme / Fon); eski sunucuda null.
+  final FinanceFund? fund;
+  final FinancePeriod? period;
+  final DateTime? dueDate;
+  final bool overdue;
+
+  /// Kalemin ilk tutarı.
+  final int amountMinor;
+
+  /// Mahsuptan sonra kalan (ödenmemiş) tutar.
+  final int remainingMinor;
+  final LedgerDecision? decision;
+
+  /// Ödenen kısım.
+  int get paidMinor => amountMinor - remainingMinor;
+
+  /// Satır başlığı: tanım adı, yoksa türün adı.
+  String get title => (name != null && name!.trim().isNotEmpty) ? name!.trim() : type.label;
+
+  factory DebtBreakdownItem.fromJson(Map<String, dynamic> json) => DebtBreakdownItem(
+    entryId: crmInt(json['entry_id']),
+    type: DebtItemType.fromApi(json['type']),
+    name: crmText(json['name']),
+    fund: FinanceFund.tryParse(json['fund']),
+    period: FinancePeriod.tryParse(json['period']),
+    dueDate: crmDate(json['due_date']),
+    overdue: json['overdue'] == true,
+    amountMinor: _requiredMinor(json, 'amount_minor'),
+    remainingMinor: _requiredMinor(json, 'remaining_minor'),
+    decision: LedgerDecision.tryParse(json['decision']),
+  );
+}
+
+/// Kalem dökümü (`breakdown`): ödenmemiş borç kalemleri, mahsup sırasıyla (en eski vade önce). [truncated]: sunucu çok kalemi kesti.
+@immutable
+class DebtBreakdown {
+  const DebtBreakdown({this.items = const <DebtBreakdownItem>[], this.truncated = false});
+
+  final List<DebtBreakdownItem> items;
+  final bool truncated;
+
+  int get totalRemainingMinor => items.fold<int>(0, (sum, item) => sum + item.remainingMinor);
+
+  /// Eski sunucuda alan yoksa null (ekran bölüm göstermez; "borç yok" DEMEZ).
+  static DebtBreakdown? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final json = Map<String, dynamic>.from(raw);
+    return DebtBreakdown(
+      items: _listOf(json['items'], DebtBreakdownItem.fromJson),
+      truncated: json['truncated'] == true,
+    );
+  }
 }
 
 // --- Denetim ----------------------------------------------------------------------------------

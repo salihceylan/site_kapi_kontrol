@@ -317,8 +317,8 @@ export async function listAllSitesTable(companyId, user) {
       apt AS (SELECT a.site_code, COUNT(*)::INT AS n FROM apartments a JOIN cs ON cs.site_code = a.site_code WHERE a.is_active GROUP BY a.site_code),
       month_led AS (
         SELECT l.site_code,
-          COALESCE(SUM(l.amount_minor) FILTER (WHERE l.kind = 'charge' OR (l.kind = 'reversal' AND l.amount_minor < 0)), 0)::TEXT AS charged,
-          COALESCE(-SUM(l.amount_minor) FILTER (WHERE l.kind = 'payment' OR (l.kind = 'reversal' AND l.amount_minor > 0)), 0)::TEXT AS collected
+          COALESCE(SUM(l.amount_minor) FILTER (WHERE COALESCE(l.source_kind, '') NOT IN ('refund', 'liability_transfer') AND (l.kind = 'charge' OR (l.kind = 'reversal' AND l.amount_minor < 0))), 0)::TEXT AS charged,
+          (COALESCE(-SUM(l.amount_minor) FILTER (WHERE l.kind = 'payment' OR (l.kind = 'reversal' AND l.amount_minor > 0)), 0) - COALESCE(SUM(l.amount_minor) FILTER (WHERE l.source_kind = 'refund'), 0))::TEXT AS collected
         FROM ledger_entries l JOIN cs ON cs.site_code = l.site_code
         WHERE l.period = date_trunc('month', (NOW() AT TIME ZONE 'Europe/Istanbul'))::DATE GROUP BY l.site_code
       ),

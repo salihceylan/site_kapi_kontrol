@@ -694,6 +694,9 @@ class FinanceFakeAuth extends PeopleFakeAuth {
   /// `expected_hash` doğrulamaz.
   bool omitPreviewHash = false;
 
+  /// Önizleme yanıtındaki `decision_requirement` (K2: Fon hesabı tahakkukunun dayanağı); null = alan yok (eski sunucu).
+  Map<String, dynamic>? decisionRequirementJson;
+
   /// true: ek borç önizlemesi `duplicate_of_run_id` BİLDİRMEZ (yakın zamanda yazılmış aynı ek borcu yalnız onay
   /// anında 409 `DUPLICATE_CHARGE` ile yakalar).
   bool omitDuplicateHint = false;
@@ -737,6 +740,7 @@ class FinanceFakeAuth extends PeopleFakeAuth {
       'already_posted': alreadyPosted,
       'duplicate_of_run_id': duplicateOfRunId,
       'closed': closed,
+      'decision_requirement': ?decisionRequirementJson,
     };
   }
 
@@ -881,6 +885,8 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     String? expectedHash,
     bool skipMissing = false,
     String? idempotencyKey,
+    int? decisionId,
+    String? decisionReason,
   }) async {
     postCalls.add(<String, Object?>{
       'id': definitionId,
@@ -891,6 +897,9 @@ class FinanceFakeAuth extends PeopleFakeAuth {
       'expected_hash': expectedHash,
       'skip_missing': skipMissing,
       'idempotency_key': idempotencyKey,
+      // Tahakkuk dayanağı (K2): yalnız verilmişse kaydedilir (mevcut testlerin beklediği çağrı biçimi değişmez)
+      'decision_id': ?decisionId,
+      'decision_reason': ?decisionReason,
     });
     _guard();
     final gate = postGate;
@@ -1551,8 +1560,11 @@ Map<String, dynamic> finMyItem({
   List<Map<String, dynamic>>? accounts,
   Map<String, dynamic>? funds,
   int? advance,
+  Map<String, dynamic>? breakdown,
 }) => <String, dynamic>{
   'site_code': siteCode,
+  // Kalem dökümü (P2-1): kişinin kendi hesabının ödenmemiş borç kalemleri (eski sunucu biçiminde yok)
+  'breakdown': ?breakdown,
   // İki kasa: kişinin kendi hesabının kasa kırılımı (eski sunucu biçiminde yok)
   'funds': ?funds,
   'advance_minor': ?advance,

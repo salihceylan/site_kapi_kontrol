@@ -85,7 +85,7 @@ const isPaymentLike = (row) => row.kind === 'payment' || (row.kind === 'reversal
 /**
  * Defter satırının ETKİN kasası. Girdi: ledger_entries sütunları (`fund`, `kind`, `amount_minor`, `source_kind`, `late_fee_run_id` ya da `late_fee`, `definition_id`) ve
  * tanım birleşimi (`def_charge_party`, `def_kind`). Tahsilat (ve tahsilatın ters kaydı) için sonuç KISITTIR: null = otomatik (kısıt yok).
- * Borç (ve borcun ters kaydı) için sonuç her zaman 'operating' | 'capital'.
+ * Borç (ve borcun ters kaydı) için sonuç her zaman 'operating' | 'capital'; TEK istisna alacak iadesi (`source_kind = 'refund'`) ve ters kaydıdır: kasası yoktur (null).
  */
 export function effectiveFund(row) {
   const raw = isFund(row.fund) ? row.fund : null;
@@ -94,6 +94,9 @@ export function effectiveFund(row) {
   }
   if (raw !== null) {
     return raw;
+  }
+  if (row.source_kind === 'refund') {
+    return null; // alacak iadesi (ve ters kaydı) hiçbir kasanın borcu değildir
   }
   if (row.source_kind === 'opening') {
     return 'operating';
@@ -107,7 +110,10 @@ export function effectiveFund(row) {
   return 'operating';
 }
 
-/** Defter satırı (ENTRY_SELECT / yükleyici) -> allocateFunds girdisi. */
+/** Alacak iadesi borcu mu (`source_kind = 'refund'` olan `charge`): hiçbir kasaya tahsilat yazmaz, YALNIZ avansı tüketir (allocateFunds `refund` bayrağı). */
+export const isRefundCharge = (row) => row.kind === 'charge' && row.source_kind === 'refund';
+
+/** Defter satırı (ENTRY_SELECT / yükleyici) -> allocateFunds girdisi. `refund` alanı yalnız iade satırında vardır (diğer satırların biçimi aynen kalır). */
 export function toAllocatorEntry(row) {
   return {
     id: Number(row.id),
@@ -117,12 +123,14 @@ export function toAllocatorEntry(row) {
     entryDate: row.entry_date,
     dueDate: row.due_date ?? null,
     reversesId: row.reverses_entry_id === null || row.reverses_entry_id === undefined ? null : Number(row.reverses_entry_id),
+    ...(isRefundCharge(row) ? { refund: true } : {}),
   };
 }
 
 // --- Dağıtım (§3) ---------------------------------------------------------------------------------------------------------------------------------
 
 const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+const EVENT_RANK = Object.freeze({ debt: 0, credit: 1, refund: 2 });
 const byDue = (a, b) => compare(a.due, b.due) || a.id - b.id;
 const emptyFund = () => ({ open: 0n, overdue: 0n, advance: 0n });
 
@@ -156,10 +164,12 @@ function insertSorted(list, debt) {
  * Çıktı: {
  *   funds: { operating: { open, overdue, advance }, capital: { … } }   open: açık borç; overdue: vadesi `today` ve öncesi olan açık borç; advance: o kasaya kısıtlı avans
  *   generalAdvance, advanceTotal                                         kısıtsız avans ve toplam avans (kısıtlı + genel)
- *   payments: Map<id, { id, date, amount, restriction, operating, capital, advance }>   her tahsilatın şu anki dağıtımı (operating + capital + advance = amount)
+ *   payments: Map<id, { id, date, amount, restriction, operating, capital, advance, refunded? }>   her tahsilatın şu anki dağıtımı (operating + capital + advance + refunded = amount)
  *   debts: Map<id, { id, fund, amount, remaining, due, date }>
- *   events: [{ date, paymentId, debtId, fund, amount }]                 tarihli dağıtım olayları (kasa hareket dökümü)
+ *   events: [{ date, paymentId, debtId, fund, amount, refund? }]       tarihli dağıtım olayları (kasa hareket dökümü); refund: true olanın fund'ı null'dır
  * }
+ * Alacak iadesi (`entry.refund === true`, yalnız `charge`): avans geri ödemesidir. YALNIZ avansı tüketir (önce genel, sonra kasa kısıtlı avanslar), hiçbir kasaya tahsilat yazmaz;
+ * tüketilen kısım tahsilatın `refunded` alanında ve `refund: true` olaylarında görünür. İade alanı olmayan girdide çıktı iadesiz sürümle BİREBİR aynıdır.
  * Değişmez: funds.operating.open + funds.capital.open - advanceTotal = Σ amount (hesabın bakiyesi).
  * @param {Array} entries
  * @param {{ today?: string|null }} [options] today ('YYYY-MM-DD') verilmezse overdue 0'dır
@@ -186,7 +196,10 @@ export function allocateFunds(entries, { today = null } = {}) {
     const debt = (amount) => ({ type: 'debt', id: entry.id, date: entry.entryDate, due: entry.dueDate ?? entry.entryDate, amount, fund: fund ?? 'operating' });
     const credit = (amount, restriction) => ({ type: 'credit', id: entry.id, date: entry.entryDate, amount, restriction });
     if (entry.kind === 'charge') {
-      if (entry.amount > 0n) timeline.push(debt(entry.amount));
+      if (entry.amount > 0n) {
+        // Alacak iadesi (`refund` bayrağı): kasaya borç DEĞİL, avansın geri ödenmesidir; aşağıda YALNIZ avansı tüketir.
+        timeline.push(entry.refund === true ? { type: 'refund', id: entry.id, date: entry.entryDate, due: entry.dueDate ?? entry.entryDate, amount: entry.amount } : debt(entry.amount));
+      }
     } else if (entry.kind === 'payment') {
       if (entry.amount < 0n) timeline.push(credit(-entry.amount, fund));
     } else if (entry.kind === 'reversal') {
@@ -195,7 +208,8 @@ export function allocateFunds(entries, { today = null } = {}) {
       else if (entry.amount < 0n) timeline.push(credit(-entry.amount, null));
     }
   }
-  timeline.sort((a, b) => compare(a.date, b.date) || (a.type === b.type ? 0 : a.type === 'debt' ? -1 : 1) || a.id - b.id);
+  // Aynı gün sırası: borç, tahsilat, iade (iade, o gün gelen tahsilattan sonra avansı tüketir). İadesiz girdide sıra eskisiyle birebir aynıdır.
+  timeline.sort((a, b) => compare(a.date, b.date) || EVENT_RANK[a.type] - EVENT_RANK[b.type] || a.id - b.id);
 
   const open = [];
   const debts = new Map();
@@ -224,6 +238,29 @@ export function allocateFunds(entries, { today = null } = {}) {
         }
       }
       if (debt.remaining > 0n) insertSorted(open, debt);
+    } else if (event.type === 'refund') {
+      // İade: önce kısıtsız (genel) avans, sonra kasa kısıtlı avanslar tüketilir; hiçbir kasaya tahsilat YAZILMAZ (olay `fund: null, refund: true`).
+      let left = event.amount;
+      for (const name of ['general', 'operating', 'capital']) {
+        const queue = queues[name];
+        while (left > 0n && queue.length > 0) {
+          const chunk = queue[0];
+          const take = chunk.remaining < left ? chunk.remaining : left;
+          chunk.remaining -= take;
+          left -= take;
+          const paid = payments.get(chunk.paymentId);
+          paid.refunded = (paid.refunded ?? 0n) + take;
+          events.push({ date: event.date, paymentId: chunk.paymentId, debtId: event.id, fund: null, refund: true, amount: take });
+          if (chunk.remaining === 0n) queue.shift();
+        }
+      }
+      if (left > 0n) {
+        // Avansı yetmeyen iade (uç durum: iade sonrası eski tarihli borç / tahsilat düzeltmesi): kalan, İşletme hesabının açık borcu sayılır
+        // (böylece bakiye değişmezi korunur: açık borç - avans = Σ tutar).
+        const debt = { id: event.id, fund: 'operating', amount: event.amount, remaining: left, due: event.due, date: event.date, refund: true };
+        debts.set(debt.id, debt);
+        insertSorted(open, debt);
+      }
     } else {
       payments.set(event.id, { id: event.id, date: event.date, amount: event.amount, restriction: event.restriction, operating: 0n, capital: 0n, advance: 0n });
       let left = event.amount;
@@ -300,13 +337,21 @@ export function fundsBodyOf(summary, toNumber) {
   return { funds: { operating: one(summary.funds.operating), capital: one(summary.funds.capital) }, advance_minor: toNumber(summary.advanceTotal) };
 }
 
-/** Bir tahsilatın dağıtımı -> API biçimi { operating_minor, capital_minor, advance_minor } (kuruş tamsayı). Tahsilat yoksa null. */
+/**
+ * Bir tahsilatın dağıtımı -> API biçimi { operating_minor, capital_minor, advance_minor } (kuruş tamsayı). Tahsilat yoksa null.
+ * Tahsilattan sonra İADE edilen kısım varsa `refunded_minor` eklenir (operating + capital + advance + refunded = tutar); iadesiz tahsilatta alan YOKTUR.
+ */
 export function fundSplitOf(allocation, paymentId, toNumber) {
   const paid = allocation.payments.get(paymentId);
   if (!paid) {
     return null;
   }
-  return { operating_minor: toNumber(paid.operating), capital_minor: toNumber(paid.capital), advance_minor: toNumber(paid.advance) };
+  return {
+    operating_minor: toNumber(paid.operating),
+    capital_minor: toNumber(paid.capital),
+    advance_minor: toNumber(paid.advance),
+    ...(paid.refunded !== undefined && paid.refunded > 0n ? { refunded_minor: toNumber(paid.refunded) } : {}),
+  };
 }
 
 /**
@@ -320,13 +365,15 @@ export function paymentSplitAsOf(allocation, paymentId, to) {
   }
   let operating = 0n;
   let capital = 0n;
+  let refunded = 0n;
   for (const event of allocation.events) {
     if (event.paymentId === paymentId && event.date <= to) {
-      if (event.fund === 'capital') capital += event.amount;
+      if (event.refund === true) refunded += event.amount;
+      else if (event.fund === 'capital') capital += event.amount;
       else operating += event.amount;
     }
   }
-  return { operating, capital, advance: paid.amount - operating - capital };
+  return { operating, capital, advance: paid.amount - operating - capital - refunded, ...(refunded > 0n ? { refunded } : {}) };
 }
 
 // --- Defter yükleyicisi (DB; çağıran `db.query` verir) -------------------------------------------------------------------------------------------------

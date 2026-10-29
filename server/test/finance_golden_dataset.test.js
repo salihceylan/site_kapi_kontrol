@@ -4,7 +4,16 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { dayNumber, daysInMonth, lastDayOfMonth } from '../src/modules/finance_4b_common.js';
-import { buildDistributionPlan, planHash } from '../src/modules/finance_distribution.js';
+import { createHash } from 'node:crypto';
+import {
+  DEFAULT_DISTRIBUTION,
+  MISSING_REASON_CODES,
+  SELECTABLE_DISTRIBUTIONS,
+  buildDistributionPlan,
+  distributeLargestRemainder,
+  planHash,
+  redistributesOnSkip,
+} from '../src/modules/finance_distribution.js';
 import { computeLateFeePlan } from '../src/modules/finance_late_fee.js';
 import { lateFeeBruteForce, lateFeeForApartment, prepareApartment } from '../src/modules/finance_late_fee_calc.js';
 import { m1Remainders } from '../src/modules/finance_m1.js';
@@ -14,10 +23,18 @@ import { RULES, invalidateRuleCache, normalizeRuleValue } from '../src/modules/p
 import {
   ACCOUNT_PROFILE,
   DISTRIBUTION_CASES,
+  EQUAL_REMAINDER_CASES,
   GOLDEN_SITE,
+  GOLDEN_SITE_WITH_PEOPLE,
   LATE_FEE_CASES,
   MAHSUP_CASES,
   OCCUPANT_ACCOUNTS,
+  OPENING_CREDIT_LATE_FEE_CASE,
+  OPENING_CREDIT_MAHSUP_CASES,
+  OPENING_CREDIT_SITE_CASE,
+  OPENING_CREDIT_TWO_ACCOUNT_CASE,
+  PERSON_COUNTS,
+  PERSON_COUNT_CASES,
   TWO_ACCOUNT_DISTRIBUTION_CASES,
   TWO_ACCOUNT_LATE_FEE_CASES,
   TWO_ACCOUNT_MAHSUP_CASES,
@@ -371,4 +388,235 @@ describe('altın veri seti: iki hesap (İP-1A, G12; dağıtım, gecikme tazminat
       assert.equal(Number(mixed.credit), scenario.mixed.credit);
     });
   }
+});
+
+// --- K5: dağıtım tabanını YÖNETİM seçer (varsayılan eşit); kişi sayısı; eşit dağıtımda kuruş artıkları -------------------------------------------
+
+describe('altın veri seti K5: dağıtım tabanı yönetimin seçimidir (varsayılan eşit; m² yok)', () => {
+  it('seçilebilir tabanlar: eşit (VARSAYILAN, ilk), sabit, kategori, arsa payı, kişi sayısı; m² (area) seçenek DEĞİL', () => {
+    assert.deepEqual([...SELECTABLE_DISTRIBUTIONS], ['equal', 'fixed', 'category', 'land_share', 'person_count']);
+    assert.equal(DEFAULT_DISTRIBUTION, 'equal');
+    assert.equal(SELECTABLE_DISTRIBUTIONS[0], DEFAULT_DISTRIBUTION);
+    assert.equal(SELECTABLE_DISTRIBUTIONS.includes('area'), false);
+  });
+
+  it('kod taban SEÇMEZ: arsa payı / kişi sayısı / kategori verisi tanımlı olsa da "eşit" seçildiyse herkese eşit pay (D1 ile aynı tutarlar)', () => {
+    const withEveryBasis = GOLDEN_SITE_WITH_PEOPLE.map((apt) => ({ ...apt }));
+    const plan = buildDistributionPlan({ distribution: 'equal', amountMinor: 8500000 }, withEveryBasis);
+    const d1 = DISTRIBUTION_CASES.find((c) => c.name.startsWith('D1 '));
+    assert.deepEqual(Object.fromEntries(plan.lines.map((line) => [line.label, Number(line.amount)])), d1.expected);
+    assert.equal(plan.missing.length, 0);
+    for (const line of plan.lines) assert.equal(line.basisValue, undefined, 'eşit tabanda satır taban değeri yok');
+  });
+
+  for (const scenario of PERSON_COUNT_CASES) {
+    it(scenario.name, () => {
+      const plan = buildDistributionPlan(scenario.definition, GOLDEN_SITE_WITH_PEOPLE);
+      const actual = Object.fromEntries(plan.lines.map((line) => [line.label, Number(line.amount)]));
+      assert.deepEqual(actual, scenario.expected);
+      // kişi kaydı olmayan daire (dükkân) eşit paya DÜŞÜRÜLMEZ: eksik veri olarak raporlanır
+      assert.deepEqual(plan.missing.map((entry) => entry.label), scenario.expectedMissing);
+      assert.ok(plan.missing.every((entry) => entry.reasonCode === 'person_count_missing' && entry.reason === MISSING_REASON_CODES.person_count_missing));
+      assert.equal(plan.includedCount, 22);
+      assert.equal(plan.total, BigInt(scenario.definition.amountMinor), 'kalan 22 daire tutarın TAMAMINI paylaşır (toplam birebir)');
+      assert.equal(sum(Object.values(actual)), scenario.definition.amountMinor);
+      for (const [label, persons] of Object.entries(scenario.expectedBasis)) {
+        assert.equal(plan.lines.find((line) => line.label === label).basisValue, persons, `${label}: satır taban değeri`);
+      }
+      // dağıtım toplam kişi sayısıyla orantılı: pay farkı en çok 1 kuruş (aynı kişi sayılı daireler arasında)
+      const byPersons = new Map();
+      for (const [label, amount] of Object.entries(actual)) {
+        const persons = PERSON_COUNTS[label];
+        byPersons.set(persons, [...(byPersons.get(persons) ?? []), amount]);
+      }
+      for (const [persons, amounts] of byPersons) {
+        assert.ok(Math.max(...amounts) - Math.min(...amounts) <= 1, `${persons} kişilik daireler arası fark en çok 1 kuruş`);
+      }
+      // girdi sırası sonucu değiştirmez
+      assert.equal(planHash(buildDistributionPlan(scenario.definition, [...GOLDEN_SITE_WITH_PEOPLE].reverse())), planHash(plan));
+      // skip_missing semantiği: kişi sayısı eşit gibi yeniden dağıtılır (fixed / category dağıtılmaz)
+      assert.equal(redistributesOnSkip('person_count'), true);
+      assert.equal(redistributesOnSkip('fixed'), false);
+    });
+  }
+
+  it('kişi sayısı: kayıt yok / 0 / negatif / metin 0 hepsi eksik veri; tüm daireler eksikse plan boş (dağıtılacak ağırlık yok)', () => {
+    const apartments = [
+      { id: 1, label: 'D-1', blockSort: 1, aptSort: 1, payerParty: 'owner', personCount: 2 },
+      { id: 2, label: 'D-2', blockSort: 1, aptSort: 2, payerParty: 'owner', personCount: 0 },
+      { id: 3, label: 'D-3', blockSort: 1, aptSort: 3, payerParty: 'owner' },
+      { id: 4, label: 'D-4', blockSort: 1, aptSort: 4, payerParty: 'owner', personCount: null },
+      { id: 5, label: 'D-5', blockSort: 1, aptSort: 5, payerParty: 'owner', personCount: '0' },
+      { id: 6, label: 'D-6', blockSort: 1, aptSort: 6, payerParty: 'owner', personCount: '3' },
+    ];
+    const plan = buildDistributionPlan({ distribution: 'person_count', amountMinor: 1000 }, apartments);
+    assert.deepEqual(plan.missing.map((entry) => entry.apartmentId), [2, 3, 4, 5]);
+    assert.deepEqual(plan.lines.map((line) => [line.apartmentId, Number(line.amount)]), [[1, 400], [6, 600]]);
+    assert.equal(plan.total, 1000n);
+    const none = buildDistributionPlan({ distribution: 'person_count', amountMinor: 1000 }, apartments.filter((a) => a.id === 2 || a.id === 3));
+    assert.equal(none.lines.length, 0);
+    assert.equal(none.total, 0n);
+    assert.equal(none.missing.length, 2);
+  });
+
+  it('m² tabanı: alan verisi verilmedikçe (sunucu hiç vermez) her daire eksik veri; alan verisi VARSA saf işlev hâlâ hesaplar (eski satırlar)', () => {
+    const noArea = buildDistributionPlan({ distribution: 'area', areaBasis: 'gross', amountMinor: 1000000 }, GOLDEN_SITE.map(({ grossX100: _g, netX100: _n, ...rest }) => rest));
+    assert.equal(noArea.lines.length, 0);
+    assert.equal(noArea.missing.length, 24);
+    assert.ok(noArea.missing.every((entry) => entry.reasonCode === 'area_missing'));
+  });
+});
+
+describe('altın veri seti K5: eşit dağıtımda kuruş farkı artıkları DETERMİNİSTİKtir (toplam tutara birebir)', () => {
+  const byLabel = (labels) => GOLDEN_SITE.filter((apt) => labels === null || labels.includes(apt.label));
+  for (const scenario of EQUAL_REMAINDER_CASES) {
+    it(scenario.name, () => {
+      const apartments = byLabel(scenario.apartments);
+      const plan = buildDistributionPlan({ distribution: 'equal', amountMinor: scenario.amountMinor }, apartments);
+      assert.deepEqual(Object.fromEntries(plan.lines.map((line) => [line.label, Number(line.amount)])), scenario.expected);
+      assert.equal(plan.zeroAmountCount, scenario.zeroAmountCount);
+      assert.equal(plan.total, BigInt(scenario.amountMinor), 'toplam tutara BİREBİR eşit');
+      assert.equal(sum(Object.values(scenario.expected)), scenario.amountMinor, 'elle tablo toplamı');
+      assert.equal(plan.missing.length, 0);
+      // girdi sırası ve tekrar sonucu değiştirmez
+      assert.equal(planHash(buildDistributionPlan({ distribution: 'equal', amountMinor: scenario.amountMinor }, [...apartments].reverse())), planHash(plan));
+      assert.equal(planHash(buildDistributionPlan({ distribution: 'equal', amountMinor: scenario.amountMinor }, apartments)), planHash(plan));
+    });
+  }
+
+  it('özellik: rastgele tutar / daire sayısı / kimlikte pay toplamı tutara birebir, fark en çok 1 kuruş, fazladan kuruşlar kimliği KÜÇÜK dairelere gider (tohumlu üreteç)', () => {
+    let seed = 20261028;
+    const next = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed;
+    };
+    for (let round = 0; round < 400; round += 1) {
+      const n = 1 + (next() % 60);
+      const total = BigInt(1 + (next() % 5000)) * BigInt(1 + (next() % 200000)) + BigInt(next() % 97);
+      const ids = new Set();
+      while (ids.size < n) ids.add(1 + (next() % 100000));
+      const items = [...ids].map((id) => ({ id, weight: 1n }));
+      const shuffled = [...items].sort(() => (next() % 2 === 0 ? -1 : 1));
+      const result = distributeLargestRemainder(total, shuffled);
+      const amounts = [...result.values()];
+      assert.equal(amounts.reduce((acc, value) => acc + value, 0n), total, `toplam birebir (tur ${round})`);
+      const min = amounts.reduce((a, b) => (a < b ? a : b));
+      const max = amounts.reduce((a, b) => (a > b ? a : b));
+      assert.ok(max - min <= 1n, `fark en çok 1 kuruş (tur ${round})`);
+      const extra = [...result].filter(([, amount]) => amount === max && max !== min).map(([id]) => id).sort((a, b) => a - b);
+      const sortedIds = [...ids].sort((a, b) => a - b);
+      assert.deepEqual(extra, sortedIds.slice(0, extra.length), `fazladan kuruşlar kimliği küçük dairelerde (tur ${round})`);
+      assert.equal(BigInt(extra.length), max === min ? 0n : total - min * BigInt(n), 'fazladan kuruş sayısı = artan');
+    }
+  });
+
+  it('önizleme özeti biçimi KARARLI (v1 + "kimlik:tutar:ödeyen" satırları): D1 eşit planının özeti bağımsız hesapla aynı; açık önizlemeler dağıtımdan sonra da geçerli kalır', () => {
+    const d1 = DISTRIBUTION_CASES.find((c) => c.name.startsWith('D1 '));
+    const plan = buildDistributionPlan(d1.definition, GOLDEN_SITE);
+    const lines = GOLDEN_SITE.map((apt) => `${apt.id}:${d1.expected[apt.label]}:owner`);
+    const independent = createHash('sha256').update(['v1', ...lines].join('\n')).digest('hex');
+    assert.equal(planHash(plan), independent);
+  });
+});
+
+// --- K16: alacaklı devir (devir alacağı) mahsup mantığına doğru girer ----------------------------------------------------------------------
+
+describe('altın veri seti K16: alacaklı devir + eşit aidat (mahsup, hesap bazında, gecikme tazminatı, site toplamları)', () => {
+  /** Devir alacağı = devir tarihinde yazılan `payment` (negatif); borçlar `charge`. */
+  const itemsOf = (charges) => prepareApartment(calcRows(charges.map((charge) => ({ ...charge, kind: 'charge' }))), 0);
+
+  for (const scenario of OPENING_CREDIT_MAHSUP_CASES) {
+    it(`${scenario.name} [${scenario.apartment}]`, () => {
+      const prepared = itemsOf(scenario.charges);
+      assert.deepEqual(prepared.items.map((item) => item.id), scenario.expected.order, 'vade sırası');
+      const { rem, credit } = m1Remainders(prepared.items, BigInt(scenario.credit));
+      const remaining = Object.fromEntries(prepared.items.map((item, index) => [String(item.id), Number(rem[index])]));
+      assert.deepEqual(remaining, Object.fromEntries(Object.entries(scenario.expected.remaining).map(([id, value]) => [String(id), value])));
+      assert.equal(Number(credit), scenario.expected.credit, 'artan alacak');
+      const charged = sum(scenario.charges.map((charge) => charge.amount));
+      assert.equal(charged - scenario.credit, scenario.expected.balance, 'bakiye = borçlar - devir alacağı (defter SUM)');
+      assert.equal(sum(Object.values(scenario.expected.remaining)) - scenario.expected.credit, scenario.expected.balance, 'açık - alacak = bakiye');
+    });
+  }
+
+  it('OC1/OC2 aidat payları eşit dağıtım planının (D1) payıdır: A-6 354.167, B-12 354.166', () => {
+    const d1 = DISTRIBUTION_CASES.find((c) => c.name.startsWith('D1 '));
+    assert.equal(d1.expected['A-6'], OPENING_CREDIT_MAHSUP_CASES[0].charges[0].amount);
+    assert.equal(d1.expected['B-12'], OPENING_CREDIT_MAHSUP_CASES[1].charges[0].amount);
+    const d5 = DISTRIBUTION_CASES.find((c) => c.name.startsWith('D5 '));
+    assert.equal(d5.expected['A-7'], OPENING_CREDIT_MAHSUP_CASES[2].charges[0].amount);
+  });
+
+  it(OPENING_CREDIT_TWO_ACCOUNT_CASE.name, () => {
+    const scenario = OPENING_CREDIT_TWO_ACCOUNT_CASE;
+    for (const party of ['owner', 'tenant']) {
+      const charges = scenario.charges.filter((charge) => charge.account === party);
+      const prepared = itemsOf(charges);
+      const expected = scenario.expected[party];
+      assert.deepEqual(prepared.items.map((item) => item.id), expected.order, `${party}: vade sırası`);
+      const { rem, credit } = m1Remainders(prepared.items, BigInt(scenario.credits[party]));
+      assert.deepEqual(
+        Object.fromEntries(prepared.items.map((item, index) => [String(item.id), Number(rem[index])])),
+        Object.fromEntries(Object.entries(expected.remaining).map(([id, value]) => [String(id), value])),
+        `${party}: kalanlar`,
+      );
+      assert.equal(Number(credit), expected.credit, `${party}: alacak`);
+    }
+    // karşılaştırma: tek hesapta karışsaydı ev sahibinin alacağı kiracının borcunu kapatırdı
+    const mixed = itemsOf(scenario.charges);
+    const { rem, credit } = m1Remainders(mixed.items, BigInt(scenario.credits.owner + scenario.credits.tenant));
+    assert.deepEqual(Object.fromEntries(mixed.items.map((item, index) => [String(item.id), Number(rem[index])])), { 831: scenario.mixed.remaining[831] });
+    assert.equal(Number(credit), scenario.mixed.credit);
+  });
+
+  it(OPENING_CREDIT_LATE_FEE_CASE.name, () => {
+    const scenario = OPENING_CREDIT_LATE_FEE_CASE;
+    const first = `${scenario.period}-01`;
+    const params = { p1: dayNumber(first), p2: dayNumber(lastDayOfMonth(first)), graceDays: scenario.graceDays, rateBp: 500, divisor: 30 };
+    const rows = calcRows(scenario.rows);
+    const result = lateFeeForApartment(rows, params);
+    assert.equal(result.base, BigInt(scenario.expected.daily_30.base), 'S (kuruş x gün)');
+    assert.equal(result.fee, BigInt(scenario.expected.daily_30.fee), 'tazminat (kuruş)');
+    assert.equal(result.peak, BigInt(scenario.expected.peak));
+    assert.deepEqual(segments(result.breakdown), scenario.expected.breakdown);
+    // bağımsız tanım (gün gün kaba kuvvet)
+    const oracle = lateFeeBruteForce(rows, params);
+    assert.equal(oracle.base, result.base);
+    assert.equal(oracle.fee, result.fee);
+    // alacaksız karşılaştırma: devir alacağı tazminatı azaltır
+    const without = lateFeeForApartment(calcRows(scenario.rows.filter((row) => row.kind === 'charge')), params);
+    assert.equal(without.base, BigInt(scenario.withoutCredit.daily_30.base));
+    assert.equal(without.fee, BigInt(scenario.withoutCredit.daily_30.fee));
+    assert.ok(without.fee > result.fee);
+    // devir alacağı tazminat tabanından DÜŞER; 20.10'da alacağın ters kaydı yazılırsa o günden itibaren vadesi geçmiş borç yeniden tam tutarıyla tabana girer
+    const reversed = calcRows([
+      ...scenario.rows,
+      { id: 843, kind: 'reversal', amount: 50000, entry: '2026-10-20' },
+    ]).map((row) => (row.id === 843 ? { ...row, reversesId: 842 } : row));
+    const withReversal = lateFeeForApartment(reversed, params);
+    // 06-19 Ekim (14 gün) x 75.000 + 20-31 Ekim (12 gün) x 125.000 = 1.050.000 + 1.500.000 = 2.550.000 -> (2 x 2.550.000 x 500 + 300.000) / 600.000 = 4.250,5 -> 4.250
+    assert.equal(withReversal.base, 2550000n);
+    assert.equal(withReversal.fee, 4250n);
+    assert.equal(lateFeeBruteForce(reversed, params).base, withReversal.base);
+  });
+
+  it(OPENING_CREDIT_SITE_CASE.name, () => {
+    const scenario = OPENING_CREDIT_SITE_CASE;
+    const d1 = DISTRIBUTION_CASES.find((c) => c.name.startsWith('D1 '));
+    const plan = buildDistributionPlan(d1.definition, GOLDEN_SITE);
+    const balances = new Map(plan.lines.map((line) => [line.label, Number(line.amount) - (scenario.credits[line.label] ?? 0)]));
+    for (const label of Object.keys(scenario.credits)) {
+      assert.equal(balances.get(label), scenario.expected[label], `${label}: bakiye`);
+    }
+    let debt = 0;
+    let credit = 0;
+    for (const balance of balances.values()) {
+      if (balance > 0) debt += balance;
+      else credit += -balance;
+    }
+    assert.equal(debt, scenario.expected.debtTotal, 'borçlu daire toplamı');
+    assert.equal(credit, scenario.expected.creditTotal, 'alacaklı daire toplamı');
+    assert.equal(debt - credit, scenario.expected.net, 'net bakiye');
+    assert.equal(scenario.expected.net, Number(plan.total) - sum(Object.values(scenario.credits)), 'net = aidat toplamı - devir alacakları');
+  });
 });

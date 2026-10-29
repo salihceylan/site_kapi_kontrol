@@ -275,6 +275,7 @@ class BulkApi {
     required String idempotencyKey,
     required int expectedCount,
     required int expectedTotalMinor,
+    int expectedCreditTotalMinor = 0,
   }) async {
     const ambiguous =
         'Sunucudan yanıt alınamadı. Geri alma tamamlanmış olabilir; aynı işlemi tekrar denerseniz çift kayıt oluşmaz.';
@@ -287,6 +288,8 @@ class BulkApi {
         'idempotency_key': idempotencyKey,
         'expected_count': expectedCount,
         'expected_total_minor': expectedTotalMinor,
+        // Alacaklı devir (K16): alacak toplamı AYRI onaylanır (yalnız alacaklı yüklemede gönderilir).
+        if (expectedCreditTotalMinor > 0) 'expected_credit_total_minor': expectedCreditTotalMinor,
       },
       timeout: commitTimeout,
       timeoutMessage: ambiguous,
@@ -644,6 +647,7 @@ class BulkService {
     required String idempotencyKey,
     required int expectedCount,
     required int expectedTotalMinor,
+    int expectedCreditTotalMinor = 0,
   }) => _guard(
     (token) => api.revertOpening(
       token: token,
@@ -653,6 +657,7 @@ class BulkService {
       idempotencyKey: idempotencyKey,
       expectedCount: expectedCount,
       expectedTotalMinor: expectedTotalMinor,
+      expectedCreditTotalMinor: expectedCreditTotalMinor,
     ),
   );
 

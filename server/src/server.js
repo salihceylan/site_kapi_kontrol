@@ -40,7 +40,10 @@ import { financeRouter } from './modules/finance_routes.js';
 import { financeOpeningRouter } from './modules/finance_opening_routes.js';
 import { finance4bRouter } from './modules/finance_4b_routes.js';
 import { financeFundsRouter } from './modules/finance_funds_routes.js';
+import { financeLiabilityRouter } from './modules/finance_liability_routes.js';
+import { financeRefundRouter } from './modules/finance_refund_routes.js';
 import { financePaymentRouter } from './modules/finance_payment_routes.js';
+import { financeFundChoiceRouter } from './modules/finance_fund_choice_routes.js';
 import { bankImportRouter } from './modules/bank_import_routes.js';
 import { financeHomeRouter } from './modules/finance_home_routes.js';
 import { accountRouter } from './modules/account_routes.js';
@@ -164,7 +167,13 @@ app.use(financeOpeningRouter);
 app.use(finance4bRouter);
 // Iki kasa (Isletme / Yatirim ve Demirbas Fon): /manager/sites/:siteCode/finance/funds, /funds/:fund/movements, /fund-transfers (docs/PLATFORM_FINANS_KASALAR.md).
 app.use(financeFundsRouter);
+// Kiraci borcunun malike devri (K1; yonetici onayli, geri alinabilir): /manager/sites/:siteCode/finance/apartments/:id/liability-transfer[/preview|s], /liability-transfers/:id/reverse (docs/PLATFORM_FINANS.md).
+app.use(financeLiabilityRouter);
+// Alacak iadesi (K4; fazla odeme varsayilan alacak, iade istege bagli + yonetici onayli): /manager/sites/:siteCode/finance/refunds[...] + /app/my-finance/refund-requests[...].
+app.use(financeRefundRouter);
 app.use(financePaymentRouter);
+// Tahsilat hesap secimi (K3, P1-3): GET /manager/sites/:siteCode/finance/payments/fund-choice (Isletme / Fon secimi zorunlu mu, onerilen hesap).
+app.use(financeFundChoiceRouter);
 // Dekont bildirimi / gecici kabul (066): /app/my-finance/payment-notices[...] + /manager/sites/:siteCode/finance/payment-notices[...] (finance modulu + 2A notices_enabled).
 app.use(paymentNoticeRouter);
 app.use(bankImportRouter);

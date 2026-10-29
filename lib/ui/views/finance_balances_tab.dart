@@ -10,6 +10,7 @@ import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_liability_banner.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 
 /// "Daireler" sekmesi (Platform Faz 4a): arama (daire etiketi, sakin adı) + durum süzgeci (Hepsi / Borçlu /
@@ -49,6 +50,9 @@ class FinanceBalancesTabState extends State<FinanceBalancesTab> {
   String _lastSignature = '|all';
   bool _opening = false;
 
+  /// Devir öneri şeridini ([FinanceLiabilityBanner]) yeniden kurar (liste tazelenince şerit de tazelenir).
+  int _liabilityTick = 0;
+
   late final PagedLoader<BalanceRow> _loader = PagedLoader<BalanceRow>(
     fetch: (offset, limit) async {
       final page = await widget.scope.authService.listFinanceBalances(
@@ -83,8 +87,11 @@ class FinanceBalancesTabState extends State<FinanceBalancesTab> {
     super.dispose();
   }
 
-  /// Listeyi yeniden çeker (sayfa kabuğunun çekip yenilemesi ve yenile düğmesi).
-  Future<void> reload() => _loader.reload();
+  /// Listeyi yeniden çeker (sayfa kabuğunun çekip yenilemesi ve yenile düğmesi); devir öneri şeridi de tazelenir.
+  Future<void> reload() {
+    if (mounted) setState(() => _liabilityTick++);
+    return _loader.reload();
+  }
 
   void _applyFilters() {
     _timer?.cancel();
@@ -115,7 +122,7 @@ class FinanceBalancesTabState extends State<FinanceBalancesTab> {
 
   void _afterChange() {
     widget.onDataChanged();
-    if (mounted) unawaited(_loader.reload());
+    if (mounted) unawaited(reload());
   }
 
   Future<void> _open(BalanceRow row) async {
@@ -190,6 +197,7 @@ class FinanceBalancesTabState extends State<FinanceBalancesTab> {
         ),
         const SizedBox(height: AppSpace.md),
         if (widget.scope.canWrite) ...[
+          FinanceLiabilityBanner(key: ValueKey<int>(_liabilityTick), scope: widget.scope, onChanged: _afterChange),
           Align(
             alignment: Alignment.centerLeft,
             child: OutlinedButton.icon(

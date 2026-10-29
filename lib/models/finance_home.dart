@@ -106,16 +106,20 @@ class FinanceHomeStep {
 
 @immutable
 class FinanceHomeAttention {
-  const FinanceHomeAttention({required this.key, required this.count, this.totalMinor});
+  const FinanceHomeAttention({required this.key, required this.count, this.totalMinor, this.atLeast = false});
 
   final String key;
   final int count;
   final int? totalMinor;
 
+  /// Sunucu sayıyı kesilmiş bir listeden çıkardıysa (`at_least`) true: sayı "en az" değeridir, tam sayı olarak yazılmaz.
+  final bool atLeast;
+
   factory FinanceHomeAttention.fromJson(Map<String, dynamic> json) => FinanceHomeAttention(
         key: json['key'] is String ? json['key'] as String : '',
         count: _intOrNull(json['count']) ?? 0,
         totalMinor: _intOrNull(json['total_minor']),
+        atLeast: json['at_least'] == true,
       );
 }
 

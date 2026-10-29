@@ -222,7 +222,8 @@ describe('postPayment (tek tahsilat giriş noktası)', () => {
     now: new Date('2026-10-21T09:00:00Z'),
   };
 
-  function paymentClient({ existing = null, closed = false, accounts = false, autoIssue = false, ledgerRows = [], hasTenant = true, responsible = 'both' } = {}) {
+  // fundRows: K3 hesap seçimi denetiminin okuduğu defter (finance_funds.loadFundLedger; allocateFunds girdisi) — varsayılan boş = borçsuz.
+  function paymentClient({ existing = null, closed = false, accounts = false, autoIssue = false, ledgerRows = [], fundRows = [], hasTenant = true, responsible = 'both' } = {}) {
     let insertedParams = null;
     const client = strictClient([
       [/^SELECT id, responsible_party FROM apartments WHERE id = \$1 AND site_code = \$2 FOR KEY SHARE$/, (_s, p) => ok(p[0] === 11 ? [{ id: '11', responsible_party: responsible }] : [])],
@@ -231,6 +232,7 @@ describe('postPayment (tek tahsilat giriş noktası)', () => {
       [/^SELECT m\.id, m\.account_id/, () => ok([])],
       [/FROM finance_period_closures WHERE site_code = \$1 AND period >= \$2::DATE/, () => ok(closed ? [{ x: 1 }] : [])],
       [/SELECT bool_or\(is_active\) AS has_active FROM finance_accounts/, () => ok(accounts ? [{ has_active: true }] : [])],
+      [/LEFT JOIN fee_definitions fd ON fd\.id = l\.definition_id WHERE l\.site_code = \$1 AND \(\$2::BIGINT\[\] IS NULL/, () => ok(fundRows)],
       [/FROM ledger_entries l WHERE l\.site_code = \$1 AND l\.apartment_id = \$2/, () => ok(ledgerRows)],
       [/SELECT a\.responsible_party, EXISTS/, () => ok([{ responsible_party: responsible, has_tenant: hasTenant }])],
       [/^INSERT INTO ledger_entries/, (_s, p) => {
@@ -330,5 +332,131 @@ describe('postPayment (tek tahsilat giriş noktası)', () => {
 
   it('sitede etkin kasa / banka hesabı varsa ve cashAccountId verilmediyse 409 ACCOUNT_REQUIRED (Faz 4b kuralı korunur)', async () => {
     await assert.rejects(() => postPayment(paymentClient({ accounts: true }), { ...base, accountParty: 'owner' }), (e) => e.code === 'ACCOUNT_REQUIRED');
+  });
+
+  // --- K3 (P1-3): yazılım ödemeyi kendiliğinden İşletme / Fon hesabına atamaz --------------------------------------------------------------------------
+  describe('K3: hesap (İşletme / Fon) seçimi', () => {
+    const row = (id, kind, amount, fund, over = {}) => ({
+      id: String(id),
+      apartment_id: '11',
+      kind,
+      amount_minor: String(amount),
+      entry_date: '2026-09-01',
+      due_date: kind === 'charge' ? '2026-09-05' : null,
+      reverses_entry_id: null,
+      fund,
+      source_kind: null,
+      late_fee_run_id: null,
+      definition_id: null,
+      def_charge_party: null,
+      def_kind: null,
+      account_party: 'owner',
+      ...over,
+    });
+    const aidat = (id, amount = 10000, over = {}) => row(id, 'charge', amount, 'operating', over);
+    const fon = (id, amount = 30000, over = {}) => row(id, 'charge', amount, 'capital', over);
+    const fundQueries = (client) => client.calls.filter((c) => /LEFT JOIN fee_definitions fd/.test(c.sql)).length;
+    const required = (error) => {
+      assert.equal(error.statusCode, 400);
+      assert.equal(error.code, 'FUND_CHOICE_REQUIRED');
+      return true;
+    };
+
+    it('İKİ türün de açık borcu varsa ve hesap seçilmediyse 400 FUND_CHOICE_REQUIRED; hiçbir satır yazılmaz; yanıt açık borçları taşır', async () => {
+      const client = paymentClient({ fundRows: [aidat(1), fon(2)] });
+      await assert.rejects(
+        () => postPayment(client, { ...base, accountParty: 'owner' }),
+        (error) => {
+          required(error);
+          assert.match(error.message, /İşletme Projesi \(Aidat\) Hesabı/);
+          assert.match(error.message, /Yatırım ve Demirbaş \(Fon\) Hesabı/);
+          assert.doesNotMatch(error.message, /kasa/i, 'K9: "kasa" sözcüğü kullanıcı metninde yok');
+          const choice = error.extra.fund_choice;
+          assert.equal(choice.choice_required, true);
+          assert.equal(choice.suggested_fund, null, 'iki türde öneri yok: yönetici seçer');
+          assert.deepEqual(choice.open, { operating_minor: 10000, capital_minor: 30000 });
+          assert.equal(choice.account_party, 'owner');
+          assert.equal(choice.apartment_id, 11);
+          return true;
+        },
+      );
+      assert.equal(client.inserted(), null, 'ledger satırı yazılmadı');
+      assert.ok(!client.calls.some((c) => /^INSERT INTO (ledger_entries|receipts|account_movements)/.test(c.sql)));
+    });
+
+    it('seçim (fund) verilirse aynı koşulda kayıt yazılır ve kısıt satıra işlenir; denetim sorgusu çalışmaz', async () => {
+      for (const fund of ['operating', 'capital']) {
+        const client = paymentClient({ fundRows: [aidat(1), fon(2)] });
+        const result = await postPayment(client, { ...base, accountParty: 'owner', fund });
+        assert.equal(result.entryId, 901);
+        assert.equal(result.fund, fund);
+        assert.equal(client.inserted().at(-1), fund, 'INSERT: fund kısıtı');
+        assert.equal(fundQueries(client), 0, 'seçim yapıldığı için iki-tür denetimi gerekmez');
+      }
+    });
+
+    it('geçersiz fund değeri 400 INVALID_BODY (yazılmaz)', async () => {
+      await assert.rejects(() => postPayment(paymentClient({ fundRows: [aidat(1)] }), { ...base, accountParty: 'owner', fund: 'both' }), (e) => e.code === 'INVALID_BODY');
+    });
+
+    it('TEK türün açık borcu varsa (yalnız Aidat ya da yalnız Fon) seçimsiz kayıt kabul edilir', async () => {
+      for (const fundRows of [[aidat(1)], [fon(2)], [aidat(1), aidat(3, 500)], [fon(2), fon(4, 700)]]) {
+        const client = paymentClient({ fundRows });
+        const result = await postPayment(client, { ...base, accountParty: 'owner' });
+        assert.equal(result.entryId, 901);
+        assert.equal(client.inserted().at(-1), null, 'öneriyi istemci seçili gönderir; sunucu kendiliğinden kısıt atamaz');
+      }
+    });
+
+    it('açık borç yoksa (borçsuz / tamamen ödenmiş / avans) seçim zorunlu değildir', async () => {
+      const none = await postPayment(paymentClient({ fundRows: [] }), { ...base, accountParty: 'owner' });
+      assert.equal(none.entryId, 901);
+      // iki tür de ödenmiş: Fon borcu kısıtlı tahsilatla, Aidat borcu kısıtsız tahsilatla kapanmış
+      const paid = [aidat(1), fon(2), row(3, 'payment', -30000, 'capital', { entry_date: '2026-09-10' }), row(4, 'payment', -10000, null, { entry_date: '2026-09-10' })];
+      const result = await postPayment(paymentClient({ fundRows: paid }), { ...base, accountParty: 'owner' });
+      assert.equal(result.entryId, 901);
+    });
+
+    it('bir tür kısmen ödendiyse hâlâ AÇIK sayılır (iki tür açık: zorunlu); ters kayıtlı borç sayılmaz', async () => {
+      const partial = [aidat(1, 10000), fon(2, 30000), row(3, 'payment', -5000, 'capital', { entry_date: '2026-09-10' })];
+      await assert.rejects(() => postPayment(paymentClient({ fundRows: partial }), { ...base, accountParty: 'owner' }), required);
+      // Fon borcu ters kayıtla iptal edilmiş: yalnız Aidat açık
+      const reversed = [aidat(1), fon(2), row(3, 'reversal', -30000, 'capital', { reverses_entry_id: '2', entry_date: '2026-09-11' })];
+      const ok2 = await postPayment(paymentClient({ fundRows: reversed }), { ...base, accountParty: 'owner' });
+      assert.equal(ok2.entryId, 901);
+    });
+
+    it('daire hesapları BAĞIMSIZDIR: ev sahibi hesabında iki tür açıkken kiracı hesabı (yalnız Aidat) seçimsiz kabul edilir ve tersi', async () => {
+      const fundRows = [aidat(1), fon(2), aidat(5, 7000, { account_party: 'tenant' })];
+      const tenant = await postPayment(paymentClient({ fundRows }), { ...base, accountParty: 'tenant' });
+      assert.equal(tenant.entryId, 901);
+      await assert.rejects(() => postPayment(paymentClient({ fundRows }), { ...base, accountParty: 'owner' }), required);
+    });
+
+    it('hesap verilmezse (eski istemci) varsayılan hesap çözülür ve K3 o hesap için uygulanır', async () => {
+      // vadesi en eski açık borç ev sahibi hesabında (iki tür açık) -> varsayılan hesap owner -> seçim zorunlu
+      const ledgerRows = [{ id: '1', account_party: 'owner', kind: 'charge', amount_minor: '100', entry_date: '2026-05-01', due_date: '2026-05-05', reverses_entry_id: null }];
+      await assert.rejects(() => postPayment(paymentClient({ ledgerRows, fundRows: [aidat(1), fon(2)] }), { ...base, accountParty: null }), required);
+    });
+
+    it('aynı anahtarla TEKRAR (replay) denetime takılmaz: kayıt zaten yazılmıştır, defter yeniden okunmaz', async () => {
+      const existing = { id: '77', kind: 'payment', apartment_id: '11', amount_minor: '-25000', entry_date: '2026-10-20', method: 'cash', account_party: 'owner', payer_party: 'both', source_kind: 'manual', source_id: null, fund: 'capital' };
+      const client = paymentClient({ existing, fundRows: [aidat(1), fon(2)] });
+      const replay = await postPayment(client, { ...base, accountParty: 'owner', fund: 'capital' });
+      assert.deepEqual([replay.replayed, replay.entryId, replay.fund], [true, 77, 'capital']);
+      assert.equal(fundQueries(client), 0);
+    });
+
+    it('K3 TÜM kaynaklarda (elle, dekont onayı, banka satırı, banka dosyası) aynı denetimden geçer', async () => {
+      for (const [sourceKind, sourceId] of [['manual', null], ['payment_notice', 55], ['bank_line', 7001]]) {
+        await assert.rejects(
+          () => postPayment(paymentClient({ fundRows: [aidat(1), fon(2)] }), { ...base, accountParty: 'owner', sourceKind, sourceId }),
+          required,
+          `${sourceKind}: seçimsiz iki-tür tahsilat reddedilir`,
+        );
+        const okResult = await postPayment(paymentClient({ fundRows: [aidat(1), fon(2)] }), { ...base, accountParty: 'owner', sourceKind, sourceId, fund: 'operating' });
+        assert.equal(okResult.entryId, 901, `${sourceKind}: seçimli kayıt yazılır`);
+      }
+    });
   });
 });

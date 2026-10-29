@@ -9,6 +9,7 @@ import {
   LOGIN_NAME_BASE_MAX,
   RELATION_RANK,
   applyApartmentOps,
+  applyOpeningOps,
   applyPeopleOps,
   collectAccountPasswords,
   hashAccountPasswords,
@@ -606,5 +607,59 @@ describe('hashAccountPasswords / collectAccountPasswords / slugifyLoginName', ()
     assert.equal(slugifyLoginName(null), 'kullanici');
     const long = slugifyLoginName('a'.repeat(30) + ' ' + 'b'.repeat(30));
     assert.ok(long.length <= LOGIN_NAME_BASE_MAX && !long.endsWith('.'), long);
+  });
+});
+
+describe('applyOpeningOps: borç (charge) ve alacak (payment) ayrı ifadeler (K16 alacaklı devir)', () => {
+  const OPENING = { siteCode: 1000000001, runId: 9, cutoverDate: '2026-10-01', actorUserCode: 42 };
+  const ops = [
+    { t: 'ob', aptId: 11, account: 'owner', minor: 125050, due: '2026-10-01', desc: null },
+    { t: 'ob', aptId: 12, account: 'tenant', minor: -50000, due: null, desc: 'Peşin ödeme' },
+    { t: 'ob', aptId: 13, account: 'owner', minor: -7525, due: null, desc: null },
+    { t: 'ob', aptId: 14, account: 'owner', minor: 30000, due: '2026-09-15', desc: 'Eski borç' },
+  ];
+
+  it('borçlar charge (vadeli, "Devir bakiyesi"), alacaklar payment (vadesiz, "Devir alacağı", method transfer, source_kind opening) olarak AYRI ifadeyle yazılır; toplamlar ayrı', async () => {
+    const client = fakeClient();
+    const result = await applyOpeningOps(client, { ...OPENING, ops });
+    assert.equal(result.total, 155050, 'borç toplamı: 1.250,50 + 300,00');
+    assert.equal(result.creditTotal, 57525, 'alacak toplamı (büyüklük): 500,00 + 75,25');
+    const inserts = stmts(client, /^INSERT INTO ledger_entries/);
+    assert.equal(inserts.length, 2);
+    const [debtInsert, creditInsert] = inserts;
+    assert.match(debtInsert.sql, /'charge'/);
+    assert.match(debtInsert.sql, /'Devir bakiyesi'/);
+    assert.deepEqual(jsonOf(debtInsert).map((r) => [r.apt, r.minor, r.due]), [[11, '125050', '2026-10-01'], [14, '30000', '2026-09-15']]);
+    assert.match(creditInsert.sql, /'payment'/);
+    assert.match(creditInsert.sql, /'Devir alacağı'/);
+    assert.match(creditInsert.sql, /'transfer'/);
+    assert.match(creditInsert.sql, /'opening', \$4::BIGINT/);
+    assert.match(creditInsert.sql, /, NULL, 'Devir alacağı'/, 'alacağın vadesi YOK (due_date NULL)');
+    assert.deepEqual(jsonOf(creditInsert).map((r) => [r.apt, r.account, r.minor, r.note]), [[12, 'tenant', '-50000', 'Peşin ödeme'], [13, 'owner', '-7525', null]]);
+    assert.deepEqual(creditInsert.params.slice(1), [OPENING.siteCode, OPENING.cutoverDate, OPENING.runId, OPENING.actorUserCode]);
+    // alacak tutarı NEGATİF yazılır (payment < 0 CHECK'i); borç pozitif
+    for (const r of jsonOf(creditInsert)) assert.ok(r.minor.startsWith('-'));
+  });
+
+  it('yalnız borç ya da yalnız alacak: ilgili ifade bir kez, diğeri hiç çalışmaz', async () => {
+    const debtsOnly = fakeClient();
+    await applyOpeningOps(debtsOnly, { ...OPENING, ops: ops.filter((op) => op.minor > 0) });
+    assert.equal(stmts(debtsOnly, /^INSERT INTO ledger_entries/).length, 1);
+    assert.match(stmts(debtsOnly, /^INSERT INTO ledger_entries/)[0].sql, /'charge'/);
+    const creditsOnly = fakeClient();
+    const written = await applyOpeningOps(creditsOnly, { ...OPENING, ops: ops.filter((op) => op.minor < 0) });
+    assert.equal(stmts(creditsOnly, /^INSERT INTO ledger_entries/).length, 1);
+    assert.match(stmts(creditsOnly, /^INSERT INTO ledger_entries/)[0].sql, /'payment'/);
+    assert.equal(written.total, 0);
+    assert.equal(written.creditTotal, 57525);
+  });
+
+  it('satır sayısı tutmazsa (daire silinmiş / başka site) alacak ifadesi de 409 PREVIEW_STALE', async () => {
+    const client = {
+      async query(text) {
+        return /'payment'/.test(text) ? { rows: [], rowCount: 1 } : { rows: [], rowCount: 2 };
+      },
+    };
+    await assert.rejects(() => applyOpeningOps(client, { ...OPENING, ops }), { code: 'PREVIEW_STALE' });
   });
 });

@@ -12,6 +12,7 @@ class BankPreviewSummary {
     this.duplicates = 0,
     this.outgoing = 0,
     this.recognizedMinor = 0,
+    this.fundChoice = 0,
   });
 
   final int recognized;
@@ -22,6 +23,10 @@ class BankPreviewSummary {
   final int outgoing;
   final int recognizedMinor;
 
+  /// K3: tanınmış olsa da dairenin İşletme ve Fon borcu birlikte açık olduğu için otomatik işlenmeyip "kontrol edin"e düşen satır sayısı
+  /// (`check` içinde sayılır; onayda hesabı yönetici seçer). Eski sunucuda alan yoktur: 0.
+  final int fundChoice;
+
   factory BankPreviewSummary.fromJson(Map<String, dynamic> j) => BankPreviewSummary(
     recognized: _i(j['recognized']),
     check: _i(j['check']),
@@ -30,6 +35,7 @@ class BankPreviewSummary {
     duplicates: _i(j['duplicates']),
     outgoing: _i(j['outgoing']),
     recognizedMinor: _i(j['recognized_minor']),
+    fundChoice: _i(j['fund_choice']),
   );
 }
 
@@ -82,6 +88,11 @@ String? bankPeriodLabel(String? hint) {
   final month = int.parse(m.group(2)!);
   return month < 1 || month > 12 ? null : '${names[month - 1]} ${m.group(1)}';
 }
+
+/// Banka satırı notları (sunucu `bank_statement_lines.note`): C-26 "tek tek gözden geçir" ile bekletilen güçlü eşleşme / K3 dairenin hem İşletme
+/// hem Fon borcu açık olduğu için hesabı onayda yöneticinin seçeceği satır.
+const String kBankNoteReviewEach = 'REVIEW_EACH';
+const String kBankNoteFundChoice = 'FUND_CHOICE_REQUIRED';
 
 class BankLineItem {
   const BankLineItem({

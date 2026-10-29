@@ -11,6 +11,7 @@ import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
+import 'package:site_kapi_kontrol/ui/widgets/debt_breakdown_panel.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_fund_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
@@ -393,6 +394,11 @@ class _MyFinanceCardState extends State<MyFinanceCard> {
               keyPrefix: 'my_finance_funds',
             ),
           ],
+          // Kalem dökümü (P2-1): ödenmemiş her borç kaleminin kaynağı (dönem, tür, hesap) ve dayanağı (karar no / gerekçe)
+          if (DebtBreakdownPanel.hasContent(item.breakdown)) ...[
+            const SizedBox(height: AppSpace.md),
+            DebtBreakdownPanel(breakdown: item.breakdown!, keyPrefix: 'my_finance_breakdown'),
+          ],
           const SizedBox(height: AppSpace.md),
           Semantics(header: true, container: true, child: Text('Son hareketler', style: th.titleSmall)),
           const SizedBox(height: AppSpace.sm),
@@ -582,6 +588,10 @@ class _ReadOnlyAccountSectionState extends State<_ReadOnlyAccountSection> {
               hideZero: true,
               keyPrefix: '${prefix}_funds',
             ),
+          ],
+          if (DebtBreakdownPanel.hasContent(account.breakdown)) ...[
+            const SizedBox(height: AppSpace.sm),
+            DebtBreakdownPanel(breakdown: account.breakdown!, keyPrefix: '${prefix}_breakdown'),
           ],
           const SizedBox(height: AppSpace.sm),
           if (recent.isEmpty)

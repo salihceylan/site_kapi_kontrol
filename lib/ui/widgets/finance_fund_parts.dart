@@ -52,6 +52,7 @@ class FundChoice extends StatelessWidget {
     this.enabled = true,
     this.title = 'Kasa',
     this.allowAuto = false,
+    this.autoLabel = kFundAutoName,
     this.autoNote = 'borçlara en eski vadeden başlayarak dağıtılır',
     this.noteFor,
     this.footer,
@@ -64,6 +65,9 @@ class FundChoice extends StatelessWidget {
   final bool enabled;
   final String title;
   final bool allowAuto;
+
+  /// "Seçilmedi" satırının adı (varsayılan: "Otomatik (en eski vade önce)"); borçsuz hesapta "Hesap seçmeden" gibi daha doğru bir ad verilir.
+  final String autoLabel;
   final String autoNote;
   final String Function(FinanceFund fund)? noteFor;
 
@@ -84,7 +88,7 @@ class FundChoice extends StatelessWidget {
         if (allowAuto)
           _FundOptionRow(
             key: ValueKey<String>('${keyPrefix}_auto'),
-            label: kFundAutoName,
+            label: autoLabel,
             note: autoNote,
             icon: Icons.auto_awesome_rounded,
             selected: selected == null,

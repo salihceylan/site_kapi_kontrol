@@ -397,13 +397,20 @@ function collectAccountCandidates({ newPeople, residencyAdds, idByRef }) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Devir bakiyesi (F4): her satır tek defter kaydı (charge, source_kind='opening', source_id=çalıştırma). Defter yalnız eklemelidir.
+// Devir bakiyesi (F4): her satır tek defter kaydı (source_kind='opening', source_id=çalıştırma). Defter yalnız eklemelidir.
+//   borç   (minor > 0): `charge`  — vadeli ("Devir bakiyesi"),
+//   alacak (minor < 0): `payment` — vadesiz ("Devir alacağı"; K16). Alacak sonraki borçlara mahsup mantığıyla (M1: vadesi en eski borçtan) düşer; kasa / banka
+//   hesabına eşlenmez, makbuz düzenlenmez (kaynak izi 'opening' ile raporlar / kasa denetimi dışında tutulur). `method` şemada tahsilat için zorunludur: 'transfer'
+//   yalnız bu zorunluluğu karşılar (gerçek bir havale DEĞİL; istemci devir alacağını kaynak izinden etiketler).
 // ---------------------------------------------------------------------------------------------------------------
 
 export async function applyOpeningOps(client, { siteCode, ops, runId, cutoverDate, actorUserCode }) {
   const adds = ops.filter((op) => op.t === 'ob');
+  const debts = adds.filter((op) => op.minor > 0);
+  const credits = adds.filter((op) => op.minor < 0);
   let total = 0;
-  for (const part of chunksOf(adds, ENTITY_CHUNK)) {
+  let creditTotal = 0;
+  for (const part of chunksOf(debts, ENTITY_CHUNK)) {
     const rows = part.map((op) => ({ apt: op.aptId, account: op.account, minor: String(op.minor), due: op.due, note: op.desc }));
     const result = await run(
       client,
@@ -423,7 +430,27 @@ export async function applyOpeningOps(client, { siteCode, ops, runId, cutoverDat
     }
     total += part.reduce((sum, op) => sum + op.minor, 0);
   }
-  return { audits: [], total };
+  for (const part of chunksOf(credits, ENTITY_CHUNK)) {
+    const rows = part.map((op) => ({ apt: op.aptId, account: op.account, minor: String(op.minor), note: op.desc }));
+    const result = await run(
+      client,
+      `
+        INSERT INTO ledger_entries (
+          site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_name, payer_party, account_party, method,
+          source_kind, source_id, description, created_by
+        )
+        SELECT $2::BIGINT, v.apt, 'payment', v.minor::BIGINT, date_trunc('month', $3::DATE)::DATE, $3::DATE, NULL, 'Devir alacağı',
+               v.account, v.account, 'transfer', 'opening', $4::BIGINT, v.note, $5::INTEGER
+        FROM jsonb_to_recordset($1::jsonb) AS v(apt bigint, account text, minor text, note text)
+      `,
+      [JSON.stringify(rows), siteCode, cutoverDate, runId, actorUserCode ?? null],
+    );
+    if (result.rowCount !== part.length) {
+      throw staleError();
+    }
+    creditTotal += part.reduce((sum, op) => sum - op.minor, 0);
+  }
+  return { audits: [], total, creditTotal };
 }
 
 

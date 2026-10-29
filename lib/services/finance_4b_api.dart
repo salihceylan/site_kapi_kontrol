@@ -25,6 +25,7 @@ import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/finance_4b.dart';
 import 'package:site_kapi_kontrol/models/finance_charts.dart';
 import 'package:site_kapi_kontrol/models/finance_funds.dart';
+import 'package:site_kapi_kontrol/models/finance_liability.dart';
 import 'package:site_kapi_kontrol/models/fund_models.dart';
 import 'package:site_kapi_kontrol/models/late_fee_models.dart';
 import 'package:site_kapi_kontrol/models/receipt_models.dart';
@@ -1301,6 +1302,34 @@ class Finance4bApi {
     return _parse('Düzeltme', () => LedgerWriteResult.fromJson(r.body));
   }
 
+  /// K3: tahsilatın İşletme / Fon hesabı seçim durumu (`GET payments/fund-choice`). Daire hesabında iki türün de açık borcu varsa
+  /// seçim ZORUNLUDUR; tek türde önerilen hesap seçili gelir. [accountParty] verilmezse sunucu tahsilat hesabını kendi kuralıyla
+  /// seçer (yanıttaki `account_party`). [amountMinor] verilirse otomatik dağıtımın önerisi (`proposal`, yalnız bilgi) da gelir.
+  /// Bu uç yazmaz; yazma yetkisi gerektirir (kurul 403).
+  Future<FundChoiceInfo> getFundChoice({
+    required String token,
+    required int siteCode,
+    required int apartmentId,
+    AccountParty? accountParty,
+    int? amountMinor,
+    DateTime? paidOn,
+  }) async {
+    final r = await _send(
+      'GET',
+      _site(siteCode, 'payments/fund-choice'),
+      token: token,
+      query: <String, String>{
+        'apartment_id': '$apartmentId',
+        if (accountParty != null) 'account_party': accountParty.apiValue,
+        if (amountMinor != null && amountMinor > 0) 'amount_minor': '$amountMinor',
+        if (paidOn != null) 'paid_on': crmDateParam(paidOn),
+      },
+    );
+    final info = FundChoiceInfo.tryParse(r.body);
+    if (info == null) throw ApiException('Hesap bilgisi işlenemedi. Lütfen tekrar deneyin.');
+    return info;
+  }
+
   // --- İki kasa (İşletme Projesi (Aidat) Hesabı / Yatırım ve Demirbaş (Fon) Hesabı) ----------------
 
   /// Kasa özeti: iki kasanın açılış / tahsilat / gider / aktarım / düzeltme / bakiye değerleri + avans. [from] / [to] dönem
@@ -1418,6 +1447,80 @@ class Finance4bApi {
       write: true,
     );
     return _parse('Ters aktarım', () => FundTransferReverseResult.fromJson(r.body));
+  }
+
+  // --- Kiracı borcunun malike devri (K1) ve gecikmede öneri (K17) ---------------------------------
+  // Sözleşme: docs/PLATFORM_FINANS.md "Kiracı borcunun malike devri". Devir kendiliğinden olmaz: önizleme + neden + onay + iz + geri alma.
+
+  /// K17: devredilebilir (vadesi gelmiş, ödenmemiş, tazminat olmayan) kiracı borcu olan daireler. Salt okunur; kişi adı yoktur.
+  Future<LiabilityCandidatePage> listLiabilityCandidates({required String token, required int siteCode}) async {
+    final r = await _send('GET', _site(siteCode, 'liability-transfer/candidates'), token: token);
+    return _parse('Devir önerileri', () => LiabilityCandidatePage.fromJson(r.body));
+  }
+
+  /// Devir önizlemesi (hiçbir şey yazmaz): kalemler, tazminat istisnası, toplam ve onayda geri gönderilecek özet.
+  Future<LiabilityPreview> previewLiabilityTransfer({
+    required String token,
+    required int siteCode,
+    required int apartmentId,
+  }) async {
+    final r = await _send('GET', _site(siteCode, 'apartments/$apartmentId/liability-transfer/preview'), token: token);
+    return _parse('Devir önizlemesi', () => LiabilityPreview.fromJson(r.body));
+  }
+
+  /// Kiracı borcunu malike devreder. Aynı [idempotencyKey] + aynı gövde = aynı kayıt (200, `replayed`); farklı gövde = 409
+  /// `IDEMPOTENCY_CONFLICT`. Önizlemeden sonra kalemler / tutarlar değiştiyse 409 `LIABILITY_TRANSFER_CHANGED` (hiçbir şey yazılmaz).
+  Future<LiabilityTransferResult> createLiabilityTransfer({
+    required String token,
+    required int siteCode,
+    required int apartmentId,
+    required int expectedTotalMinor,
+    required String expectedHash,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    final r = await _send(
+      'POST',
+      _site(siteCode, 'apartments/$apartmentId/liability-transfer'),
+      token: token,
+      body: <String, dynamic>{
+        'expected_total_minor': expectedTotalMinor,
+        'expected_hash': expectedHash,
+        'reason': reason.trim(),
+        'idempotency_key': idempotencyKey,
+      },
+      write: true,
+    );
+    return _parse('Devir', () => LiabilityTransferResult.fromJson(r.body, replayed: !r.created));
+  }
+
+  /// Dairenin devirleri ve geri almaları (yeni -> eski, en çok 50); etkin devirde `reversible` sunucudan gelir.
+  Future<List<LiabilityTransfer>> listLiabilityTransfers({
+    required String token,
+    required int siteCode,
+    required int apartmentId,
+  }) async {
+    final r = await _send('GET', _site(siteCode, 'apartments/$apartmentId/liability-transfers'), token: token);
+    return _parse('Devir geçmişi', () => f4List(r.body['items'], LiabilityTransfer.fromJson));
+  }
+
+  /// Devri geri alır (silinmez: ters kayıtlar eklenir; bakiyeler devirden önceki değerlere döner). Gerekçe zorunludur. Devirden sonra
+  /// malik hesabına ödeme girildiyse ya da devrin satırı sonradan başka devirle taşındıysa 409.
+  Future<LiabilityTransferResult> reverseLiabilityTransfer({
+    required String token,
+    required int siteCode,
+    required int transferId,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    final r = await _send(
+      'POST',
+      _site(siteCode, 'liability-transfers/$transferId/reverse'),
+      token: token,
+      body: <String, dynamic>{'reason': reason.trim(), 'idempotency_key': idempotencyKey},
+      write: true,
+    );
+    return _parse('Devir geri alma', () => LiabilityTransferResult.fromJson(r.body, replayed: !r.created));
   }
 
   // --- Taşıma katmanı ----------------------------------------------------------------------------

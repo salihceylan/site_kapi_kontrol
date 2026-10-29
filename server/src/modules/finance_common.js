@@ -23,7 +23,8 @@ export const KINDS = Object.freeze(['recurring', 'one_time']);
 // 'area' (m²) yalnız ESKİ tanım satırları için listede kalır (DB CHECK ve okuma uyumu): m² sistemden kaldırıldı, daire alanı tutulmuyor; yeni tanım /
 // ek borç / dağıtım değişikliğinde 400 AREA_DISTRIBUTION_REMOVED ile reddedilir (parseDefinitionCore, parseDefinitionPatch). Mevcut 'area' tanımı
 // önizleme / borçlandırmada 409 AREA_DISTRIBUTION_REMOVED verir; tanım pasifleştirilebilir ya da (borçlandırılmamışsa) başka yönteme çevrilebilir.
-export const DISTRIBUTIONS = Object.freeze(['fixed', 'equal', 'category', 'land_share', 'area']);
+// 'person_count' (kişi sayısına göre; migration 091): ağırlık = dairedeki güncel kişi sayısı. Taban YÖNETİMİN açık seçimidir (K5; varsayılan 'equal', finance_distribution.DEFAULT_DISTRIBUTION).
+export const DISTRIBUTIONS = Object.freeze(['fixed', 'equal', 'category', 'land_share', 'area', 'person_count']);
 export const AREA_BASES = Object.freeze(['gross', 'net']);
 export const AREA_DISTRIBUTION_REMOVED = 'AREA_DISTRIBUTION_REMOVED';
 export const TARGET_TYPES = Object.freeze(['site', 'blocks', 'apartments']);
@@ -118,6 +119,9 @@ export const entryNotReversible = () =>
   new PlatformError(409, 'ENTRY_NOT_REVERSIBLE', 'Ters kayıt tekrar iptal edilemez.');
 export const entryNotCorrectable = () =>
   new PlatformError(409, 'ENTRY_NOT_CORRECTABLE', 'Yalnızca tahsilat düzeltilebilir; borç için kaydı iptal edin.');
+/** Devir alacağı (K16; source_kind 'opening') tahsilat gibi düzeltilemez (yeni bir nakit / havale tahsilatına dönüşürdü). Aynı kod, açık ileti. */
+export const openingEntryNotCorrectable = () =>
+  new PlatformError(409, 'ENTRY_NOT_CORRECTABLE', 'Devir alacağı düzeltilemez; kaydı iptal edin ya da devir yüklemesini geri alıp yeniden yükleyin.');
 export const nothingToPost = () =>
   new PlatformError(409, 'NOTHING_TO_POST', 'Borçlandırılacak daire bulunamadı.');
 export const idempotencyConflict = () =>
@@ -129,6 +133,34 @@ export const idempotencyConflict = () =>
 /** Daire azaltma (site_service.syncSiteStructureCounts): mali kaydı olan daire silinemez. */
 export const apartmentHasFinance = () =>
   new PlatformError(409, 'APARTMENT_HAS_FINANCE', 'Mali kaydı olan daire silinemez.');
+
+// Demirbaş / Fon tahakkukunun dayanağı (K2, P1-2; docs/PLATFORM_FINANS_KARAR_BAGI.md): Karar Defteri açık sitede kesin karar, kapalı sitede serbest metin gerekçe.
+/** Karar Defteri modülü AÇIK sitede Fon (demirbaş) borcu karar seçilmeden yazılamaz. 400. */
+export const decisionRequired = () =>
+  new PlatformError(
+    400,
+    'DECISION_REQUIRED',
+    "Yatırım ve Demirbaş (Fon) Hesabı'na borç yazmak için Karar Defteri'nden kesinleşmiş bir karar seçmelisiniz.",
+    { decision_mode: 'decision' },
+  );
+/** Karar Defteri modülü KAPALI sitede Fon (demirbaş) borcu gerekçesiz yazılamaz. 400. */
+export const decisionReasonRequired = () =>
+  new PlatformError(
+    400,
+    'DECISION_REASON_REQUIRED',
+    "Karar Defteri bu sitede kapalı. Yatırım ve Demirbaş (Fon) Hesabı'na borç yazmak için gerekçe yazmalısınız.",
+    { decision_mode: 'reason' },
+  );
+/** Modül kapalıyken `decision_id` gönderilmiş: karar seçilemez, gerekçe yazılmalı. 400. */
+export const decisionModuleOff = () =>
+  new PlatformError(400, 'DECISION_MODULE_OFF', 'Karar Defteri bu sitede kapalı; karar seçilemez. Bunun yerine gerekçe yazın.', {
+    decision_mode: 'reason',
+  });
+/** Karar yok ya da başka sitenin kararı (IDOR: ikisi de aynı yanıt). 404. */
+export const runDecisionNotFound = () => new PlatformError(404, 'DECISION_NOT_FOUND', 'Karar bulunamadı ya da bu siteye ait değil.');
+/** Taslak (numarasız) karar dayanak olamaz. 409. */
+export const runDecisionNotFinal = () =>
+  new PlatformError(409, 'DECISION_NOT_FINAL', 'Yalnız kesinleşmiş (numara almış) bir karar seçilebilir. Önce Karar Defteri\'nde kararı kesinleştirin.');
 
 // --- Metin temizliği -------------------------------------------------------------------------------------
 
@@ -692,6 +724,30 @@ function parseOptionalDueDate(value, now) {
   return dueDate;
 }
 
+/** Tahakkuk dayanağının en az / en çok karakter sayısı (gerekçe; veritabanı CHECK'i 1..300). */
+export const RUN_DECISION_REASON_MIN = 3;
+export const RUN_DECISION_REASON_MAX = 300;
+
+/**
+ * Tahakkuk dayanağı gövde alanları (K2): `decision_id` (Karar Defteri kaydı) ve `decision_reason` (serbest metin gerekçe). Yoksa null. YALNIZ biçim doğrulanır; zorunluluk (Fon hesabı borcu) ve
+ * modül durumu (açık: karar, kapalı: gerekçe) serviste, işlem içinde denetlenir (finance_run_decision.resolveRunDecision). Boş metin "yok" sayılır.
+ * @returns {{ decisionId: number|null, decisionReason: string|null }}
+ */
+export function parseRunDecisionInput(input) {
+  let decisionId = null;
+  if (present(input.decision_id) && input.decision_id !== '') {
+    decisionId = parsePositiveId(input.decision_id);
+    if (decisionId === null) {
+      throw invalidBody('Karar seçimi geçersiz.');
+    }
+  }
+  const decisionReason = normalizeFreeText(input.decision_reason, { label: 'Gerekçe', max: RUN_DECISION_REASON_MAX });
+  if (decisionReason !== null && codePointLength(decisionReason) < RUN_DECISION_REASON_MIN) {
+    throw invalidBody(`Gerekçe en az ${RUN_DECISION_REASON_MIN} karakter olmalıdır.`);
+  }
+  return { decisionId, decisionReason };
+}
+
 /** Borçlandırma gövdesi (post): önizlemenin toplamı ve daire sayısı BEKLENEN değerlerdir (PREVIEW_STALE denetimi). */
 export function parsePostInput(body, definitionKind, now = new Date()) {
   const input = objectOf(body);
@@ -703,6 +759,8 @@ export function parsePostInput(body, definitionKind, now = new Date()) {
     expectedHash: parseExpectedHash(input.expected_hash),
     skipMissing: parseBooleanFlag(input.skip_missing, 'Eksik verili daireleri hariç tutma seçeneği'),
     idempotencyKey: parseIdempotencyKey(input.idempotency_key),
+    // Tahakkuk dayanağı (K2): Fon hesabı borcunda zorunlu (serviste denetlenir)
+    ...parseRunDecisionInput(input),
   };
 }
 
@@ -740,6 +798,8 @@ export function parseChargeInput(body, { requireExpected, now = new Date() }) {
     // Kasa: yalniz fund verilirse kim oder ondan turetilir (capital => owner, operating => occupant); ikisi cakisirsa 400 INVALID_BODY.
     chargeParty: resolveChargePartyAndFund({ chargeParty: parseChargeParty(input.charge_party), fund: parseFundField(input.fund), fallback: 'owner' }),
     idempotencyKey: parseIdempotencyKey(input.idempotency_key, { required: requireExpected === true }),
+    // Tahakkuk dayanağı (K2): Fon hesabı borcunda zorunlu (serviste denetlenir)
+    ...parseRunDecisionInput(input),
     expectedTotal: null,
     expectedCount: null,
     expectedHash: null,
@@ -968,7 +1028,47 @@ export function mapDefinitionRow(row) {
   };
 }
 
+/** Karar numarası ("2026/4"); numarasız (taslak) ise null. decision_book_common.numberLabel ile AYNI kural (o dosyanın zincirini içe aktarmamak için burada). */
+const decisionNumberLabel = (year, decisionNo) =>
+  decisionNo === null || decisionNo === undefined || year === null || year === undefined ? null : `${Number(year)}/${Number(decisionNo)}`;
+
+/**
+ * Tahakkuk dayanağı (K2): bir satırdaki `run_decision_*` sütunları (ENTRY_SELECT ve çalıştırma okumaları: `run_decision_id`, `run_decision_reason`, `run_decision_year`, `run_decision_no`,
+ * `run_decision_title`, `run_decision_visibility`) -> `{ id, number_label, title, visibility, reason }`; dayanak yoksa null.
+ */
+export function decisionOfRow(row) {
+  const rawId = row?.run_decision_id;
+  const id = rawId === null || rawId === undefined ? null : Number(rawId);
+  const reason = row?.run_decision_reason ?? null;
+  if (id === null && reason === null) {
+    return null;
+  }
+  return {
+    id,
+    number_label: id === null ? null : decisionNumberLabel(row.run_decision_year, row.run_decision_no),
+    title: id === null ? null : (row.run_decision_title ?? null),
+    visibility: id === null ? null : (row.run_decision_visibility ?? null),
+    reason,
+  };
+}
+
+/**
+ * Sakin görünümü: yalnız karar numarası, (karar sakinlere açıksa) başlığı ve gerekçe. İç kimlik ve görünürlük bayrağı verilmez; "yönetim" görünürlüklü kararın başlığı sızmaz.
+ * Gerekçe, yönetimin sakinlere göstermek üzere yazdığı metindir (arayüz yazarken uyarır).
+ */
+export function residentDecisionOf(decision) {
+  if (!decision) {
+    return null;
+  }
+  return {
+    number_label: decision.number_label ?? null,
+    title: decision.visibility === 'sakinler' ? (decision.title ?? null) : null,
+    reason: decision.reason ?? null,
+  };
+}
+
 export function mapRunRow(row) {
+  const decision = decisionOfRow(row);
   return {
     id: Number(row.id),
     definition_id: Number(row.definition_id),
@@ -976,11 +1076,14 @@ export function mapRunRow(row) {
     total_minor: minorToNumber(row.total_minor),
     apartment_count: Number(row.apartment_count),
     posted_at: toIso(row.posted_at),
+    // Tahakkuk dayanağı (K2): yalnız varsa (090 öncesi ve işletme hesabı çalıştırmalarında alan yoktur)
+    ...(decision === null ? {} : { decision }),
   };
 }
 
 /** Ekstre satırı -> Entry. */
 export function mapEntryRow(row) {
+  const decision = decisionOfRow(row);
   return {
     id: Number(row.id),
     kind: row.kind,
@@ -1006,6 +1109,8 @@ export function mapEntryRow(row) {
     source_id: row.source_id === null || row.source_id === undefined ? null : Number(row.source_id),
     // Kasa: borcun kasasi (080 oncesi satirda turetilir); tahsilatta KISIT (null = otomatik); ters kayit asilinkini tasir
     fund: effectiveFund(row),
+    // Tahakkuk dayanağı (K2): borcun yazıldığı çalıştırmanın karar kaydı / gerekçesi; yalnız varsa (090 öncesi, işletme hesabı ve tahsilat satırlarında alan yoktur)
+    ...(decision === null ? {} : { decision }),
   };
 }
 
@@ -1034,7 +1139,12 @@ function mapEntryReceipt(row) {
 
 /** Sakin yanıtı: yönetici serbest metinleri (açıklama, ters kayıt nedeni) ve oluşturan adı ASLA verilmez. */
 export function redactEntryForResident(entry) {
-  return { ...entry, description: null, reversal_reason: null, created_by_name: null, source_id: null };
+  const out = { ...entry, description: null, reversal_reason: null, created_by_name: null, source_id: null };
+  // Tahakkuk dayanağı (K2): sakin yalnız karar numarasını (+ sakinlere açık kararın başlığını) ve gerekçeyi görür; iç kimlik / görünürlük bayrağı verilmez
+  if (entry.decision) {
+    out.decision = residentDecisionOf(entry.decision);
+  }
+  return out;
 }
 
 const BOARD_HIDDEN_KEYS = new Set([
@@ -1047,6 +1157,9 @@ const BOARD_HIDDEN_KEYS = new Set([
   'added_by_name',
   'removed_by_name',
   'cancelled_by_name',
+  'requested_by_name',
+  'resolved_by_name',
+  'reversed_by_name',
   'cancel_note',
 ]);
 
@@ -1087,9 +1200,23 @@ const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 
 const targetOf = (target) => ({ type: target.type, block_ids: [...target.blockIds], apartment_ids: [...target.apartmentIds] });
 
-/** Aylık borçlandırma isteğinin parmak izi (tanım + dönem / vade + hariç tutma). */
-export function postRequestFingerprint({ definitionId, period, dueDate, skipMissing }) {
-  return sha256(canonicalJson({ v: 1, kind: 'post', definition_id: definitionId, period, due_date: dueDate, skip_missing: skipMissing === true }));
+/**
+ * Aylık borçlandırma isteğinin parmak izi (tanım + dönem / vade + hariç tutma). Tahakkuk dayanağı (K2) YALNIZ verilmişse girer: dayanaksız isteğin parmak izi eskisiyle aynı kalır; aynı anahtar +
+ * farklı karar / gerekçe ise 409 IDEMPOTENCY_CONFLICT olur (sessizce başka dayanakla "başarı" dönmez).
+ */
+export function postRequestFingerprint({ definitionId, period, dueDate, skipMissing, decisionId = null, decisionReason = null }) {
+  return sha256(
+    canonicalJson({
+      v: 1,
+      kind: 'post',
+      definition_id: definitionId,
+      period,
+      due_date: dueDate,
+      skip_missing: skipMissing === true,
+      ...(decisionId === null ? {} : { decision_id: decisionId }),
+      ...(decisionReason === null ? {} : { decision_reason: decisionReason }),
+    }),
+  );
 }
 
 /**
@@ -1110,6 +1237,9 @@ export function chargeRequestFingerprint(input) {
       due_date: input.dueDate,
       skip_missing: input.skipMissing === true,
       ...(input.chargeParty && input.chargeParty !== 'owner' ? { charge_party: input.chargeParty } : {}),
+      // Tahakkuk dayanağı (K2) yalnız verilmişse: dayanaksız isteğin parmak izi eskisiyle aynı kalır
+      ...(input.decisionId ? { decision_id: input.decisionId } : {}),
+      ...(input.decisionReason ? { decision_reason: input.decisionReason } : {}),
     }),
   );
 }

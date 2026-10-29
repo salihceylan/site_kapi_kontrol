@@ -48,9 +48,9 @@ async function loadNumbers(db, siteCode, period, today) {
   const ledger = await db.query(
     `
       SELECT
-        COALESCE(SUM(amount_minor) FILTER (WHERE late_fee_run_id IS NULL AND COALESCE(source_kind, '') <> 'opening' AND (kind = 'charge' OR (kind = 'reversal' AND amount_minor < 0))), 0)::TEXT AS charged,
+        COALESCE(SUM(amount_minor) FILTER (WHERE late_fee_run_id IS NULL AND COALESCE(source_kind, '') NOT IN ('opening', 'refund', 'liability_transfer') AND (kind = 'charge' OR (kind = 'reversal' AND amount_minor < 0))), 0)::TEXT AS charged,
         COALESCE(SUM(amount_minor) FILTER (WHERE late_fee_run_id IS NOT NULL AND (kind = 'charge' OR (kind = 'reversal' AND amount_minor < 0))), 0)::TEXT AS late_fee,
-        COALESCE(-SUM(amount_minor) FILTER (WHERE kind = 'payment' OR (kind = 'reversal' AND amount_minor > 0)), 0)::TEXT AS collected
+        (COALESCE(-SUM(amount_minor) FILTER (WHERE COALESCE(source_kind, '') <> 'opening' AND (kind = 'payment' OR (kind = 'reversal' AND amount_minor > 0))), 0) - COALESCE(SUM(amount_minor) FILTER (WHERE source_kind = 'refund'), 0))::TEXT AS collected
       FROM ledger_entries WHERE site_code = $1 AND period = $2::DATE
     `,
     [siteCode, period],
@@ -138,6 +138,7 @@ async function loadRecent(db, siteCode, now) {
               (-l.amount_minor)::TEXT AS amount, ${label} AS label, l.created_at AS at
        FROM ledger_entries l INNER JOIN apartments a ON a.id = l.apartment_id INNER JOIN site_blocks b ON b.id = a.block_id
        WHERE l.site_code = $1 AND l.period >= $2::DATE AND (l.kind = 'payment' OR (l.kind = 'reversal' AND l.amount_minor > 0))
+         AND COALESCE(l.source_kind, '') <> 'opening'
        ORDER BY l.created_at DESC, l.id DESC LIMIT $3)
       UNION ALL
       (SELECT 'expense', to_char(e.expense_date, 'YYYY-MM-DD'), (-e.amount_minor)::TEXT, e.category_name, e.created_at

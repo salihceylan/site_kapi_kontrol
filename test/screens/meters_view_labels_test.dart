@@ -144,9 +144,10 @@ void main() {
       expect(find.text('Fatura tutarı'), findsWidgets);
 
       await tapFinder(t, find.text(_heatLabel));
-      // Seçili yöntem alanda görünür; açıklama arsa payı / eşit tabanını zaten "alan payı" diye anlatır.
+      // Seçili yöntem alanda görünür; açıklama alan payının dağıtım tabanını yönetimin seçtiğini söyler (K5: kod arsa payına kendiliğinden geçmez) ve "Alan payı tabanı" seçicisi görünür.
       expect(find.text(_heatLabel), findsOneWidget);
-      expect(find.textContaining('Gider; ölçüme göre ve alan payıyla (hepsinde arsa payı tanımlıysa arsa payına, değilse eşit)'), findsOneWidget);
+      expect(find.textContaining('Gider; ölçüme göre ve alan payıyla, platform kuralındaki oranla (varsayılan %70 / %30) paylaştırılır. Alan payının dağıtım tabanını siz seçersiniz.'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('billing_area_basis')), findsOneWidget);
       expect(find.textContaining('m²'), findsNothing, reason: '078: daire alanı sistemde yok; ekranda m² geçmemeli');
       expect(find.textContaining('metrekare'), findsNothing);
     });

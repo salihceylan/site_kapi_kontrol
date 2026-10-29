@@ -347,7 +347,7 @@ async function insertReceipt(client, input) {
 async function loadPaymentForReceipt(client, siteCode, entryId) {
   const result = await client.query(
     `
-      SELECT l.id, l.apartment_id, l.kind, (-l.amount_minor)::TEXT AS amount, to_char(l.entry_date, 'YYYY-MM-DD') AS entry_date, l.method, l.payer_party,
+      SELECT l.id, l.apartment_id, l.kind, (-l.amount_minor)::TEXT AS amount, to_char(l.entry_date, 'YYYY-MM-DD') AS entry_date, l.method, l.payer_party, l.source_kind,
              ${RECEIPT_ACCOUNT_L} AS account_party,
              EXISTS (SELECT 1 FROM ledger_entries rv WHERE rv.reverses_entry_id = l.id) AS reversed
       FROM ledger_entries l WHERE l.id = $1 AND l.site_code = $2
@@ -370,6 +370,10 @@ export async function ensureReceiptForPayment(client, { siteCode, entryId, actor
   const payment = await loadPaymentForReceipt(client, siteCode, entryId);
   if (!payment || payment.kind !== 'payment') {
     throw entryNotFound();
+  }
+  // Devir alacağı (K16; source_kind 'opening') bir nakit / havale tahsilatı DEĞİLDİR: makbuz (tahsil edildi belgesi) düzenlenmez.
+  if (payment.source_kind === 'opening') {
+    throw new PlatformError(409, 'RECEIPT_NOT_APPLICABLE', 'Devir alacağı için makbuz düzenlenmez (önceki dönemden devredilen alacaktır, bu dönemde tahsilat yapılmamıştır).');
   }
   const existing = await loadActiveReceiptForEntry(client, siteCode, entryId);
   if (existing) {

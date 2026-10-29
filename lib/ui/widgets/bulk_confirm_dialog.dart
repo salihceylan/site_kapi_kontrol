@@ -100,9 +100,15 @@ class _BulkConfirmDialogState extends State<BulkConfirmDialog> {
         children: [
           Text(
             isOpening
-                ? 'Toplam ${formatMinor(preview.plan['total_minor'] ?? 0)} devir borcu ${preview.plan['opening_add'] ?? preview.totals.ok} '
-                      'hesaba ${_dateText(widget.cutoverDate)} tarihiyle yazılacak. Yanlışsa Finans > Daireler > Devir '
-                      'bakiyesi ekranından yüklemeyi geri alabilirsiniz.'
+                ? ((preview.plan['credit_total_minor'] ?? 0) > 0
+                      // Alacaklı devir (K16): borç ve alacak toplamları ayrı gösterilir ve ayrı onaylanır
+                      ? 'Toplam ${formatMinor(preview.plan['total_minor'] ?? 0)} devir borcu ve ${formatMinor(preview.plan['credit_total_minor'] ?? 0)} devir alacağı '
+                            '(${preview.plan['opening_add'] ?? preview.totals.ok} kayıt) hesaplara ${_dateText(widget.cutoverDate)} tarihiyle yazılacak. '
+                            'Alacak, sonraki borçlardan (vadesi en eski borçtan başlayarak) düşer. Yanlışsa Finans > Daireler > Devir '
+                            'bakiyesi ekranından yüklemeyi geri alabilirsiniz.'
+                      : 'Toplam ${formatMinor(preview.plan['total_minor'] ?? 0)} devir borcu ${preview.plan['opening_add'] ?? preview.totals.ok} '
+                            'hesaba ${_dateText(widget.cutoverDate)} tarihiyle yazılacak. Yanlışsa Finans > Daireler > Devir '
+                            'bakiyesi ekranından yüklemeyi geri alabilirsiniz.')
                 : '${preview.totals.ok} satır aktarılacak. Bu işlem toplu geri alınamaz; yanlış yüklenen kayıtlar tek '
                       'tek düzeltilir.',
             key: const ValueKey<String>('bulk_confirm_summary'),

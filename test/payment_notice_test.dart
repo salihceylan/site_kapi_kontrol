@@ -5,8 +5,11 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/cash_models.dart';
+import 'package:site_kapi_kontrol/models/finance.dart' show AccountParty;
+import 'package:site_kapi_kontrol/models/finance_funds.dart';
 import 'package:site_kapi_kontrol/models/payment_notice.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
+import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/payment_notice_api.dart';
 import 'package:site_kapi_kontrol/services/payment_notice_file.dart';
 import 'package:site_kapi_kontrol/services/share_inbox.dart';
@@ -43,6 +46,8 @@ class _FakeApi extends PaymentNoticeApi {
   final calls = <String>[];
   Map<String, dynamic>? createBody;
   Map<String, dynamic>? approveBody;
+  FinanceFund? approveFund;
+  Object? approveError;
   Uint8List? uploaded;
   List<String> acknowledgedSent = const <String>[];
 
@@ -71,12 +76,19 @@ class _FakeApi extends PaymentNoticeApi {
     required int id,
     int? accountId,
     String? accountParty,
+    FinanceFund? fund,
     bool bookInOpenPeriod = false,
     List<String> acknowledged = const <String>[],
   }) async {
     calls.add('approve');
     acknowledgedSent = acknowledged;
-    approveBody = <String, dynamic>{'account_id': accountId, 'account_party': accountParty, 'book': bookInOpenPeriod};
+    approveFund = fund;
+    approveBody = <String, dynamic>{'account_id': accountId, 'account_party': accountParty, 'book': bookInOpenPeriod, 'fund': fund?.apiValue};
+    final error = approveError;
+    if (error != null) {
+      approveError = null; // yalnız ilk deneme reddedilir
+      throw error;
+    }
     return <String, dynamic>{};
   }
 
@@ -103,6 +115,30 @@ class _FakeApi extends PaymentNoticeApi {
     'pending_total_minor': 125000,
   });
 }
+
+/// K3: sahte `GET payments/fund-choice` yükleyicisi (sunucu biçimi). [calls] her çağrının daire / hesap bilgisini kaydeder.
+typedef _FundLoader = Future<FundChoiceInfo> Function({required int apartmentId, AccountParty? accountParty, int? amountMinor, DateTime? paidOn});
+
+Map<String, dynamic> _fundBody({int operating = 0, int capital = 0, String party = 'owner'}) => <String, dynamic>{
+  'apartment_id': 7,
+  'account_party': party,
+  'open': <String, dynamic>{'operating_minor': operating, 'capital_minor': capital},
+  'advance_minor': 0,
+  'choice_required': operating > 0 && capital > 0,
+  'suggested_fund': operating > 0 && capital == 0 ? 'operating' : (capital > 0 && operating == 0 ? 'capital' : null),
+  'proposal': null,
+};
+
+_FundLoader _loaderOf(Map<String, dynamic> body, {List<Map<String, Object?>>? calls}) =>
+    ({required int apartmentId, AccountParty? accountParty, int? amountMinor, DateTime? paidOn}) async {
+      calls?.add(<String, Object?>{'apartment_id': apartmentId, 'account_party': accountParty?.apiValue, 'amount_minor': amountMinor});
+      return FundChoiceInfo.tryParse(<String, dynamic>{...body, 'account_party': accountParty?.apiValue ?? body['account_party']})!;
+    };
+
+bool _selected(WidgetTester t, String key) => find
+    .descendant(of: find.byKey(ValueKey<String>(key)), matching: find.byIcon(Icons.radio_button_checked_rounded))
+    .evaluate()
+    .isNotEmpty;
 
 Future<void> _show(WidgetTester t, Widget dialog) async {
   t.view.physicalSize = const Size(1000, 2400);
@@ -209,7 +245,7 @@ void main() {
       final auth = FakeBulkAuth();
       final api = _FakeApi(warnings: <Map<String, dynamic>>[<String, dynamic>{'code': 'SAME_FILE_OTHER_NOTICE', 'level': 'strong'}]);
       PaymentNoticeService.register(auth, PaymentNoticeService(authService: auth, api: api, tokenProvider: () => 'tok'));
-      await _show(t, PaymentNoticeReviewDialog(scope: scopeOf(auth), noticeId: 5, accountsLoader: (_) async => const <CashAccount>[]));
+      await _show(t, PaymentNoticeReviewDialog(scope: scopeOf(auth), noticeId: 5, accountsLoader: (_) async => const <CashAccount>[], fundChoiceLoader: _loaderOf(_fundBody())));
       final approve = find.byKey(const ValueKey<String>('notice_review_approve'));
       expect(approve, findsOneWidget);
       expect(t.widget<StatefulWidget>(find.byType(PaymentNoticeReviewDialog)), isNotNull);
@@ -230,10 +266,110 @@ void main() {
       final auth = FakeBulkAuth();
       final api = _FakeApi(warnings: <Map<String, dynamic>>[<String, dynamic>{'code': 'OLD_DATE', 'level': 'info'}]);
       PaymentNoticeService.register(auth, PaymentNoticeService(authService: auth, api: api, tokenProvider: () => 'tok'));
-      await _show(t, PaymentNoticeReviewDialog(scope: scopeOf(auth), noticeId: 5, accountsLoader: (_) async => const <CashAccount>[]));
+      await _show(t, PaymentNoticeReviewDialog(scope: scopeOf(auth), noticeId: 5, accountsLoader: (_) async => const <CashAccount>[], fundChoiceLoader: _loaderOf(_fundBody())));
       await t.tap(find.byKey(const ValueKey<String>('notice_review_approve')));
       await t.pumpAndSettle();
       expect(api.calls, <String>['approve']);
+    });
+  });
+
+  // K3 (P1-3): dekont onayı da İşletme / Fon hesabı seçimine tabidir (yazılım ödemeyi kendiliğinden atamaz).
+  group('karşılaştırma penceresi: İşletme / Fon hesabı (K3)', () {
+    PeopleScope scopeOf(FakeBulkAuth auth) => PeopleScope(authService: auth, siteCode: 1, siteName: 'Gül', canWrite: true);
+    final approveKey = find.byKey(const ValueKey<String>('notice_review_approve'));
+
+    Future<_FakeApi> open(WidgetTester t, _FundLoader loader) async {
+      final auth = FakeBulkAuth();
+      final api = _FakeApi();
+      PaymentNoticeService.register(auth, PaymentNoticeService(authService: auth, api: api, tokenProvider: () => 'tok'));
+      await _show(t, PaymentNoticeReviewDialog(scope: scopeOf(auth), noticeId: 5, accountsLoader: (_) async => const <CashAccount>[], fundChoiceLoader: loader));
+      return api;
+    }
+
+    testWidgets('iki tür borç: seçim ZORUNLU — seçilmeden onay sunucuya GİTMEZ; seçilince fund gider', (t) async {
+      final api = await open(t, _loaderOf(_fundBody(operating: 100000, capital: 300000)));
+      expect(find.byKey(const ValueKey<String>('notice_fund_required')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('notice_fund_auto')), findsNothing, reason: 'iki türde Otomatik yok');
+      expect(_selected(t, 'notice_fund_operating'), isFalse);
+      expect(_selected(t, 'notice_fund_capital'), isFalse);
+      await t.tap(approveKey);
+      await t.pumpAndSettle();
+      expect(api.calls, isEmpty, reason: 'seçim yokken onay gitmemeli');
+      expect(find.text('Ödemenin işleneceği İşletme / Fon hesabını seçin.'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey<String>('notice_fund_capital')));
+      await t.pumpAndSettle();
+      expect(find.text('Ödemenin işleneceği İşletme / Fon hesabını seçin.'), findsNothing);
+      await t.tap(approveKey);
+      await t.pumpAndSettle();
+      expect(api.calls, <String>['approve']);
+      expect(api.approveFund, FinanceFund.capital);
+    });
+
+    testWidgets('tek tür borç: önerilen hesap seçili gelir ve onayda o hesap gider; değiştirilebilir', (t) async {
+      final api = await open(t, _loaderOf(_fundBody(operating: 100000)));
+      expect(_selected(t, 'notice_fund_operating'), isTrue);
+      expect(find.byKey(const ValueKey<String>('notice_fund_auto')), findsNothing);
+      await t.tap(find.byKey(const ValueKey<String>('notice_fund_capital')));
+      await t.pumpAndSettle();
+      expect(_selected(t, 'notice_fund_capital'), isTrue);
+      await t.tap(approveKey);
+      await t.pumpAndSettle();
+      expect(api.approveFund, FinanceFund.capital);
+    });
+
+    testWidgets('tek tür borç, seçim değiştirilmezse: önerilen hesap gider', (t) async {
+      final api = await open(t, _loaderOf(_fundBody(capital: 50000)));
+      await t.tap(approveKey);
+      await t.pumpAndSettle();
+      expect(api.approveFund, FinanceFund.capital);
+    });
+
+    testWidgets('açık borç yok: seçim zorunlu değil; seçilmeden onay (fund gövdede yok)', (t) async {
+      final api = await open(t, _loaderOf(_fundBody()));
+      expect(find.byKey(const ValueKey<String>('notice_fund_auto')), findsOneWidget);
+      await t.tap(approveKey);
+      await t.pumpAndSettle();
+      expect(api.calls, <String>['approve']);
+      expect(api.approveFund, isNull);
+    });
+
+    testWidgets('bayat bilgi: sunucu 400 FUND_CHOICE_REQUIRED verirse panel zorunlu kipe geçer; seçince onay yazılır', (t) async {
+      final api = await open(t, _loaderOf(_fundBody()));
+      api.approveError = ApiException(
+        'Bu hesapta hem İşletme hem Fon için açık borç var.',
+        statusCode: 400,
+        code: 'FUND_CHOICE_REQUIRED',
+        payload: <String, dynamic>{'code': 'FUND_CHOICE_REQUIRED', 'fund_choice': _fundBody(operating: 100000, capital: 300000)},
+      );
+      await t.tap(approveKey);
+      await t.pumpAndSettle();
+      expect(api.calls, <String>['approve'], reason: 'gönderildi ve sunucu reddetti');
+      expect(find.byKey(const ValueKey<String>('notice_fund_required')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('notice_fund_auto')), findsNothing);
+      expect(find.text('Ödemenin işleneceği İşletme / Fon hesabını seçin.'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey<String>('notice_fund_operating')));
+      await t.pumpAndSettle();
+      await t.tap(approveKey);
+      await t.pumpAndSettle();
+      expect(api.calls, <String>['approve', 'approve']);
+      expect(api.approveFund, FinanceFund.operating);
+    });
+
+    testWidgets('daire hesabı (ev sahibi / kiracı) değişince bilgi yeniden okunur ve eski seçim geçmez', (t) async {
+      final calls = <Map<String, Object?>>[];
+      final api = await open(t, _loaderOf(_fundBody(operating: 100000), calls: calls));
+      expect(_selected(t, 'notice_fund_operating'), isTrue);
+      expect(calls.single['account_party'], 'owner');
+      await t.tap(find.byKey(const ValueKey<String>('notice_party')));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Kiracı hesabı').last);
+      await t.pumpAndSettle();
+      expect(calls.map((c) => c['account_party']), <String?>['owner', 'tenant']);
+      expect(_selected(t, 'notice_fund_operating'), isTrue, reason: 'yeni hesabın önerisi yeniden seçili gelir');
+      await t.tap(approveKey);
+      await t.pumpAndSettle();
+      expect(api.approveBody!['account_party'], 'tenant');
+      expect(api.approveFund, FinanceFund.operating);
     });
   });
 
