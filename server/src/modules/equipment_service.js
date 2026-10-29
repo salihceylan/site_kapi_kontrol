@@ -41,6 +41,7 @@ export const bodyTooLarge = () => new PlatformError(413, 'BODY_TOO_LARGE', 'İst
 
 // --- Girdi yardimcilari ---------------------------------------------------------------------------------------------
 
+// eslint-disable-next-line no-control-regex
 const clean = (v) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim() : v);
 
 export function text(value, field, label, max, { required = false } = {}) {
