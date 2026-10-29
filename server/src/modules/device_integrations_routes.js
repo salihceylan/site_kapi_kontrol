@@ -6,6 +6,7 @@
 //   POST /manager/sites/:siteCode/cameras                          kamera kaydı (201, event_token bir kez)
 //   POST /manager/sites/:siteCode/cameras/:id/rotate-token         belirteç yenile
 //   POST /manager/sites/:siteCode/cameras/:id/deactivate           pasifleştir
+//   POST /manager/sites/:siteCode/cameras/:id/test                 "Sına": sunucudan zaman aşımı sınırlı TCP denemesi (yalnız yazar; denetim kaydı; yerel adres sınanamaz)
 //   GET  /manager/sites/:siteCode/plate-events                     plaka kayıtları (?limit=&before_id=)
 //   POST /camera-events/plate                                      kamera olayı (Authorization: Bearer <id>.<gizli> ya da X-Camera-Token); kapı AÇMAZ
 //
@@ -35,6 +36,7 @@ import {
   recordPlateEvent,
   rotateCameraToken,
   savePaymentProviderInfo,
+  testCamera,
 } from './device_integrations_service.js';
 
 export const deviceIntegrationsRouter = express.Router();
@@ -156,6 +158,14 @@ deviceIntegrationsRouter.post(
   writeLimiter,
   handler({ moduleCode: PLATE_CAMERAS_MODULE, context: 'cameras_deactivate', fallback: 'Kamera pasifleştirilemedi.', write: true }, ({ req, access }) =>
     deactivateCamera({ siteCode: access.siteCode, rawId: req.params.id }),
+  ),
+);
+deviceIntegrationsRouter.post(
+  `${SITE}/cameras/:id/test`,
+  authRequired,
+  writeLimiter,
+  handler({ moduleCode: PLATE_CAMERAS_MODULE, context: 'cameras_test', fallback: 'Kamera sınanamadı.', write: true }, ({ req, access }) =>
+    testCamera({ siteCode: access.siteCode, rawId: req.params.id, actor: req.authUser }),
   ),
 );
 deviceIntegrationsRouter.get(

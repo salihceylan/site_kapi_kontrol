@@ -201,7 +201,14 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> {
               trailing: site.canWrite && c.isActive
                   ? PopupMenuButton<String>(
                       onSelected: (v) async {
-                        if (v == 'rotate') {
+                        if (v == 'test') {
+                          try {
+                            final r = await _service.testCamera(site.code, c.id);
+                            if (mounted) AppSnack.show(this.context, r.message, kind: r.ok ? AppSnackKind.success : AppSnackKind.error);
+                          } on ApiException catch (e) {
+                            if (mounted) AppSnack.show(this.context, e.message, kind: AppSnackKind.error);
+                          }
+                        } else if (v == 'rotate') {
                           try {
                             final t = await _service.rotateToken(site.code, c.id);
                             if (mounted) await _showToken(t);
@@ -213,6 +220,7 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> {
                         }
                       },
                       itemBuilder: (_) => const <PopupMenuEntry<String>>[
+                        PopupMenuItem<String>(value: 'test', child: Text('Bağlantıyı sına')),
                         PopupMenuItem<String>(value: 'rotate', child: Text('Belirteci yenile')),
                         PopupMenuItem<String>(value: 'off', child: Text('Pasifleştir')),
                       ],

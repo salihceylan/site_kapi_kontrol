@@ -11620,6 +11620,28 @@
           "gelistirme": "yakinda"
         }
       ]
+    },
+    {
+      "id": "F80",
+      "baslik": "Kamera bağlantısı: “Bağlantıyı sına”",
+      "durum": "hazir",
+      "ozet": "Plaka kamerası listesinde (Cihaz entegrasyonları) ve CCTV kamera uçlarında “Sına”: sunucu kameranın adresine zaman aşımı sınırlı (4 sn) bir TCP bağlantısı dener; görüntü çekilmez, kimlik bilgisi gönderilmez. Yalnız herkese açık adresler denenir; yerel ağdaki kamera sunucudan sınanamaz ve bu dürüstçe söylenir. Her deneme İşlem Kayıtlarına yazılır. Yalnız yönetici/süper yazar; kurul 403. Migration gerekmez. HGS sağlayıcısı ve kartlı geçiş okuyucu ekranı bu sürümde yoktur.",
+      "maddeler": [
+        {
+          "id": "F80.01",
+          "baslik": "Plaka kamerasında “Bağlantıyı sına” dürüst sonuç verir",
+          "adimlar": [
+            "Yönetici hesabıyla Cihaz entegrasyonları ekranında bir plaka kamerası ekleyin (yerel ağ adresi, örn. 192.168.1.20).",
+            "Kameranın sağ üstündeki menüden “Bağlantıyı sına”ya dokunun.",
+            "İşlem Kayıtları ekranına bakın."
+          ],
+          "beklenen": "“Bu adres yerel ağda; sunucudan sınanamaz...” iletisi görünür (başarı ya da sahte onay gösterilmez). İşlem Kayıtlarında “Plaka kamerası bağlantısı sınandı” satırı vardır. Kurul üyesi hesabında menü ve uç yoktur/403 verir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Kamera ve Plaka modülü açık bir site",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
     }
   ]
 }

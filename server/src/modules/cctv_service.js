@@ -10,6 +10,7 @@ import { PlatformError } from './errors.js';
 import { recordAudit } from './audit_service.js';
 import { decryptSecret, encryptSecret } from './device_integrations_service.js';
 import { fetchSnapshot, parseSnapshotUrl } from './cctv_snapshot.js';
+import { probeTcp } from './camera_probe.js';
 
 export const CCTV_MODULE = 'cctv_link';
 export const CAMERA_KINDS = Object.freeze(['ip_camera', 'nvr_channel']);
@@ -349,6 +350,34 @@ export async function deleteCamera({ siteCode, rawId, actor }, db = pool) {
   if (!result.rows[0]) throw notFound('Kamera');
   await audit(db, actor, 'cctv.camera_deleted', siteCode, id, {});
   return { ok: true };
+}
+
+/** Sina hedefi: anlik goruntu adresi, yoksa kayit sablonunun ana bilgisayari (https => varsayilan 443). Yer tutucu ana bilgisayarda olamaz. */
+export function probeTargetOf(row) {
+  for (const raw of [row.snapshot_url, row.clip_url_template]) {
+    if (!raw) continue;
+    try {
+      const url = new URL(String(raw).replace(/\{[a-z_]+\}/g, 'x'));
+      return { host: url.hostname, port: url.port ? Number(url.port) : 443 };
+    } catch {
+      // sonraki adayi dene
+    }
+  }
+  return null;
+}
+
+/** "Sina": kayit sistemi / kamera adresine sunucudan zaman asimi sinirli TCP denemesi (goruntu cekilmez). Yerel adres sinanamaz; her deneme denetim kaydina yazilir. */
+export async function testCamera({ siteCode, rawId, actor }, { db = pool, probe = probeTcp } = {}) {
+  const id = toNumberId(rawId);
+  const found = await db.query(`SELECT ${CAMERA_COLUMNS} FROM cctv_cameras WHERE id = $1 AND site_code = $2`, [id, siteCode]);
+  const row = found.rows[0];
+  if (!row) throw notFound('Kamera');
+  if (!row.is_active) throw new PlatformError(409, 'CAMERA_INACTIVE', 'Kamera pasif.');
+  const target = probeTargetOf(row);
+  if (!target) throw new PlatformError(409, 'NO_CONNECTION_INFO', 'Sınanacak bir bağlantı adresi tanımlı değil.');
+  const outcome = await probe(target);
+  await audit(db, actor, 'cctv.connection_tested', siteCode, id, { ok: outcome.ok, reason: outcome.reason });
+  return { ok: outcome.ok, reason: outcome.reason, message: outcome.message };
 }
 
 // --- Anlik goruntu --------------------------------------------------------------------------------------------------

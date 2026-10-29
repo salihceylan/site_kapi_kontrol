@@ -352,6 +352,8 @@ export const SITE_AUDIT_LABELS = Object.freeze({
   'cctv.camera_deleted': 'Kamera silindi',
   'cctv.snapshot_viewed': 'Kamera anlık görüntüsü izlendi',
   'cctv.clip_opened': 'Kamera kaydı açıldı',
+  'cctv.connection_tested': 'Kamera bağlantısı sınandı',
+  'cctv.plate_camera_tested': 'Plaka kamerası bağlantısı sınandı',
   'annual_report.save': 'Faaliyet raporu taslağı kaydedildi',
 
   // Site ayarları

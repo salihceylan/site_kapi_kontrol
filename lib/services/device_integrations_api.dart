@@ -305,6 +305,12 @@ class DeviceIntegrationsApi {
     return '${json['event_token']}';
   }
 
+  /// "Sına": sunucudan zaman aşımı sınırlı TCP denemesi. Dönen metin kullanıcıya olduğu gibi gösterilir; yerel ağdaki kamera sınanamaz (ok=false).
+  Future<({bool ok, String message})> testCamera(String token, int siteCode, int cameraId) async {
+    final json = await _send('POST', _site(siteCode, 'cameras/$cameraId/test'), token, body: const <String, Object?>{});
+    return (ok: json['ok'] == true, message: '${json['message'] ?? ''}');
+  }
+
   Future<void> deactivate(String token, int siteCode, int cameraId) async {
     await _send('POST', _site(siteCode, 'cameras/$cameraId/deactivate'), token, body: const <String, Object?>{});
   }
@@ -426,5 +432,6 @@ class DeviceIntegrationsService {
     String? password,
   }) => _guard((t) => api.createCamera(t, site, brand: brand, name: name, host: host, port: port, username: username, password: password));
   Future<String> rotateToken(int site, int id) => _guard((t) => api.rotateToken(t, site, id));
+  Future<({bool ok, String message})> testCamera(int site, int id) => _guard((t) => api.testCamera(t, site, id));
   Future<void> deactivate(int site, int id) => _guard((t) => api.deactivate(t, site, id));
 }
