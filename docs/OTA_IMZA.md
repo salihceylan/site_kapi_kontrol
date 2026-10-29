@@ -278,6 +278,19 @@ Yayın kuralları:
 - **Sunucu ön koşulları (G0):** canlı `.env`'de `OTA_PUBLIC_KEY` tanımlı olmalı (bölüm 5, S7) ve nginx'te `/admin/firmware/` yolu için istek gövdesi sınırı yükseltilmiş olmalı
   (varsayılan 1 MB yetmez; `OTA_MAX_FIRMWARE_BYTES` varsayılanı 1.966.080 bayttır, yani en az 2 MB). Aksi hâlde yükleme 503 (`OTA_KEY_NOT_CONFIGURED`) ya da nginx 413 ile reddedilir.
   `allowed_uids` önce yalnız test cihazları; `usb_required`, `interval_hours`, `force` alanlarının anlamı `OTA_KURULUM.txt`'deki gibidir.
+  nginx (VPS; depoda yapılandırma YOK, `sunucu_kurulum.txt` §9; kullanıcı `sudo` ile uygular; belge yükleme ucuyla aynı kalıp, `docs/PLATFORM_BELGELER.md` A2) — server bloğuna, mevcut
+  `location /` içindeki `proxy_set_header` satırları AYNEN kopyalanarak:
+
+  ```text
+  location ~ ^/admin/firmware/(esp32-c3|esp32-wroom)/releases$ {
+      client_max_body_size 3m;          # OTA_MAX_FIRMWARE_BYTES (1.966.080) + pay; env değişirse birlikte
+      client_body_timeout 120s; proxy_read_timeout 120s; proxy_send_timeout 120s;
+      proxy_pass http://127.0.0.1:8080;
+  }
+  ```
+
+  Sonra `sudo nginx -t && sudo systemctl reload nginx`. Alternatif: SSH tüneliyle (`ssh -L 8080:127.0.0.1:8080 ...`) doğrudan `http://127.0.0.1:8080/admin/firmware/<hedef>/releases` adresine yükleyin
+  (nginx'i atlar; `FIRMWARE_DIR` klasörüne API sürecinin yazma izni olmalıdır).
 - **Hızlı kontrol:** `curl "https://api.gudeteknoloji.com.tr/firmware/<hedef>/manifest.json?current_version=<eski sürüm>&uid=<test cihazı UID>"`.
 - **Aynı sürüm numarasını yeniden kullanmayın:** cihazlar aynı sürümü yeniden kurmaz ve sunucu aynı numarayı farklı içerikle reddeder (409 `FIRMWARE_VERSION_EXISTS`); içeriği değişen
   paket için sürümü artırıp yeniden derleyin ve imzalayın.
