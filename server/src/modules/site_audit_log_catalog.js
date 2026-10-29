@@ -260,6 +260,7 @@ export const SITE_AUDIT_LABELS = Object.freeze({
   'metering.reading.added': 'Sayaç okuması eklendi',
   'metering.reading.deleted': 'Sayaç okuması silindi',
   'metering.reading.imported': 'Sayaç okumaları yüklendi',
+  'metering.tariff.created': 'Sayaç tarifesi eklendi',
   'metering.reading.retaken': 'Sayaç okuması yeniden çekildi',
   'metering.reading.jump_confirmed': 'Olağan dışı sayaç okuması onaylandı',
   'metering.billing.posted': 'Sayaç faturalandırıldı',

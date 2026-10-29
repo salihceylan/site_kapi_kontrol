@@ -383,7 +383,7 @@ describe('rota tablosu taraması: gerçek server.js uygulaması', () => {
       '(kök)', 'access-cards', 'announcements', 'annual-report', 'apartments', 'approve-deletion', 'assignable-devices', 'audit-log', 'budget-projects', 'cameras',
       'card-payments', 'cctv', 'concierge-requests', 'contract-vendors', 'contracts', 'decisions', 'directory', 'documents', 'doors', 'drive', 'emergency', 'equipment',
       'exports', 'feedback', 'finance', 'history', 'imports', 'invitations', 'join-requests', 'join-token', 'managers', 'meter-apartments', 'meter-billings',
-      'meter-readings', 'menu-layout', 'messaging', 'meters', 'module-requests', 'modules', 'neighbor-board', 'people', 'plate-events', 'plate-recognition', 'quote-requests', 'quotes',
+      'meter-readings', 'meter-tariffs', 'menu-layout', 'messaging', 'meters', 'module-requests', 'modules', 'neighbor-board', 'people', 'payment-provider', 'plate-events', 'plate-recognition', 'quote-requests', 'quotes',
       'reject-deletion', 'reservation-areas', 'reservations', 'residencies', 'residency-log', 'rules', 'safety-requests', 'security-policy',
       'signing-roster', 'staff-roles', 'structure', 'surveys', 'team', 'trial-access', 'vehicles', 'visitor-entries', 'work-categories', 'work-items',
     ],
