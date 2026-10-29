@@ -2,6 +2,7 @@
 
 import { resolveTrustProxy } from '../security/trust_proxy.js';
 import { pushEnvWarnings } from '../modules/push_config.js';
+import { otaEnvWarnings } from '../services/ota_signature.js';
 
 export const MIN_RECOMMENDED_JWT_SECRET_LENGTH = 32;
 
@@ -337,6 +338,9 @@ export function validateEnv(env = process.env) {
 
   // Telefon bildirimi (Faz 3b-B): hizmet hesabi dosyasi depo icinde / izinleri acik / okunamiyor -> UYARI (sunucu yine acilir; dosya icerigi okunmaz).
   warnings.push(...pushEnvWarnings(env));
+
+  // OTA imzasi: OTA_PUBLIC_KEY kullanilamiyorsa imzali yukleme ucu kapali kalir (sunucu yine acilir; anahtar degeri yazilmaz).
+  warnings.push(...otaEnvWarnings(env));
 
   return { errors, warnings };
 }

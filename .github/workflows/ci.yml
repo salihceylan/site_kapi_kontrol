@@ -1,6 +1,6 @@
 name: CI
 
-# Pull request ve ana dal push'larinda: sunucu lint+test, Flutter analyze+test, gizli bilgi taramasi.
+# Pull request ve ana dal push'larinda: sunucu lint+test, OTA imza araci testi, Flutter analyze+test, gizli bilgi taramasi.
 # NOT: Bu dosyada DEPLOY YOKTUR (canli dagitim kullanici karari; AGENTS.md kural 8 elle yurutulur).
 
 on:
@@ -43,6 +43,23 @@ jobs:
 
       - name: Test (import smoke dahil)
         run: npm test
+
+  ota-imza:
+    name: OTA imza araci (node --test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js (.nvmrc)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      # tools/ota_imza bagimliliksizdir (yalniz Node yerlesik crypto): npm ci gerekmez. Testler anahtari calisma aninda uretir; depoda ozel anahtar yoktur.
+      - name: Test (imza araci + bilinen-cevap vektorleri)
+        run: node --test "tools/ota_imza/test/*.test.mjs"
 
   flutter:
     name: Flutter (analyze + test)

@@ -26,6 +26,8 @@ Bu bölüm sunucu/uygulama/firmware kodunun DIŞINDAKİ arıza yerlerini toplar:
 | [test_driver/perf_driver.dart](../../test_driver/perf_driver.dart) | flutter drive sürücüsü: kare süresi JSON özeti yazar |
 | [cihaz_kontrol/host_test/run_all.py](../../cihaz_kontrol/host_test/run_all.py) | Firmware ana makine testlerini (MSVC) derleyip çalıştıran koşucu |
 | [cihaz_kontrol/host_test/README.md](../../cihaz_kontrol/host_test/README.md) | Host test tablosu (719 doğrulama) ve gereksinimler |
+| [tools/ota_imza/ota_imza.mjs](../../tools/ota_imza/ota_imza.mjs) | OTA imza aracı (anahtar-uret / genel-anahtar / imzala / dogrula); bağımlılığı yok, özel anahtar depo dışında |
+| [tools/ota_imza/README.md](../../tools/ota_imza/README.md) | İmza biçimi KAPI-OTA-IMZA-V1 (BAĞLAYICI tanım), akış, özel anahtar saklama, sınırlar |
 | [tools/klavuz/build.mjs](../../tools/klavuz/build.mjs) | Arıza klavuzu üreticisi / denetleyicisi |
 | [tools/klavuz/build.test.mjs](../../tools/klavuz/build.test.mjs) | Klavuz aracının testleri + gerçek girişlerin --check denetimi |
 | [.github/workflows/ci.yml](../../.github/workflows/ci.yml) | CI: server lint+test, Flutter analyze+test, gitleaks (deploy YOK) |
@@ -44,7 +46,7 @@ Bu bölüm sunucu/uygulama/firmware kodunun DIŞINDAKİ arıza yerlerini toplar:
 | [android/app/build.gradle.kts](../../android/app/build.gradle.kts) | applicationId, Java 17 hedefi, release imzası |
 | [.vscode/settings.json](../../.vscode/settings.json) | VS Code çalışma alanı ayarları (git.autorefresh, izleyici hariç tutma) |
 
-## Bu bölümdeki girişler (49)
+## Bu bölümdeki girişler (50)
 
 - [arac-sunucu-401](#arac-sunucu-401) — Şirket aracında "Sunucu yetkilendirmeyi reddetti (HTTP 401)" çıkıyor (Cihazı Sunucuya Kaydet, kayıtlı cihaz listesi, silme)
 - [arac-anahtar-tanimli-degil](#arac-anahtar-tanimli-degil) — Şirket aracı "COMPANY_API_KEY tanimli degil" uyarısı veriyor; sunucuya kayıt/liste/silme hiç denenmiyor (yalnız yerel kayıt yapılıyor)
@@ -95,6 +97,7 @@ Bu bölüm sunucu/uygulama/firmware kodunun DIŞINDAKİ arıza yerlerini toplar:
 - [test-flutter-analyze](#test-flutter-analyze) — "flutter analyze" hata/uyarı veriyor ya da bir klasör (android/ios/web) analiz edilmiyor; CI Flutter işi kırmızı
 - [surec-teknik-notlar-bayat](#surec-teknik-notlar-bayat) — PROJE_TEKNIK_NOTLAR.md ile kod/gerçek durum çelişiyor (komut, sayı, güncelleme sırası); hangi belgeye güvenmeliyim?
 - [test-codebase-belgeleri](#test-codebase-belgeleri) — Mimari, modül sınırları, risk, entegrasyon veya test düzeni sorusu: docs/codebase altındaki hangi belgeye bakmalıyım?
+- [arac-ota-imza-araci](#arac-ota-imza-araci) — tools/ota_imza: "imza URETILMEDI", "ICINDE olamaz", "varsayilan bir yol YOKTUR", "ZATEN VAR" ya da dogrula "SONUC: GECMEDI" veriyor
 
 ## Girişler
 
@@ -107,7 +110,7 @@ Bu bölüm sunucu/uygulama/firmware kodunun DIŞINDAKİ arıza yerlerini toplar:
 | [company_qr_tool/app.py:140](../../company_qr_tool/app.py#L140) | <code>headers["X-Company-Key"] = key</code> | Anahtar yalnız doluysa ve adres güvenliyse başlığa eklenir; aksi halde başlık hiç gitmez |
 | [server/src/middlewares/company_auth.js:16](../../server/src/middlewares/company_auth.js#L16) | <code>export function hasValidCompanyKey(req, env = process.env) {</code> | Sunucu tarafı: x-company-key başlığını COMPANY_API_KEY ile sabit zamanlı karşılaştırır; sunucuda anahtar tanımsızsa her zaman false |
 | [server/src/middlewares/company_auth.js:43](../../server/src/middlewares/company_auth.js#L43) | <code>return res.status(401).json({ error: 'Yetkisiz erisim.' });</code> | Anahtar da super_user JWT de yoksa 401; ayrıca company_access_denied denetim kaydı yazılır |
-| [server/src/config/env.js:325](../../server/src/config/env.js#L325) | <code>warnings.push('COMPANY_API_KEY tanimli degil; /api/company/* yalnizca super_user JWT ile …</code> | Sunucuda anahtar tanımsızsa açılışta bu uyarı yazılır (başlık işlemez) |
+| [server/src/config/env.js:326](../../server/src/config/env.js#L326) | <code>warnings.push('COMPANY_API_KEY tanimli degil; /api/company/* yalnizca super_user JWT ile …</code> | Sunucuda anahtar tanımsızsa açılışta bu uyarı yazılır (başlık işlemez) |
 | [company_qr_tool/env.example:12](../../company_qr_tool/env.example#L12) | <code>COMPANY_API_KEY=</code> | İstemcide anahtarın yazılacağı satır (değer sunucudaki server/.env ile AYNI olmalı) |
 
 **Olası nedenler**
@@ -145,7 +148,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 | [company_qr_tool/app.py:108](../../company_qr_tool/app.py#L108) | <code>COMPANY_KEY_MISSING_MESSAGE = (</code> | Kullanıcıya gösterilen uyarı metni ve çözüm adımları |
 | [company_qr_tool/app.py:2023](../../company_qr_tool/app.py#L2023) | <code>error_msg = COMPANY_KEY_MISSING_MESSAGE</code> | Kayıt işçisi anahtar yokken ağ isteği yapmaz; yalnız yerel kayıt tamamlanır |
 | [company_qr_tool/app.py:544](../../company_qr_tool/app.py#L544) | <code>return [], f"{COMPANY_KEY_ENV} tanimli degil: sunucu listesi alinamadi, yalnizca yerel ka…</code> | Liste/PDF/Kayıtlı Cihazlar penceresi anahtar yokken yalnız yerel kayıtları gösterir |
-| [company_qr_tool/README.md:125](../../company_qr_tool/README.md#L125) | <code>### Sunucu yetkisi (COMPANY_API_KEY)</code> | Anahtarın nereye yazılacağı (.env veya setx) ve davranışı |
+| [company_qr_tool/README.md:127](../../company_qr_tool/README.md#L127) | <code>### Sunucu yetkisi (COMPANY_API_KEY)</code> | Anahtarın nereye yazılacağı (.env veya setx) ve davranışı |
 
 **Olası nedenler**
 - company_qr_tool/.env yok ya da app.py ile aynı klasörde değil
@@ -192,8 +195,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 | [company_qr_tool/app.py:191](../../company_qr_tool/app.py#L191) | <code>def known_hosts_setup_help() -&gt; str:</code> | İlk kurulum adımlarını ve known_hosts yolunu yazan yardım metni |
 | [company_qr_tool/app.py:215](../../company_qr_tool/app.py#L215) | <code>client.set_missing_host_key_policy(paramiko.RejectPolicy())</code> | Bilinmeyen sunucuya otomatik güvenilmez (AutoAddPolicy YOK) |
 | [company_qr_tool/app.py:238](../../company_qr_tool/app.py#L238) | <code>except paramiko.BadHostKeyException as exc:</code> | Kayıtlı anahtar ile sunucunun anahtarı uyuşmazsa "UYUSMUYOR" hatası |
-| [company_qr_tool/app.py:2529](../../company_qr_tool/app.py#L2529) | <code>if not known_hosts_path().is_file():</code> | Sunucuya gönder düğmesi known_hosts dosyası yoksa hiç bağlanmadan bu uyarıyı gösterir |
-| [company_qr_tool/README.md:136](../../company_qr_tool/README.md#L136) | <code>### SFTP ile firmware gonderme: sunucu kimligi dogrulamasi</code> | İlk kurulum ve sunucu yeniden kurulursa yapılacaklar |
+| [company_qr_tool/app.py:2544](../../company_qr_tool/app.py#L2544) | <code>if not known_hosts_path().is_file():</code> | Sunucuya gönder düğmesi known_hosts dosyası yoksa hiç bağlanmadan bu uyarıyı gösterir |
+| [company_qr_tool/README.md:138](../../company_qr_tool/README.md#L138) | <code>### SFTP ile firmware gonderme: sunucu kimligi dogrulamasi</code> | İlk kurulum ve sunucu yeniden kurulursa yapılacaklar |
 
 **Olası nedenler**
 - known_hosts dosyasında 178.210.161.55:22667 kaydı yok (ilk kurulum yapılmamış)
@@ -226,9 +229,9 @@ ssh-keygen -R "[178.210.161.55]:22667"
 | [company_qr_tool/app.py:222](../../company_qr_tool/app.py#L222) | <code>key_file = os.environ.get("SSH_KEY_FILE", "").strip()</code> | Anahtar tanımlıysa anahtarla, değilse parolayla bağlanır |
 | [company_qr_tool/app.py:226](../../company_qr_tool/app.py#L226) | <code>raise RuntimeError(f"SSH_KEY_FILE bulunamadi: {key_path}")</code> | Anahtar dosyası yolu yanlış |
 | [company_qr_tool/app.py:245](../../company_qr_tool/app.py#L245) | <code>except paramiko.PasswordRequiredException as exc:</code> | Anahtar parolalıysa SSH_KEY_PASSPHRASE gerekir |
-| [company_qr_tool/app.py:2536](../../company_qr_tool/app.py#L2536) | <code>password = os.environ.get("AHBU_VPS_PASSWORD", "").strip()</code> | Anahtar yoksa parola: önce AHBU_VPS_PASSWORD, yoksa diyalog; boş bırakılırsa işlem sessizce iptal olur |
-| [company_qr_tool/app.py:2573](../../company_qr_tool/app.py#L2573) | <code>import paramiko</code> | paramiko burada tembel içe alınır: kurulu değilse "Sunucu yukleme hatasi" ile düşer |
-| [company_qr_tool/app.py:2577](../../company_qr_tool/app.py#L2577) | <code>vps_target_dir = f"{VPS_FIRMWARE_BASE_DIR}/{target}"</code> | Dosyalar donanım hedef klasörüne (esp32-c3 / esp32-wroom) gider: AGENTS.md kural 4 izolasyonu |
+| [company_qr_tool/app.py:2551](../../company_qr_tool/app.py#L2551) | <code>password = os.environ.get("AHBU_VPS_PASSWORD", "").strip()</code> | Anahtar yoksa parola: önce AHBU_VPS_PASSWORD, yoksa diyalog; boş bırakılırsa işlem sessizce iptal olur |
+| [company_qr_tool/app.py:2588](../../company_qr_tool/app.py#L2588) | <code>import paramiko</code> | paramiko burada tembel içe alınır: kurulu değilse "Sunucu yukleme hatasi" ile düşer |
+| [company_qr_tool/app.py:2592](../../company_qr_tool/app.py#L2592) | <code>vps_target_dir = f"{VPS_FIRMWARE_BASE_DIR}/{target}"</code> | Dosyalar donanım hedef klasörüne (esp32-c3 / esp32-wroom) gider: AGENTS.md kural 4 izolasyonu |
 | [company_qr_tool/requirements.txt:5](../../company_qr_tool/requirements.txt#L5) | <code>paramiko&gt;=3.4.0</code> | SFTP için gerekli paket |
 
 **Olası nedenler**
@@ -284,7 +287,7 @@ ssh-keygen -R "[178.210.161.55]:22667"
 | [server/src/routes/company_routes.js:326](../../server/src/routes/company_routes.js#L326) | <code>return res.status(400).json({ error: 'device_uid 12 haneli hex (0-9, A-F) olmalidir.' });</code> | Sunucu UID'yi 12 haneli büyük harf hex ister (":" ve "-" ayırıcıları tolere edilir) |
 | [server/src/routes/company_routes.js:110](../../server/src/routes/company_routes.js#L110) | <code>export function resolveCompanyHardwareType(body) {</code> | hardware_type/hardware_target/chip alanlarından türü çıkarır; çıkaramazsa null |
 | [server/src/routes/company_routes.js:127](../../server/src/routes/company_routes.js#L127) | <code>const DEFAULT_COMPANY_HARDWARE_TYPE = 'esp32_c3';</code> | Tür belirlenemezse varsayılan esp32_c3 yazılır; cihaz MQTT bildirimi sonradan düzeltir |
-| [server/src/server.js:128](../../server/src/server.js#L128) | <code>app.post('/api/company/labeled-devices', companyAccessLimiter, requireCompanyAccess, expr…</code> | Bu uca özel 5 MB JSON limiti (QR PNG base64); hız sınırı yetkiden ÖNCE çalışır |
+| [server/src/server.js:130](../../server/src/server.js#L130) | <code>app.post('/api/company/labeled-devices', companyAccessLimiter, requireCompanyAccess, expr…</code> | Bu uca özel 5 MB JSON limiti (QR PNG base64); hız sınırı yetkiden ÖNCE çalışır |
 
 **Olası nedenler**
 - UID 12 haneli değil (ör. eski firmware farklı uzunlukta UID bildiriyor) → 400
@@ -394,8 +397,8 @@ pio run -d cihaz_kontrol -e esp32_relay_wroom
 | [company_qr_tool/app.py:2228](../../company_qr_tool/app.py#L2228) | <code># Otomatik versiyon senkronizasyonu: ota_guncelleme.h dosyasini guncelle</code> | "Derle" düğmesi derlemeden ÖNCE başlığı günceller |
 | [company_qr_tool/app.py:961](../../company_qr_tool/app.py#L961) | <code>def read_firmware_source_version(env: str &#124; None = None) -&gt; str &#124; None:</code> | Sürüm kutusunun başlangıç değeri başlıktan okunur (yoksa son sürüm + 1) |
 | [company_qr_tool/app.py:278](../../company_qr_tool/app.py#L278) | <code>OTA_VERSION_C3_RE = re.compile(r'OTA_VERSION_C3\[\]\s*=\s*"(\d+\.\d+\.\d+)"')</code> | Başlıkta aranan desen: OTA_VERSION_C3[] = "x.y.z" |
-| [cihaz_kontrol/include/ota_guncelleme.h:27](../../cihaz_kontrol/include/ota_guncelleme.h#L27) | <code>inline constexpr char OTA_VERSION_C3[] = "4.3.3";</code> | Araç bu satırı değiştirir; C3 hedef sürümü |
-| [cihaz_kontrol/include/ota_guncelleme.h:28](../../cihaz_kontrol/include/ota_guncelleme.h#L28) | <code>inline constexpr char OTA_VERSION_WROOM[] = "5.2.2";</code> | WROOM hedef sürümü (hedefler birbirinden bağımsız: AGENTS.md kural 4) |
+| [cihaz_kontrol/include/ota_guncelleme.h:32](../../cihaz_kontrol/include/ota_guncelleme.h#L32) | <code>inline constexpr char OTA_VERSION_C3[] = "4.4.0";</code> | Araç bu satırı değiştirir; C3 hedef sürümü |
+| [cihaz_kontrol/include/ota_guncelleme.h:33](../../cihaz_kontrol/include/ota_guncelleme.h#L33) | <code>inline constexpr char OTA_VERSION_WROOM[] = "5.3.0";</code> | WROOM hedef sürümü (hedefler birbirinden bağımsız: AGENTS.md kural 4) |
 
 **Olası nedenler**
 - Şirket aracında "Derle" veya "Sürüm oluştur" kullanıldı: başlık seçilen sürüme eşitlenir (tasarım gereği)
@@ -417,12 +420,12 @@ git diff -- cihaz_kontrol/include/ota_guncelleme.h
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:2617](../../company_qr_tool/app.py#L2617) | <code>def start_coworker_zip(self) -&gt; None:</code> | Düğme yalnız derleme + sürüm hazırken (aynı env ve sürüm) çalışır, yoksa "Surum gerekli"; kayıt yeri sorulur |
-| [company_qr_tool/app.py:2644](../../company_qr_tool/app.py#L2644) | <code>def _coworker_zip_worker(self, rel: dict, target: Path) -&gt; None:</code> | ZIP işçisi: firmware, manifest, flash_smartkeypass_usb.bat, README ve PlatformIO araçlarını paketler |
-| [company_qr_tool/app.py:2649](../../company_qr_tool/app.py#L2649) | <code>raise FileNotFoundError(f"Guncelleme dosyasi yok: {p}")</code> | Sürümün bootloader / partitions / firmware / manifest dosyalarından biri yoksa ZIP yapılmaz |
-| [company_qr_tool/app.py:2650](../../company_qr_tool/app.py#L2650) | <code>required_tool_dirs = [</code> | ~/.platformio altında python3, packages/tool-esptoolpy ve penv/Lib/site-packages/serial klasörleri bulunmalı |
-| [company_qr_tool/app.py:2663](../../company_qr_tool/app.py#L2663) | <code>hw_target = target_for_env(env)</code> | Donanım hedefi ve bootloader ofseti sürümün env'inden çıkarılır; bat dosyasına ve README'ye yazılır |
-| [company_qr_tool/app.py:2761](../../company_qr_tool/app.py#L2761) | <code>zf.writestr("flash_smartkeypass_usb.bat", bat)</code> | Pakete konan bat dosyası: otomatik COM port bulur, esptool ile yazar |
+| [company_qr_tool/app.py:2632](../../company_qr_tool/app.py#L2632) | <code>def start_coworker_zip(self) -&gt; None:</code> | Düğme yalnız derleme + sürüm hazırken (aynı env ve sürüm) çalışır, yoksa "Surum gerekli"; kayıt yeri sorulur |
+| [company_qr_tool/app.py:2659](../../company_qr_tool/app.py#L2659) | <code>def _coworker_zip_worker(self, rel: dict, target: Path) -&gt; None:</code> | ZIP işçisi: firmware, manifest, flash_smartkeypass_usb.bat, README ve PlatformIO araçlarını paketler |
+| [company_qr_tool/app.py:2664](../../company_qr_tool/app.py#L2664) | <code>raise FileNotFoundError(f"Guncelleme dosyasi yok: {p}")</code> | Sürümün bootloader / partitions / firmware / manifest dosyalarından biri yoksa ZIP yapılmaz |
+| [company_qr_tool/app.py:2665](../../company_qr_tool/app.py#L2665) | <code>required_tool_dirs = [</code> | ~/.platformio altında python3, packages/tool-esptoolpy ve penv/Lib/site-packages/serial klasörleri bulunmalı |
+| [company_qr_tool/app.py:2678](../../company_qr_tool/app.py#L2678) | <code>hw_target = target_for_env(env)</code> | Donanım hedefi ve bootloader ofseti sürümün env'inden çıkarılır; bat dosyasına ve README'ye yazılır |
+| [company_qr_tool/app.py:2776](../../company_qr_tool/app.py#L2776) | <code>zf.writestr("flash_smartkeypass_usb.bat", bat)</code> | Pakete konan bat dosyası: otomatik COM port bulur, esptool ile yazar |
 
 **Olası nedenler**
 - ~/.platformio/python3, packages/tool-esptoolpy veya penv/Lib/site-packages/serial yok (PlatformIO bu bilgisayarda kurulmamış/farklı konumda)
@@ -464,10 +467,10 @@ git diff -- cihaz_kontrol/include/ota_guncelleme.h
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:2937](../../company_qr_tool/app.py#L2937) | <code>def _fetch_worker(self) -&gt; None:</code> | Liste = sunucu kayıtları + yerelde olup sunucuda olmayanlar (UID ile birleştirilir; sunucu önceliklidir) |
+| [company_qr_tool/app.py:2952](../../company_qr_tool/app.py#L2952) | <code>def _fetch_worker(self) -&gt; None:</code> | Liste = sunucu kayıtları + yerelde olup sunucuda olmayanlar (UID ile birleştirilir; sunucu önceliklidir) |
 | [company_qr_tool/app.py:541](../../company_qr_tool/app.py#L541) | <code>def fetch_server_labeled_devices_with_status() -&gt; tuple[list[dict], str]:</code> | Sunucu listesi alınamazsa neden döner (anahtar yok / 401 / ağ) ve yalnız yerel kayıtlar kalır |
 | [company_qr_tool/app.py:40](../../company_qr_tool/app.py#L40) | <code>LABELED_DEVICES_FILE = OUTPUT_DIR / "labeled_devices.json"</code> | Yerel indeks: company_qr_tool/output/labeled_devices.json (git dışı) |
-| [company_qr_tool/app.py:3026](../../company_qr_tool/app.py#L3026) | <code>def _delete_selected_device(self) -&gt; None:</code> | Önce yerel kayıt + PNG silinir, sonra sunucudan silinir; sunucu hatası "Kısmi Silme" uyarısı verir |
+| [company_qr_tool/app.py:3041](../../company_qr_tool/app.py#L3041) | <code>def _delete_selected_device(self) -&gt; None:</code> | Önce yerel kayıt + PNG silinir, sonra sunucudan silinir; sunucu hatası "Kısmi Silme" uyarısı verir |
 | [company_qr_tool/app.py:585](../../company_qr_tool/app.py#L585) | <code>def delete_server_labeled_device(device_uid: str) -&gt; tuple[bool, str]:</code> | DELETE /api/company/labeled-devices/<UID>; anahtar yoksa sunucudan silinmez |
 | [company_qr_tool/app.py:648](../../company_qr_tool/app.py#L648) | <code>def generate_devices_catalog_pdf(</code> | A4 2480x3508 (300 DPI), sayfa başına 6 kart; QR'lar her kart için yeniden üretilir |
 | [company_qr_tool/app.py:483](../../company_qr_tool/app.py#L483) | <code>def load_regular_font(size: int) -&gt; ImageFont.FreeTypeFont &#124; ImageFont.ImageFont:</code> | Yazı tipi C:/Windows/Fonts altından aranır (segoeui/arial/calibri); yoksa Pillow varsayılanı (küçük/Türkçe karakter sorunu) |
@@ -493,9 +496,9 @@ git diff -- cihaz_kontrol/include/ota_guncelleme.h
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [cihaz_dene/app.py:17](../../cihaz_dene/app.py#L17) | <code>STATUS_START = "----- CIHAZ DURUMU -----"</code> | Bağımsız araç ESKİ başlığı bekler; güncel firmware "--- ESP32 SISTEM BILGISI ---" yazar (bu araçta alanlar dolmaz) |
-| [company_qr_tool/app.py:3113](../../company_qr_tool/app.py#L3113) | <code>STATUS_START = "--- ESP32 SISTEM BILGISI ---"</code> | Şirket aracındaki "Cihaz testi" sayfası güncel başlığı tanır (eski başlığı da: STATUS_START_ALT) |
-| [company_qr_tool/app.py:3404](../../company_qr_tool/app.py#L3404) | <code>if line.strip().startswith("---") and self._collecting_status and len(self._status_lines)…</code> | Blok, ilk "---" ile başlayan satırda (en az 3 satır sonra) kapanır ve alanlara işlenir |
-| [company_qr_tool/app.py:3429](../../company_qr_tool/app.py#L3429) | <code>key_map = {</code> | Firmware anahtarlarını arayüz alanlarına çevirir (Cihaz Unique ID → Cihaz UID vb.) |
+| [company_qr_tool/app.py:3128](../../company_qr_tool/app.py#L3128) | <code>STATUS_START = "--- ESP32 SISTEM BILGISI ---"</code> | Şirket aracındaki "Cihaz testi" sayfası güncel başlığı tanır (eski başlığı da: STATUS_START_ALT) |
+| [company_qr_tool/app.py:3419](../../company_qr_tool/app.py#L3419) | <code>if line.strip().startswith("---") and self._collecting_status and len(self._status_lines)…</code> | Blok, ilk "---" ile başlayan satırda (en az 3 satır sonra) kapanır ve alanlara işlenir |
+| [company_qr_tool/app.py:3444](../../company_qr_tool/app.py#L3444) | <code>key_map = {</code> | Firmware anahtarlarını arayüz alanlarına çevirir (Cihaz Unique ID → Cihaz UID vb.) |
 | [cihaz_kontrol/src/main.cpp:355](../../cihaz_kontrol/src/main.cpp#L355) | <code>Serial.println("--- ESP32 SISTEM BILGISI ---");</code> | Firmware durum bloğu; "?" (ve s/u/i) komutuyla yazılır |
 | [cihaz_kontrol/src/main.cpp:191](../../cihaz_kontrol/src/main.cpp#L191) | <code>Serial.println("Atolye modu kapali (Wi-Fi sifirlayin veya reset butonu 3 sn)");</code> | h/l/p seri komutları yalnız ATÖLYE MODUNDA çalışır; r ve k her derlemede açık |
 | [company_qr_tool/app.py:367](../../company_qr_tool/app.py#L367) | <code># DTR/RTS MUTLAKA open() oncesinde False yapilmali!</code> | Seri bağlantıda DTR/RTS kontrolü (CH340 kartı indirme moduna sokmasın) |
@@ -523,11 +526,11 @@ git diff -- cihaz_kontrol/include/ota_guncelleme.h
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:3305](../../company_qr_tool/app.py#L3305) | <code>def _start_beacon_listener(self) -&gt; None:</code> | UDP 8765 dinleyicisi (yayın kabul eder); soket açılamazsa (port başka uygulamada, izin yok) hata sessizce yutulur ve alan "-" kalır |
-| [company_qr_tool/app.py:3338](../../company_qr_tool/app.py#L3338) | <code>if "Yerel Beacon (UDP)" in self.status_vars:</code> | Beacon yalnız bağlı kartın kimliğiyle eşleşirse (ya da kimlik henüz okunmadıysa) "ip:port (rssi dBm) · canlı" yazılır |
+| [company_qr_tool/app.py:3320](../../company_qr_tool/app.py#L3320) | <code>def _start_beacon_listener(self) -&gt; None:</code> | UDP 8765 dinleyicisi (yayın kabul eder); soket açılamazsa (port başka uygulamada, izin yok) hata sessizce yutulur ve alan "-" kalır |
+| [company_qr_tool/app.py:3353](../../company_qr_tool/app.py#L3353) | <code>if "Yerel Beacon (UDP)" in self.status_vars:</code> | Beacon yalnız bağlı kartın kimliğiyle eşleşirse (ya da kimlik henüz okunmadıysa) "ip:port (rssi dBm) · canlı" yazılır |
 | [docs/YEREL_KONTROL_V2.md:9](../../docs/YEREL_KONTROL_V2.md#L9) | <code>- **Beacon** (cihaz → alt ağ broadcast, ~5 sn): `{"device_uid","ip","port":8765,"rssi","h…</code> | Cihazın yayınladığı beacon biçimi (UDP 8765) |
 | [company_qr_tool/app.py:617](../../company_qr_tool/app.py#L617) | <code>def fetch_device_public_ip(device_uid: str) -&gt; str:</code> | Genel IP sunucudan okunur: GET /api/company/devices/<UID>/runtime (X-Company-Key, yalnız HTTPS ya da yerel makine, 4 sn zaman aşımı); anahtar yoksa ya da hata olursa boş döner, hata penceresi açmaz |
-| [company_qr_tool/app.py:3456](../../company_qr_tool/app.py#L3456) | <code>def _request_public_ip(self, uid: str) -&gt; None:</code> | Kartın durum bloğu her geldiğinde istenir (başarıdan sonra 120 sn, hatada 30 sn arayla); COMPANY_API_KEY yoksa hiç sorulmaz |
+| [company_qr_tool/app.py:3471](../../company_qr_tool/app.py#L3471) | <code>def _request_public_ip(self, uid: str) -&gt; None:</code> | Kartın durum bloğu her geldiğinde istenir (başarıdan sonra 120 sn, hatada 30 sn arayla); COMPANY_API_KEY yoksa hiç sorulmaz |
 | [server/src/routes/company_routes.js:478](../../server/src/routes/company_routes.js#L478) | <code>companyRouter.get('/api/company/devices/:deviceUid/runtime', async (req, res) =&gt; {</code> | Salt okunur uç: yalnız { device_uid, public_ip, last_seen_at }; geçersiz kimlik 400, kayıtlı olmayan kart 404 |
 | [server/src/routes/company_routes.js:219](../../server/src/routes/company_routes.js#L219) | <code>export function companyDeviceRuntimeBody(deviceUid, row) {</code> | public_ip kartın OTA manifest isteğinin kaynak adresidir (açılışta Wi-Fi oturduktan ~1,5-2,5 dk sonra, sonra 24 saatte bir); henüz istek yoksa ya da adres Cloudflare kenarıysa null |
 
@@ -551,12 +554,12 @@ git diff -- cihaz_kontrol/include/ota_guncelleme.h
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:3514](../../company_qr_tool/app.py#L3514) | <code>class ScreenFirmwarePage:</code> | Ekran (ESP32-C3 + TFT) için ayrı sayfa (yan menüde "Ekran yazılımı", Ctrl+5): ekranı bul, sürüm oluştur, yükle |
-| [company_qr_tool/app.py:3728](../../company_qr_tool/app.py#L3728) | <code>s.write(b"\r\nDISP_PING\r\n")</code> | "Ekranı bul": her porta DISP_PING gönderir |
-| [company_qr_tool/app.py:3731](../../company_qr_tool/app.py#L3731) | <code>if "AHBU_DEVICE:DISPLAY" in buf or "Display Controller" in buf:</code> | Ekranın yanıtı; gelmezse esptool chip_id ile ESP32-C3 aranır ("ESP32-C3 ekran modülü bulundu (yazılım yanıt vermedi)" der) |
+| [company_qr_tool/app.py:3529](../../company_qr_tool/app.py#L3529) | <code>class ScreenFirmwarePage:</code> | Ekran (ESP32-C3 + TFT) için ayrı sayfa (yan menüde "Ekran yazılımı", Ctrl+5): ekranı bul, sürüm oluştur, yükle |
+| [company_qr_tool/app.py:3743](../../company_qr_tool/app.py#L3743) | <code>s.write(b"\r\nDISP_PING\r\n")</code> | "Ekranı bul": her porta DISP_PING gönderir |
+| [company_qr_tool/app.py:3746](../../company_qr_tool/app.py#L3746) | <code>if "AHBU_DEVICE:DISPLAY" in buf or "Display Controller" in buf:</code> | Ekranın yanıtı; gelmezse esptool chip_id ile ESP32-C3 aranır ("ESP32-C3 ekran modülü bulundu (yazılım yanıt vermedi)" der) |
 | [ekran_yazilimi/src/main.cpp:86](../../ekran_yazilimi/src/main.cpp#L86) | <code>if (pcSerialBuffer == "?" &#124;&#124; pcSerialBuffer == "IDENT" &#124;&#124; pcSerialBuffer == "DISP_PING") {</code> | Ekran yazılımının kimlik yanıtı (PC USB seri) |
 | [company_qr_tool/app.py:56](../../company_qr_tool/app.py#L56) | <code>DISPLAY_CONFIG_H_PATH = DISPLAY_PROJECT_DIR / "include" / "config.h"</code> | Sürüm ekran projesindeki config.h içindeki DISPLAY_FIRMWARE_VERSION satırına yazılır |
-| [company_qr_tool/app.py:4093](../../company_qr_tool/app.py#L4093) | <code>"esp32c3",</code> | Ekran yüklemesi her zaman --chip esp32c3, 0x0 bootloader ofseti ve 460800 baud ile yapılır |
+| [company_qr_tool/app.py:4108](../../company_qr_tool/app.py#L4108) | <code>"esp32c3",</code> | Ekran yüklemesi her zaman --chip esp32c3, 0x0 bootloader ofseti ve 460800 baud ile yapılır |
 
 **Olası nedenler**
 - Ekran farklı bir seri portta / başka program portu tutuyor
@@ -584,7 +587,7 @@ pio run -d ekran_yazilimi -e esp32c3_display
 | [company_qr_tool/launch_company_qr_tool.bat:17](../../company_qr_tool/launch_company_qr_tool.bat#L17) | <code>".venv\Scripts\python.exe" -m pip install -r requirements.txt</code> | Bağımlılıkları kurar; ağ/proxy yoksa "Kutuphane kurulumu basarisiz" |
 | [company_qr_tool/launch_company_qr_tool.bat:24](../../company_qr_tool/launch_company_qr_tool.bat#L24) | <code>start "" ".venv\Scripts\pythonw.exe" app.py</code> | pythonw konsolsuz çalışır: açılış hataları (ör. içe aktarma/Tk) görünmez |
 | [company_qr_tool/requirements.txt:1](../../company_qr_tool/requirements.txt#L1) | <code>qrcode[pil]&gt;=7.4.2</code> | QR üretimi (Pillow ile) |
-| [company_qr_tool/app.py:4180](../../company_qr_tool/app.py#L4180) | <code>def main() -&gt; None:</code> | Giriş noktası: App().run() |
+| [company_qr_tool/app.py:4195](../../company_qr_tool/app.py#L4195) | <code>def main() -&gt; None:</code> | Giriş noktası: App().run() |
 
 **Olası nedenler**
 - Python 3 / py başlatıcısı kurulu değil
@@ -1043,10 +1046,10 @@ flutter drive --profile -d windows --driver=test_driver/perf_driver.dart --targe
 | --- | --- | --- |
 | [cihaz_kontrol/host_test/run_all.py:22](../../cihaz_kontrol/host_test/run_all.py#L22) | <code>VCVARS = os.environ.get(</code> | vcvars64.bat yolu (varsayılan Visual Studio 18 Community); farklıysa VCVARS ortam değişkeni verilir |
 | [cihaz_kontrol/host_test/run_all.py:21](../../cihaz_kontrol/host_test/run_all.py#L21) | <code>ARDUINOJSON = os.path.normpath(os.path.join(HERE, '..', '.pio', 'libdeps', 'lolin_c3_mini…</code> | ArduinoJson cihaz_kontrol/.pio/libdeps/lolin_c3_mini altında aranır (önce bir kez pio run gerekir) |
-| [cihaz_kontrol/host_test/run_all.py:72](../../cihaz_kontrol/host_test/run_all.py#L72) | <code>print('UYARI: ArduinoJson bulunamadi (%s). Once `pio run -e lolin_c3_mini` ile cihaz_kont…</code> | Uyarı metni ve çözüm: pio run -e lolin_c3_mini |
-| [cihaz_kontrol/host_test/run_all.py:74](../../cihaz_kontrol/host_test/run_all.py#L74) | <code>subprocess.run(['node', 'gen_vectors.mjs'], cwd=HERE, check=True)</code> | t_core için rastgele HMAC vektörleri Node ile üretilir (Node gerekir) |
-| [cihaz_kontrol/host_test/run_all.py:98](../../cihaz_kontrol/host_test/run_all.py#L98) | <code>print('%-78s CALISMADI / DERLENMEDI (cikis=%d)' % (ad, r.returncode))</code> | Derleme/çalıştırma hatası çıktısı; test mantık hatasında "FAIL" satırları ve basarisiz sayısı basılır |
-| [cihaz_kontrol/host_test/README.md:19](../../cihaz_kontrol/host_test/README.md#L19) | <code>## Gereksinimler</code> | Windows + Visual Studio, Python 3, Node.js, PlatformIO ile bir kez derlenmiş cihaz_kontrol |
+| [cihaz_kontrol/host_test/run_all.py:73](../../cihaz_kontrol/host_test/run_all.py#L73) | <code>print('UYARI: ArduinoJson bulunamadi (%s). Once `pio run -e lolin_c3_mini` ile cihaz_kont…</code> | Uyarı metni ve çözüm: pio run -e lolin_c3_mini |
+| [cihaz_kontrol/host_test/run_all.py:75](../../cihaz_kontrol/host_test/run_all.py#L75) | <code>subprocess.run(['node', 'gen_vectors.mjs'], cwd=HERE, check=True)</code> | t_core için rastgele HMAC vektörleri Node ile üretilir (Node gerekir) |
+| [cihaz_kontrol/host_test/run_all.py:102](../../cihaz_kontrol/host_test/run_all.py#L102) | <code>print('%-78s CALISMADI / DERLENMEDI (cikis=%d)' % (ad, r.returncode))</code> | Derleme/çalıştırma hatası çıktısı; test mantık hatasında "FAIL" satırları ve basarisiz sayısı basılır |
+| [cihaz_kontrol/host_test/README.md:20](../../cihaz_kontrol/host_test/README.md#L20) | <code>## Gereksinimler</code> | Windows + Visual Studio, Python 3, Node.js, PlatformIO ile bir kez derlenmiş cihaz_kontrol |
 
 **Olası nedenler**
 - Visual Studio kurulu değil ya da yolu farklı (VCVARS)
@@ -1151,9 +1154,9 @@ node --test "tools/klavuz/*.test.mjs"
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [.github/workflows/ci.yml:41](../../.github/workflows/ci.yml#L41) | <code>- name: Lint (no-undef = hata)</code> | Sunucu işi: npm ci, lint (no-undef = hata), npm test (import smoke dahil) |
-| [.github/workflows/ci.yml:69](../../.github/workflows/ci.yml#L69) | <code>run: flutter analyze --no-fatal-infos</code> | Hata ve uyarılar CI'yı kırar; yalnız "info" düzeyi kırmaz |
-| [.github/workflows/ci.yml:84](../../.github/workflows/ci.yml#L84) | <code>- name: Run gitleaks</code> | Tam geçmiş taranır: eski ifşa olmuş sırlar kırmızıya neden olur |
-| [.github/workflows/ci.yml:91](../../.github/workflows/ci.yml#L91) | <code>GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}</code> | Kuruluma (organization) ait depolarda lisans secret'ı gerekir |
+| [.github/workflows/ci.yml:86](../../.github/workflows/ci.yml#L86) | <code>run: flutter analyze --no-fatal-infos</code> | Hata ve uyarılar CI'yı kırar; yalnız "info" düzeyi kırmaz |
+| [.github/workflows/ci.yml:101](../../.github/workflows/ci.yml#L101) | <code>- name: Run gitleaks</code> | Tam geçmiş taranır: eski ifşa olmuş sırlar kırmızıya neden olur |
+| [.github/workflows/ci.yml:108](../../.github/workflows/ci.yml#L108) | <code>GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}</code> | Kuruluma (organization) ait depolarda lisans secret'ı gerekir |
 | [.github/workflows/ci.yml:4](../../.github/workflows/ci.yml#L4) | <code># NOT: Bu dosyada DEPLOY YOKTUR (canli dagitim kullanici karari; AGENTS.md kural 8 elle y…</code> | CI canlıya dağıtım yapmaz (AGENTS.md kural 8 elle yürütülür) |
 | [SAHA_KONTROL_LISTESI.md:931](../../SAHA_KONTROL_LISTESI.md#L931) | <code>- [ ] **47.8.** GitHub: PR'da Actions "Server", "Flutter", "Secret scan" çalışır (gitleak…</code> | gitleaks geçmişteki parola yüzünden kırmızı çıkabilir; parolayı döndürme notu |
 | [docs/codebase/CONCERNS.md:9](../../docs/codebase/CONCERNS.md#L9) | <code>&#124; high &#124; Production credentials were exposed in the past (repository history, firmware bi…</code> | Geçmişte ifşa olan üretim sırları riski (döndürme ve geçmiş temizliği kullanıcı kararı) |
@@ -1491,7 +1494,7 @@ flutter doctor -v
 | [analysis_options.yaml:19](../../analysis_options.yaml#L19) | <code>include: package:flutter_lints/flutter.yaml</code> | Varsayılan Flutter lint seti; özel kural geçersiz kılmaları yorum satırında (kapalı) |
 | [analysis_options.yaml:13](../../analysis_options.yaml#L13) | <code>- android/**</code> | build, android, ios, web, windows, macos, linux klasörleri analiz dışıdır: oradaki kodu analyze görmez |
 | [pubspec.yaml:55](../../pubspec.yaml#L55) | <code>flutter_lints: ^6.0.0</code> | Lint paketi sürümü (sürüm yükselince yeni kurallar yeni uyarı çıkarabilir) |
-| [.github/workflows/ci.yml:69](../../.github/workflows/ci.yml#L69) | <code>run: flutter analyze --no-fatal-infos</code> | CI hata ve uyarıda kırılır, yalnız info düzeyi kırmaz |
+| [.github/workflows/ci.yml:86](../../.github/workflows/ci.yml#L86) | <code>run: flutter analyze --no-fatal-infos</code> | CI hata ve uyarıda kırılır, yalnız info düzeyi kırmaz |
 | [docs/codebase/CONVENTIONS.md:14](../../docs/codebase/CONVENTIONS.md#L14) | <code>### 2) Formatting and Linting</code> | Linter/biçimlendirici kuralları ve çalıştırma komutları |
 
 **Olası nedenler**
@@ -1554,4 +1557,42 @@ flutter pub get
 - Test belgesinin satır bilgisi için test-nerede-sunucu, test-nerede-flutter, test-nerede-firmware girişleri
 
 **Bkz.:** [test-nerede-sunucu](#test-nerede-sunucu), [test-nerede-flutter](#test-nerede-flutter), [test-nerede-firmware](#test-nerede-firmware)
+
+<a id="arac-ota-imza-araci"></a>
+### arac-ota-imza-araci · tools/ota_imza: "imza URETILMEDI", "ICINDE olamaz", "varsayilan bir yol YOKTUR", "ZATEN VAR" ya da dogrula "SONUC: GECMEDI" veriyor
+
+| Dosya:satır | Satırdaki kod | Ne işe yarar |
+| --- | --- | --- |
+| [tools/ota_imza/ota_imza.mjs:387](../../tools/ota_imza/ota_imza.mjs#L387) | <code>export function main(argv, ortam = {}) {</code> | Komut dağıtımı ve çıkış kodları: 0 başarılı/GEÇTİ, 1 reddedildi/GEÇMEDİ, 2 komut satırı hatası |
+| [tools/ota_imza/lib/anahtar.mjs:100](../../tools/ota_imza/lib/anahtar.mjs#L100) | <code>export function depoDisindaOlmali(yol, secenek) {</code> | Özel anahtar yolu git deposunun / proje klasörünün İÇİNDE olamaz (sembolik bağlantı ve ".." çözülür); varsayılan yol YOKTUR |
+| [tools/ota_imza/lib/imza.mjs:28](../../tools/ota_imza/lib/imza.mjs#L28) | <code>export function imzala({ imajYolu, hedef, surum, ozelAnahtar, rollbackMax }) {</code> | İmaj başlığı/hedef uyumu, sürüm metni sezgisi, imza üretimi ve hemen yeniden doğrulama; rollback_max sürümden büyük olmalı |
+| [tools/ota_imza/lib/imza.mjs:133](../../tools/ota_imza/lib/imza.mjs#L133) | <code>export function dogrula({ imajYolu, sigMetni, genelAnahtarlar, beklenenHedef, beklenenSur…</code> | Boyut, SHA-256, hedef, sürüm, key_id, Ed25519 imzası ve (--manifest ile) manifest çapraz kontrolü; hiçbir kontrol ilk hatada durmaz |
+| [tools/ota_imza/lib/imaj.mjs:88](../../tools/ota_imza/lib/imaj.mjs#L88) | <code>export function hedefUyumunuDenetle(hedef, veri) {</code> | ESP32 imaj başlığındaki yonga kimliği hedefle uyuşmalı (C3 imajı esp32-wroom diye imzalanamaz) |
+| [tools/ota_imza/lib/bicim.mjs:110](../../tools/ota_imza/lib/bicim.mjs#L110) | <code>export function imzaMesajiKur({ hedef, surum, boyut, sha256, rollbackMax }) {</code> | İmzalanan ileti: KAPI-OTA-IMZA-V1 + target/version/size/sha256 [+ rollback_max]; sunucu ve cihazla bayt-bayt aynı |
+
+**Olası nedenler**
+- "ICINDE olamaz" / "varsayilan bir yol YOKTUR": --ozel (ya da OTA_IMZA_OZEL_ANAHTAR) depo içinde ya da hiç verilmedi; özel anahtar depo DIŞINDA bir yola yazılır
+- "ZATEN VAR, uzerine yazilmaz": var olan anahtar/genel anahtar dosyası asla ezilmez (eskisini bilerek taşıyın)
+- "imza URETILMEDI": imaj başlığı hedefle uyuşmuyor (yanlış --hedef ya da başka hedefin .bin dosyası) ya da --rollback-max sürümden büyük değil; UYARI "surum metni ... imajin icinde bulunamadi": OTA_VERSION_* artırılmadan derlenmiş
+- dogrula "GECMEDI": .bin imzadan sonra değişti (boyut/sha256), .sig başka sürüm/hedef için, key_id verilen genel anahtarla eşleşmiyor ya da manifest.json (version/sha256/target/rollback_max) imzayla uyuşmuyor
+- "parola komut satirinda verilmez": parola yalnız OTA_IMZA_PAROLA ortam değişkeniyle verilir
+
+**Adım adım kontrol**
+- Çıktıdaki [HATA ] satırı hangi kontrolün düştüğünü söyler (boyut, sha256, anahtar kimligi, Ed25519 imzasi, manifest ...)
+- node tools/ota_imza/ota_imza.mjs yardim komutu tüm seçenekleri yazar; biçim ve saklama kuralları tools/ota_imza/README.md ve docs/OTA_IMZA.md
+- Araç testleri: node --test "tools/ota_imza/test/*.test.mjs" (anahtarı çalışma anında üretir; depoda özel anahtar yoktur)
+
+**Günlükte aranacak ifadeler**
+- `imza URETILMEDI`
+- `SONUC: GECMEDI`
+- `parola komut satirinda verilmez`
+
+**Komutlar**
+```bash
+node tools/ota_imza/ota_imza.mjs yardim
+```
+
+**İlgili testler:** [tools/ota_imza/test/dongu.test.mjs](../../tools/ota_imza/test/dongu.test.mjs), [tools/ota_imza/test/rollback.test.mjs](../../tools/ota_imza/test/rollback.test.mjs), [tools/ota_imza/test/vektor.test.mjs](../../tools/ota_imza/test/vektor.test.mjs)
+
+**Bkz.:** [sunucu-firmware-yukleme-imza](10-sunucu-api.md#sunucu-firmware-yukleme-imza), [cihaz-ota-imza-reddi](40-cihaz-yazilimi.md#cihaz-ota-imza-reddi), [arac-surum-derleme](#arac-surum-derleme)
 

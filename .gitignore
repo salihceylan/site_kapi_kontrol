@@ -45,6 +45,9 @@ migrate_working_dir/
 !/server/.env.example
 /server/.env
 /server/firmware/**/*.bin
+# OTA imzasi: sunucuda yuklemeyle uretilen imza (.bin.sig) ve yayin kayitlari (.release.json) imajlarla birlikte yalniz sunucuda durur
+/server/firmware/**/*.bin.sig
+/server/firmware/**/*.release.json
 cihaz_kontrol/firmware_releases/
 *.bin
 
@@ -74,6 +77,8 @@ hatalaar.txt
 *.key
 *.p12
 !/server/.env.example
+# OTA imza araci: ornek ortam dosyasi (yalniz AD, deger yok) izlenir; gercek .env ve ozel anahtarlar *.pem / .env.* ile yok sayilir
+!/tools/ota_imza/.env.example
 
 # Ekran yazilimi surum ikilileri (*.bin genel kurali da kapsar; acik tutuldu)
 ekran_yazilimi/firmware_releases/**/*.bin
@@ -88,6 +93,7 @@ ekran_yazilimi/firmware_releases/**/*.bin
 /cihaz_kontrol/host_test/*.pdb
 /cihaz_kontrol/host_test/*.ilk
 /cihaz_kontrol/host_test/vectors.txt
+/cihaz_kontrol/host_test/imza_vectors.txt
 /cihaz_kontrol/host_test/_calistir_*.bat
 
 # Firebase (push, Faz 3b-B). Depo herkese acik: istemci yapilandirmalari elle yerlestirilir (bkz. *.example),

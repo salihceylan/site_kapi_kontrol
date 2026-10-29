@@ -13,6 +13,7 @@
 #include <mbedtls/sha256.h>
 
 #include "device_konfig.h"
+#include "ota_imza.h"
 #include "ota_is_kimligi.h"
 #include "role_kontrol.h"
 #include "tls_kok_sertifika.h"
@@ -24,8 +25,12 @@
 // 4.3.2 / 5.2.1: ara surum, hicbir karta yuklenmedi.
 // 4.3.3 / 5.2.2: urun adi SmartKeyPass (BLE adi SmartKeyPass<UID>, mDNS smartkeypass-<uid>, MQTT istemci kimligi
 // SmartKeyPass-<UID>).
-inline constexpr char OTA_VERSION_C3[] = "4.3.3";
-inline constexpr char OTA_VERSION_WROOM[] = "5.2.2";
+// 4.4.0 / 5.3.0: OTA IMZA DOGRULAMASI (Ed25519; ota_imza.h, ota_ed25519.h, ota_public_key.h): paketin imzasi dogrulanmadan boot bolumu
+// DEGISTIRILMEZ; imzasiz / yanlis imzali paket reddedilir (ota_failed, "imza: ..."). Bu surum KOPRU surumdur: imza bilmeyen eski
+// cihazlara eski yolla (manifest + sha256) ulasir; calismaya basladiktan sonra SONRAKI her guncelleme imzali olmak ZORUNDADIR. Bu
+// zorunluluk derleme bayragi, manifest alani ya da NVS ayariyla kapatilamaz. Ayrinti: docs/OTA_IMZA_CIHAZ.md
+inline constexpr char OTA_VERSION_C3[] = "4.4.0";
+inline constexpr char OTA_VERSION_WROOM[] = "5.3.0";
 
 #if defined(BOARD_ESP32_WROOM_RELAY) || defined(BOARD_ESP32_WROOM)
 inline constexpr char OTA_TARGET[] = "esp32-wroom";
@@ -40,6 +45,14 @@ inline constexpr char OTA_MANIFEST_URL[] =
 #endif
 // Indirme URL'si yalniz manifestle ayni sunucudan ve HTTPS ile kabul edilir.
 inline constexpr char OTA_ALLOWED_URL_PREFIX[] = "https://api.gudeteknoloji.com.tr/";
+
+// OTA imzasi (ota_imza.h). Yetenek bildirimi: manifest isteginde `imza=<deger>` gonderilir; sunucu gecis (kopru) mantigini buna gore
+// kurabilir (imza bilmeyen eski cihazlar bu parametreyi gondermez). Imza dosyasi en fazla OTA_IMZA_DOSYA_MAX bayttir: aracin urettigi JSON
+// .sig (~450 bayt, rollback_max ile ~480) ya da ciplak imza (64 bayt ham / 128 hane hex / 88 karakter base64 + bosluk payi);
+// varsayilan adres paket adresi + ".sig".
+inline constexpr char OTA_IMZA_YETENEK[] = "ed25519-v1";
+inline constexpr size_t OTA_IMZA_DOSYA_MAX = 1024;
+inline constexpr char OTA_IMZA_DOSYA_EKI[] = ".sig";
 
 inline constexpr char OTA_PREFS_NAMESPACE[] = "ota_cfg";
 inline constexpr char OTA_PREF_LAST_STATUS[] = "last_status";
@@ -82,6 +95,34 @@ inline Preferences gOtaPrefs;
 inline OtaEventPublisher gOtaEventPublisher = nullptr;
 inline OtaMqttHook gOtaMqttKapat = nullptr;
 inline OtaMqttHook gOtaMqttAc = nullptr;
+
+// Gomulu imza anahtarinin durumu (ilk kullanimda bir kez hesaplanir). HAZIR degilse HICBIR paket kurulmaz (yer tutucu / gecersiz anahtar).
+inline OtaAnahtarDurumu gOtaImzaAnahtarDurumu = OTA_ANAHTAR_BILINMIYOR;
+
+inline OtaAnahtarDurumu otaImzaAnahtarDurumuAl() {
+  if (gOtaImzaAnahtarDurumu == OTA_ANAHTAR_BILINMIYOR) {
+    gOtaImzaAnahtarDurumu = otaImzaAnahtarDurumuHesapla(otaImzaAnahtari());
+  }
+  return gOtaImzaAnahtarDurumu;
+}
+
+// Anahtar parmak izi: SHA-256(genel anahtar) ilk 8 bayt = 16 hane kucuk harf hex. Seri cikis ve cihaz_kontrol/tools/ota_anahtar.mjs ayni
+// degeri gosterir; boylece kartta hangi anahtarin gomulu oldugu elle dogrulanir.
+inline String otaImzaParmakIzi() {
+  mbedtls_sha256_context ctx;
+  mbedtls_sha256_init(&ctx);
+  mbedtls_sha256_starts_ret(&ctx, 0);
+  mbedtls_sha256_update_ret(&ctx, otaImzaAnahtari(), OTA_IMZA_ANAHTAR_BOYUT);
+  uint8_t ozet[32];
+  mbedtls_sha256_finish_ret(&ctx, ozet);
+  mbedtls_sha256_free(&ctx);
+  char hex[17];
+  for (int i = 0; i < 8; i += 1) {
+    snprintf(&hex[i * 2], 3, "%02x", ozet[i]);
+  }
+  hex[16] = '\0';
+  return String(hex);
+}
 
 inline unsigned long otaDeviceJitterMs(unsigned long maxMs) {
   if (maxMs == 0) {
@@ -232,6 +273,20 @@ inline void otaSetup() {
   Serial.println(OTA_CURRENT_VERSION);
   Serial.print("OTA son durum: ");
   Serial.println(gOtaLastStatus);
+
+  // Imza anahtari: yer tutucu ya da gecersizse HICBIR paket kurulmaz; bunu acilista acikca yaz (sahada ilk bakilacak yer).
+  switch (otaImzaAnahtarDurumuAl()) {
+    case OTA_ANAHTAR_HAZIR:
+      Serial.print("OTA imza anahtari: HAZIR (Ed25519, zorunlu); parmak izi ");
+      Serial.println(otaImzaParmakIzi());
+      break;
+    case OTA_ANAHTAR_YER_TUTUCU:
+      Serial.println("OTA imza anahtari: YER TUTUCU; OTA ile guncelleme KAPALI (ota_public_key.h dosyasina gercek anahtari yazin).");
+      break;
+    default:
+      Serial.println("OTA imza anahtari: GECERSIZ; OTA ile guncelleme KAPALI (ota_public_key.h dosyasini kontrol edin).");
+      break;
+  }
 }
 
 // dagit=true (toplu is, ota_job_id): kontrol hemen degil, MAC tabanli 0-120 sn gecikmeyle planlanir; cok sayida cihaz ayni anda
@@ -307,7 +362,8 @@ inline bool otaReadManifest(JsonDocument& doc) {
   http.setTimeout(10000);             // ms
   String url = String(OTA_MANIFEST_URL) +
                "?current_version=" + OTA_CURRENT_VERSION +
-               "&uid=" + cihazUniqueId();
+               "&uid=" + cihazUniqueId() +
+               "&imza=" + OTA_IMZA_YETENEK;  // imza dogrulayabildigini bildirir (sunucu gecis mantigi icin; eski cihazlar gondermez)
   esp_task_wdt_reset();
   if (!http.begin(otaClient, url)) {
     otaPersistStatus("manifest baglantisi baslatilamadi");
@@ -429,12 +485,163 @@ class OtaHashStream : public Stream {
   }
 };
 
-// Firmware'i indirir, SHA-256'yi dogrular ve yalnizca dogruysa boot bolumunu degistirir.
+// Imza dosyasi tamponu: yigin yerine kalici bellekte (OTA tek is parcaciginda, gOtaRunning ile sirali calisir; TLS zinciri zaten derin).
+inline uint8_t gOtaImzaDosyaTamponu[OTA_IMZA_DOSYA_MAX];
+
+// Imza dosyasini (en fazla OTA_IMZA_DOSYA_MAX bayt) sabit tampona alan akis; tasarsa durur (sunucu dev govde gonderip bellegi dolduramaz).
+class OtaKucukAkis : public Stream {
+ public:
+  uint8_t* veri = gOtaImzaDosyaTamponu;
+  size_t uzunluk = 0;
+  bool tasti = false;
+
+  size_t write(const uint8_t* kaynak, size_t adet) override {
+    if (tasti || uzunluk + adet > OTA_IMZA_DOSYA_MAX) {
+      tasti = true;
+      return 0;
+    }
+    memcpy(veri + uzunluk, kaynak, adet);
+    uzunluk += adet;
+    return adet;
+  }
+  size_t write(uint8_t b) override { return write(&b, 1); }
+  int available() override { return 0; }
+  int read() override { return -1; }
+  int peek() override { return -1; }
+  void flush() override {}
+};
+
+// Indirilen imza DOSYASINI cozer: (1) aracin .sig JSON'u (KAPI-OTA-IMZA-V1; tools/ota_imza/README.md) ya da (2) CIPLAK imza (64 bayt ham /
+// 128 hane hex / 88 karakter base64). JSON'da yalniz "format" (etiket), "algorithm" (Ed25519) ve "signature" (128 hane hex) okunur;
+// target/version/size/sha256/key_id dosyadan ALINMAZ: cihaz yuku KENDI bildigi degerlerle kurar (imza bunlari zaten baglar, uyusmazlik
+// dogrulamada duser). Bilinmeyen ek alanlar yok sayilir (ileriye uyum). UTF-8 BOM ve bas/son bosluk tolere edilir.
+inline bool otaImzaDosyasiCozumle(const uint8_t* veri, size_t n, uint8_t imza[OTA_IMZA_BOYUT]) {
+  if (veri == nullptr) {
+    return false;
+  }
+  if (n == OTA_IMZA_BOYUT) {  // 64 bayt: ham ikili imza (hicbir JSON dosyasi bu kadar kisa olamaz)
+    return otaImzaCozumle(veri, n, imza);
+  }
+  size_t bas = 0;
+  if (n >= 3 && veri[0] == 0xEF && veri[1] == 0xBB && veri[2] == 0xBF) {
+    bas = 3;
+  }
+  while (bas < n && (veri[bas] == ' ' || veri[bas] == '\t' || veri[bas] == '\r' || veri[bas] == '\n')) {
+    bas += 1;
+  }
+  if (bas >= n || veri[bas] != '{') {
+    return otaImzaCozumle(veri, n, imza);  // JSON degil: ciplak hex / base64
+  }
+  JsonDocument doc;
+  if (deserializeJson(doc, reinterpret_cast<const char*>(veri) + bas, n - bas) != DeserializationError::Ok) {
+    return false;
+  }
+  if (strcmp(doc["format"] | "", OTA_IMZA_YUK_ETIKETI) != 0 || strcmp(doc["algorithm"] | "", OTA_IMZA_ALGORITMA) != 0) {
+    return false;
+  }
+  const char* sig = doc["signature"] | "";
+  if (strlen(sig) != 2 * OTA_IMZA_BOYUT) {  // aracin bicimi: tam 128 hane hex
+    return false;
+  }
+  return otaImzaCozumle(reinterpret_cast<const uint8_t*>(sig), 2 * OTA_IMZA_BOYUT, imza);
+}
+
+// Cihazin imza dogrulamasi icin manifestten aldigi bilgiler (otaCheckAndUpdate doldurur).
+struct OtaImzaIstegi {
+  String surum;          // manifest surumu (imza yukune girer)
+  String gomuluImza;     // manifestteki `signature` alani (doluysa imza dosyasi indirilmez)
+  String imzaUrl;        // imza dosyasi adresi (OTA_ALLOWED_URL_PREFIX ile baslamak ZORUNDA)
+  bool dusurme = false;  // izinli surum dusurme modu (imza yukunde rollback_max aranir)
+  String rollbackMax;    // dusurme modunda imza yukune girecek ust surum
+};
+
+// Imza baytlarini alir: manifestte gomulu `signature` varsa o, yoksa imza dosyasi (HTTPS, ayni sunucu, ayni kok CA). Donus "" = tamam
+// (imza dolu), aksi halde "imza: ..." hata metni. agHatasi: gecici ag hatasi (cagiran deneme hakkini iade eder); 404/403/410 KESIN
+// "imza yok" sayilir (hak yanar: imzasiz paket tekrar denenerek duzelmez).
+inline String otaImzaAl(const OtaImzaIstegi& istek, uint8_t imza[OTA_IMZA_BOYUT], bool& agHatasi) {
+  if (!istek.gomuluImza.isEmpty()) {
+    if (!otaImzaCozumle(reinterpret_cast<const uint8_t*>(istek.gomuluImza.c_str()), istek.gomuluImza.length(), imza)) {
+      return "imza: bicim gecersiz (manifest signature)";
+    }
+    return "";
+  }
+
+  WiFiClientSecure imzaClient;
+  imzaClient.setCACert(TLS_ROOT_CA);
+  imzaClient.setTimeout(10);           // SANIYE
+  imzaClient.setHandshakeTimeout(15);  // SANIYE
+
+  HTTPClient http;
+  http.setTimeout(10000);              // ms
+  esp_task_wdt_reset();
+  if (!http.begin(imzaClient, istek.imzaUrl)) {
+    return "imza: baglanti baslatilamadi";
+  }
+  const int code = http.GET();
+  esp_task_wdt_reset();
+  if (code != HTTP_CODE_OK) {
+    http.end();
+    if (code == 404 || code == 403 || code == 410) {
+      return "imza: dosya yok (http " + String(code) + ")";
+    }
+    agHatasi = true;  // negatif: baglanti/TLS/zaman asimi; diger pozitif kodlar: gecici sunucu sorunu
+    return "imza: dosya alinamadi (http " + String(code) + ")";
+  }
+  const int boyut = http.getSize();
+  if (boyut > static_cast<int>(OTA_IMZA_DOSYA_MAX)) {
+    http.end();
+    return "imza: dosya cok buyuk";
+  }
+  OtaKucukAkis akis;
+  const int okunan = http.writeToStream(&akis);
+  http.end();
+  if (akis.tasti) {
+    return "imza: dosya cok buyuk";
+  }
+  if (okunan < 0 || (boyut >= 0 && okunan != boyut)) {
+    agHatasi = true;  // akis kesildi / okuma zaman asimi
+    return "imza: dosya okunamadi";
+  }
+  if (!otaImzaDosyasiCozumle(akis.veri, akis.uzunluk, imza)) {
+    return "imza: bicim gecersiz";
+  }
+  return "";
+}
+
+// Indirilen ve flash'a yazilan paketin imzasini dogrular. "" = gecerli; aksi halde "imza: ..." hata metni (paket KURULMAZ).
+// Yuk cihazin GERCEKTE bildigi degerlerden kurulur: kendi hedefi, indirdigi bayt sayisi ve hesapladigi SHA-256 (manifestin iddiasi degil).
+inline String otaImzaYukunuDogrula(const uint8_t imza[OTA_IMZA_BOYUT], const OtaImzaIstegi& istek, uint32_t boyut, const String& sha256Kucuk) {
+  const char* rollback = istek.dusurme ? istek.rollbackMax.c_str() : nullptr;
+  esp_task_wdt_reset();  // Ed25519 dogrulamasi ~0,3-1,5 sn surer; watchdog beslenir
+  const OtaImzaSonuc sonuc = otaImzaDogrula(imza, otaImzaAnahtari(), OTA_TARGET, istek.surum.c_str(), boyut, sha256Kucuk.c_str(), rollback);
+  esp_task_wdt_reset();
+  switch (sonuc) {
+    case OTA_IMZA_TAMAM:
+      return "";
+    case OTA_IMZA_ANAHTAR_YOK:
+      return "imza: anahtar yerlestirilmemis";
+    case OTA_IMZA_ALAN_GECERSIZ:
+      return "imza: surum/hedef alani gecersiz";
+    default:
+      return "imza: dogrulama basarisiz";
+  }
+}
+
+// Firmware'i indirir, SHA-256'yi dogrular, IMZAYI dogrular ve yalnizca ikisi de dogruysa boot bolumunu degistirir.
 // Donus: "" = basarili, aksi halde hata metni.
 // agHatasi (cikis): true ise hata gecici AG hatasidir (baglanti/TLS/HTTP durum kodu/akis kopmasi); cagiran deneme hakkini iade eder.
 // false ise hak YANAR: url/boyut/Update.begin, flash yazma, sha256 uyusmazligi ve Update.end (imaj dogrulama) hatalari.
-inline String otaIndirVeYaz(const String& url, const String& beklenenSha256, const String& md5, bool& agHatasi) {
+inline String otaIndirVeYaz(const String& url, const String& beklenenSha256, const String& md5, const OtaImzaIstegi& imzaIstegi,
+                            bool& agHatasi) {
   agHatasi = false;
+
+  // IMZA ONCE: imza yoksa ya da bozuksa 1,8 MB indirmeye ve OTA bolumune yazmaya HIC baslanmaz.
+  uint8_t imza[OTA_IMZA_BOYUT];
+  const String imzaHata = otaImzaAl(imzaIstegi, imza, agHatasi);
+  if (!imzaHata.isEmpty()) {
+    return imzaHata;
+  }
+
   WiFiClientSecure otaClient;
   otaClient.setCACert(TLS_ROOT_CA);
   otaClient.setTimeout(15);           // SANIYE
@@ -489,10 +696,27 @@ inline String otaIndirVeYaz(const String& url, const String& beklenenSha256, con
     return "sha256 uyusmuyor";
   }
 
+  // IMZA: sha256 manifestle tutuyor; simdi yuk (hedef + surum + boyut + sha256 [+ rollback_max]) Ed25519 ile dogrulanir. Update.end'den
+  // ONCE: gecersizse boot bolumu degismez (imaj yalniz bos OTA bolumune yazilmistir ve burada iptal edilir).
+  const String imzaSonuc = otaImzaYukunuDogrula(imza, imzaIstegi, static_cast<uint32_t>(akis.yazilan), hesaplanan);
+  if (!imzaSonuc.isEmpty()) {
+    Update.abort();
+    return imzaSonuc;
+  }
+
   if (!Update.end(false)) {
     return "Update.end basarisiz: " + String(Update.errorString());
   }
   return "";
+}
+
+// Kalici ON KOSUL reddi (indirme hic baslamadan): durumu yaz, ota_failed yayinla, ussel geri cekilmeyle yeniden planla.
+inline void otaOnKosulReddi(const String& durum, const String& version, const char* seriMetni) {
+  otaPersistStatus(durum, version);
+  Serial.println(seriMetni);
+  otaPublishEvent("ota_failed", gOtaLastStatus);
+  otaPlanFailure();
+  gOtaRunning = false;
 }
 
 inline void otaCheckAndUpdate() {
@@ -550,6 +774,18 @@ inline void otaCheckAndUpdate() {
   const String url = String(manifest["url"] | "");
   const String sha256 = String(manifest["sha256"] | "");
   const String md5 = String(manifest["md5"] | "");
+  // Imza alanlari (hepsi ISTEGE BAGLI; hicbiri imza zorunlulugunu kapatamaz - imza denetimi manifestten bagimsiz, her kurulumda yapilir):
+  //  signature            imza metni (hex / base64); yoksa imza dosyasi indirilir
+  //  sig_url | signature_url   imza dosyasi adresi; yoksa paket adresi + ".sig"
+  //  allow_downgrade | downgrade_allowed   izinli surum dusurme ADAYLIGI (kurulum icin imzada rollback_max sart)
+  //  rollback_max         izinli dusurmenin kapsami (bu surum ve daha eski cihazlar); yoksa cihazin kendi surumu
+  const String imzaGomulu = String(manifest["signature"] | "");
+  String imzaUrl = String(manifest["sig_url"] | "");
+  if (imzaUrl.isEmpty()) {
+    imzaUrl = String(manifest["signature_url"] | "");
+  }
+  const bool dusurmeIzni = (manifest["allow_downgrade"] | false) || (manifest["downgrade_allowed"] | false);
+  String rollbackMax = String(manifest["rollback_max"] | "");
   // NOT: gOtaArdisikHata burada SIFIRLANMAZ (manifest alinmasi basari degildir; ussel geri cekilme 10/20/40 dk bozulurdu).
   // Yalniz "guncel" dallarinda sifirlanir.
 
@@ -572,15 +808,39 @@ inline void otaCheckAndUpdate() {
     return;
   }
 
-  // Yalnizca ARTAN surum: sunucu update_available dese bile esit/eski surum (downgrade) kabul edilmez.
+  // Yalnizca ARTAN surum: sunucu update_available dese bile esit/eski surum (downgrade) kabul edilmez. TEK ISTISNA izinli surum
+  // dusurmedir: manifest `allow_downgrade: true` derse VE surum gercekten ESKIYSE (esit asla) paket ADAY olur; ama kurulabilmesi icin
+  // imzalanan yukte `rollback_max` satiri sarttir (ota_imza.h) - sunucunun tek basina verdigi izin cihazda hicbir sey acmaz.
+  bool dusurmeModu = false;
   if (otaSurumKarsilastir(version, String(OTA_CURRENT_VERSION)) <= 0) {
-    otaPersistStatus("guncel", String(OTA_CURRENT_VERSION));
-    Serial.println("OTA: manifest surumu mevcut surumden yeni degil; downgrade reddedildi.");
-    otaPublishEvent("ota_up_to_date", String(OTA_CURRENT_VERSION));
-    gOtaArdisikHata = 0;  // guncel (downgrade reddedildi): geri cekilme basa doner
-    otaPlanNext(gOtaPeriodicIntervalMs);
-    gOtaRunning = false;
-    return;
+    dusurmeModu = dusurmeIzni && otaSurumKarsilastir(version, String(OTA_CURRENT_VERSION)) < 0;
+    if (!dusurmeModu) {
+      otaPersistStatus("guncel", String(OTA_CURRENT_VERSION));
+      Serial.println("OTA: manifest surumu mevcut surumden yeni degil; downgrade reddedildi.");
+      otaPublishEvent("ota_up_to_date", String(OTA_CURRENT_VERSION));
+      gOtaArdisikHata = 0;  // guncel (downgrade reddedildi): geri cekilme basa doner
+      otaPlanNext(gOtaPeriodicIntervalMs);
+      gOtaRunning = false;
+      return;
+    }
+    // Izinli dusurmenin kapsami: rollback_max'tan (dahil) eski/esit surumdeki cihazlar. Bos ise yalnizca cihazin kendi surumu.
+    if (rollbackMax.isEmpty()) {
+      rollbackMax = String(OTA_CURRENT_VERSION);
+    }
+    if (!otaImzaSurumGecerliMi(rollbackMax.c_str()) || otaSurumKarsilastir(String(OTA_CURRENT_VERSION), rollbackMax) > 0) {
+      otaPersistStatus("guncel", String(OTA_CURRENT_VERSION));
+      Serial.println("OTA: surum dusurme izni bu cihazin surumunu kapsamiyor (rollback_max); dusurulmedi.");
+      otaPublishEvent("ota_up_to_date", String(OTA_CURRENT_VERSION));
+      gOtaArdisikHata = 0;
+      otaPlanNext(gOtaPeriodicIntervalMs);
+      gOtaRunning = false;
+      return;
+    }
+    Serial.print("OTA: IZINLI SURUM DUSURME adayi (");
+    Serial.print(OTA_CURRENT_VERSION);
+    Serial.print(" -> ");
+    Serial.print(version);
+    Serial.println("); imzada rollback_max zorunlu.");
   }
 
   if (!url.startsWith(OTA_ALLOWED_URL_PREFIX)) {
@@ -601,10 +861,40 @@ inline void otaCheckAndUpdate() {
     return;
   }
 
+  // Imza on kosullari (indirme hic baslamadan, deneme hakki yakmadan): surum alani imza yukune girebilmeli; imza adresi izinli sunucuda olmali.
+  if (!otaImzaSurumGecerliMi(version.c_str())) {
+    otaOnKosulReddi("imza: manifest surum alani gecersiz", version, "OTA HATA: manifest version alani imza yukune uygun degil; guncelleme yapilmadi.");
+    return;
+  }
+  if (imzaGomulu.isEmpty()) {
+    if (imzaUrl.isEmpty()) {
+      if (url.indexOf('?') >= 0 || url.indexOf('#') >= 0) {
+        otaOnKosulReddi("imza: adres turetilemedi (sig_url gerekli)", version, "OTA HATA: paket adresi sorgu iceriyor; imza adresi (sig_url) manifestte verilmeli.");
+        return;
+      }
+      imzaUrl = url + OTA_IMZA_DOSYA_EKI;  // varsayilan: paket adresi + ".sig"
+    }
+    if (!imzaUrl.startsWith(OTA_ALLOWED_URL_PREFIX)) {
+      otaOnKosulReddi("imza: adres reddedildi (https/sunucu uyusmuyor)", version, "OTA HATA: imza adresi izinli sunucu/HTTPS degil.");
+      return;
+    }
+  }
+
   const esp_partition_t* updatePartition = esp_ota_get_next_update_partition(nullptr);
   if (updatePartition == nullptr) {
     otaPersistStatus("OTA partition yok; cihaza USB ile OTA partition tablosu yuklenmeli", version);
     Serial.println(gOtaLastStatus);
+    otaPublishEvent("ota_failed", gOtaLastStatus);
+    otaPlanNext(gOtaPeriodicIntervalMs);
+    gOtaRunning = false;
+    return;
+  }
+
+  // Imza anahtari hazir degilse (yer tutucu / gecersiz) HICBIR paket dogrulanamaz: indirmeye baslanmaz, deneme hakki yakilmaz.
+  // Kalici durum oldugu icin ussel geri cekilme anlamsiz; periyodik aralikta yeniden bildirilir.
+  if (otaImzaAnahtarDurumuAl() != OTA_ANAHTAR_HAZIR) {
+    otaPersistStatus("imza: anahtar yerlestirilmemis; guncelleme yapilmadi", version);
+    Serial.println("OTA HATA: imza anahtari hazir degil (ota_public_key.h yer tutucu/gecersiz); guncelleme yapilmadi.");
     otaPublishEvent("ota_failed", gOtaLastStatus);
     otaPlanNext(gOtaPeriodicIntervalMs);
     gOtaRunning = false;
@@ -635,8 +925,15 @@ inline void otaCheckAndUpdate() {
     gOtaMqttKapat();
   }
 
+  OtaImzaIstegi imzaIstegi;
+  imzaIstegi.surum = version;
+  imzaIstegi.gomuluImza = imzaGomulu;
+  imzaIstegi.imzaUrl = imzaUrl;
+  imzaIstegi.dusurme = dusurmeModu;
+  imzaIstegi.rollbackMax = dusurmeModu ? rollbackMax : String("");
+
   bool agHatasi = false;
-  const String hata = otaIndirVeYaz(url, sha256, md5, agHatasi);
+  const String hata = otaIndirVeYaz(url, sha256, md5, imzaIstegi, agHatasi);
 
   // Sonuc once NVS'e yazilir (guc kesilirse acilista dogru okunsun); sonra MQTT hemen yeniden baglanir ki
   // ota_success / ota_failed olayi (sunucudaki OTA is takibi bunlara bagli) sunucuya ulassin.
@@ -654,6 +951,9 @@ inline void otaCheckAndUpdate() {
 
   if (!hata.isEmpty()) {
     Serial.println(gOtaLastStatus);
+    if (hata.startsWith("imza")) {
+      Serial.println("OTA GUVENLIK: paket imzasi dogrulanamadi; guncelleme REDDEDILDI (boot bolumu degismedi).");
+    }
     otaPublishEvent("ota_failed", gOtaLastStatus);
     otaPlanFailure();  // geri cekilme: 10 dk, 20 dk, 40 dk ...
     gOtaRunning = false;

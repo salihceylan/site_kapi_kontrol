@@ -16,6 +16,8 @@ Bu bölüm cihaz_kontrol (ESP32-C3 saha cihazı + ESP32-WROOM röle kartı), ekr
 | [cihaz_kontrol/include/tls_kok_sertifika.h](../../cihaz_kontrol/include/tls_kok_sertifika.h) | Gömülü kök CA (MQTT ve OTA TLS doğrulaması) |
 | [cihaz_kontrol/include/ota_guncelleme.h](../../cihaz_kontrol/include/ota_guncelleme.h) | OTA: manifest, indirme, SHA-256, rollback doğrulaması, deneme sınırı, hedef (c3/wroom) ve sürüm sabitleri |
 | [cihaz_kontrol/include/ota_is_kimligi.h](../../cihaz_kontrol/include/ota_is_kimligi.h) | OTA iş kimliği (ota_job_id) yansıtma |
+| [cihaz_kontrol/include/ota_imza.h](../../cihaz_kontrol/include/ota_imza.h) | OTA paket imzası (KAPI-OTA-IMZA-V1): imzalanan ileti, anahtar durumu (HAZIR / YER TUTUCU / GEÇERSİZ), çıplak imza çözümleme, otaImzaDogrula |
+| [cihaz_kontrol/include/ota_public_key.h](../../cihaz_kontrol/include/ota_public_key.h) | Gömülü OTA genel anahtarı (32 bayt; teslimde YER TUTUCU: gerçek anahtar ota_anahtar.mjs yaz ile yazılır) |
 | [cihaz_kontrol/include/gm60_scanner.h](../../cihaz_kontrol/include/gm60_scanner.h) | GM60 QR okuyucu: UART, self-test, QR korumaları, qr_verify gönderimi |
 | [cihaz_kontrol/include/qr_dogrulama.h](../../cihaz_kontrol/include/qr_dogrulama.h) | ÖLÜ KOD: hiçbir yerden çağrılmaz; QR doğrulaması yalnız sunucudadır |
 | [cihaz_kontrol/include/role_kontrol.h](../../cihaz_kontrol/include/role_kontrol.h) | Röle pini, pulse süresi, debounce, manuel tutma, esp_timer ile bırakma |
@@ -43,7 +45,7 @@ Bu bölüm cihaz_kontrol (ESP32-C3 saha cihazı + ESP32-WROOM röle kartı), ekr
 | [OTA_KURULUM.txt](../../OTA_KURULUM.txt) | OTA akışı, manifest alanları, sunucu dizin yapısı (c3 / wroom ayrı) |
 | [docs/YEREL_KONTROL_V2.md](../../docs/YEREL_KONTROL_V2.md) | Yerel kontrol protokol sözleşmesi (LOCALCTRL_V2) |
 
-## Bu bölümdeki girişler (44)
+## Bu bölümdeki girişler (45)
 
 - [cihaz-wifi-baglanmiyor](#cihaz-wifi-baglanmiyor) — Cihaz Wi-Fi'ye bağlanmıyor: Wi-Fi LED'i yavaş (yaklaşık 0,7 sn) yanıp sönüyor, uygulamada cihaz çevrimdışı
 - [cihaz-led-hizli-yanip-sonuyor](#cihaz-led-hizli-yanip-sonuyor) — Cihazın Wi-Fi LED'i hızlı (yaklaşık 0,15 sn) yanıp sönüyor: Wi-Fi bilgisi girilmemiş, kurulum bekliyor
@@ -89,6 +91,7 @@ Bu bölüm cihaz_kontrol (ESP32-C3 saha cihazı + ESP32-WROOM röle kartı), ekr
 - [cihaz-yerel-anahtar-reddedildi](#cihaz-yerel-anahtar-reddedildi) — Sunucudan yerel kontrol anahtarı gönderildi ama cihaz "local_control_config_rejected" (invalid_token) olayı yayınlıyor; yerel kontrol "kapali (anahtar yok)" kalıyor
 - [cihaz-host-test-calismiyor](#cihaz-host-test-calismiyor) — Firmware ana makine testleri (host_test) derlenmiyor ya da başarısız; "vcvars64.bat bulunamadi" ya da ArduinoJson yolu hatası
 - [cihaz-kok-sertifika-suresi](#cihaz-kok-sertifika-suresi) — Tüm cihazlar aynı gün MQTT ve OTA için TLS hatası vermeye başladı (kök sertifika değişti ya da süresi doldu)
+- [cihaz-ota-imza-reddi](#cihaz-ota-imza-reddi) — Cihaz OTA güncellemesini kurmuyor: OTA durumu ya da ota_failed ayrıntısı "imza: ..." ("imza: dosya yok", "imza: dogrulama basarisiz", "imza: anahtar yerlestirilmemis", "imza: bicim gecersiz")
 
 ## Girişler
 
@@ -254,7 +257,7 @@ cd cihaz_kontrol && pio device monitor -e lolin_c3_mini
 | [cihaz_kontrol/include/device_konfig.h:57](../../cihaz_kontrol/include/device_konfig.h#L57) | <code>return now &gt; 1600000000 ? static_cast&lt;uint32_t&gt;(now) : 0;</code> | Eşik: NTP gelmeden time() küçük değer döner |
 | [cihaz_kontrol/include/wifi_baglanti.h:697](../../cihaz_kontrol/include/wifi_baglanti.h#L697) | <code>sNtpConfigured = true;</code> | Wi-Fi bağlanınca configTime ile NTP başlatılır (pool.ntp.org, time.google.com, time.cloudflare.com; UTC+3) |
 | [cihaz_kontrol/include/mqtt_baglanti.h:430](../../cihaz_kontrol/include/mqtt_baglanti.h#L430) | <code>if (!zamanSenkronMu()) {</code> | Saat gelmeden MQTT denemesi YAPILMAZ; 5 sn sonra tekrar bakılır (günlük yazmaz) |
-| [cihaz_kontrol/include/ota_guncelleme.h:275](../../cihaz_kontrol/include/ota_guncelleme.h#L275) | <code>if (!zamanSenkronMu()) {</code> | Saat gelmeden OTA kontrolü başlamaz (TLS doğrulaması saate bağlı) |
+| [cihaz_kontrol/include/ota_guncelleme.h:330](../../cihaz_kontrol/include/ota_guncelleme.h#L330) | <code>if (!zamanSenkronMu()) {</code> | Saat gelmeden OTA kontrolü başlamaz (TLS doğrulaması saate bağlı) |
 
 **Olası nedenler**
 - Ağ NTP sunucularına (UDP 123) ya da DNS'e izin vermiyor / internet yok
@@ -312,7 +315,7 @@ cd cihaz_kontrol && pio device monitor -e lolin_c3_mini
 | [cihaz_kontrol/include/mqtt_baglanti.h:584](../../cihaz_kontrol/include/mqtt_baglanti.h#L584) | <code>espClientSecure.setCACert(TLS_ROOT_CA);</code> | MQTT TLS doğrulaması bu kök CA ile yapılır (setInsecure YOK) |
 | [cihaz_kontrol/include/mqtt_baglanti.h:504](../../cihaz_kontrol/include/mqtt_baglanti.h#L504) | <code>if (espClientSecure.lastError(tlsHata, sizeof(tlsHata) - 1) != 0 &amp;&amp; tlsHata[0] != '\0') {</code> | mbedtls hata metni " tls=..." olarak seriye eklenir |
 | [cihaz_kontrol/include/mqtt_baglanti.h:32](../../cihaz_kontrol/include/mqtt_baglanti.h#L32) | <code>inline constexpr uint32_t MQTT_TLS_HANDSHAKE_TIMEOUT_S = 10;</code> | El sıkışma zaman aşımı 10 sn (loop bu sürede bloklanabilir) |
-| [cihaz_kontrol/include/ota_guncelleme.h:300](../../cihaz_kontrol/include/ota_guncelleme.h#L300) | <code>inline bool otaReadManifest(JsonDocument&amp; doc) {</code> | OTA da aynı kök CA ile api.gudeteknoloji.com.tr'ye bağlanır: sertifika sorunu OTA'yı da bozar |
+| [cihaz_kontrol/include/ota_guncelleme.h:355](../../cihaz_kontrol/include/ota_guncelleme.h#L355) | <code>inline bool otaReadManifest(JsonDocument&amp; doc) {</code> | OTA da aynı kök CA ile api.gudeteknoloji.com.tr'ye bağlanır: sertifika sorunu OTA'yı da bozar |
 
 **Olası nedenler**
 - Broker/API sertifika zinciri gömülü kök CA'ya (ISRG Root X1) bağlanmıyor ya da sunucu sertifikasının süresi dolmuş (yenilenmemiş)
@@ -448,10 +451,10 @@ openssl s_client -connect mqtt.gudeteknoloji.com.tr:8883 -servername mqtt.gudete
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/include/ota_guncelleme.h:266](../../cihaz_kontrol/include/ota_guncelleme.h#L266) | <code>inline bool otaShouldCheckNow() {</code> | Kontrol başlamasının tüm ön koşulları: Wi-Fi hazır, OTA sürmüyor, röle pasif, saat senkron, imaj doğrulanmış, 10 dk tekrar sınırı |
-| [cihaz_kontrol/include/ota_guncelleme.h:498](../../cihaz_kontrol/include/ota_guncelleme.h#L498) | <code>inline void otaCheckAndUpdate() {</code> | Ana döngüden her turda çağrılır; ilk plan Wi-Fi oturunca ~90 sn + MAC tabanlı gecikmeyle kurulur |
-| [cihaz_kontrol/include/ota_guncelleme.h:50](../../cihaz_kontrol/include/ota_guncelleme.h#L50) | <code>inline constexpr unsigned long OTA_BOOT_CHECK_DELAY_MS = 90UL * 1000UL;</code> | Açılıştan sonra ilk otomatik kontrol en az ~90 sn (+0-60 sn cihaz gecikmesi) sonra; sonra 24 saatte bir |
-| [cihaz_kontrol/include/ota_guncelleme.h:240](../../cihaz_kontrol/include/ota_guncelleme.h#L240) | <code>inline void otaTalepEt(const char* reason = "manual", bool dagit = false) {</code> | Elle/MQTT talebi: tekil talep hemen, toplu iş (ota_job_id) 0-120 sn dağıtılarak planlanır |
+| [cihaz_kontrol/include/ota_guncelleme.h:321](../../cihaz_kontrol/include/ota_guncelleme.h#L321) | <code>inline bool otaShouldCheckNow() {</code> | Kontrol başlamasının tüm ön koşulları: Wi-Fi hazır, OTA sürmüyor, röle pasif, saat senkron, imaj doğrulanmış, 10 dk tekrar sınırı |
+| [cihaz_kontrol/include/ota_guncelleme.h:722](../../cihaz_kontrol/include/ota_guncelleme.h#L722) | <code>inline void otaCheckAndUpdate() {</code> | Ana döngüden her turda çağrılır; ilk plan Wi-Fi oturunca ~90 sn + MAC tabanlı gecikmeyle kurulur |
+| [cihaz_kontrol/include/ota_guncelleme.h:63](../../cihaz_kontrol/include/ota_guncelleme.h#L63) | <code>inline constexpr unsigned long OTA_BOOT_CHECK_DELAY_MS = 90UL * 1000UL;</code> | Açılıştan sonra ilk otomatik kontrol en az ~90 sn (+0-60 sn cihaz gecikmesi) sonra; sonra 24 saatte bir |
+| [cihaz_kontrol/include/ota_guncelleme.h:295](../../cihaz_kontrol/include/ota_guncelleme.h#L295) | <code>inline void otaTalepEt(const char* reason = "manual", bool dagit = false) {</code> | Elle/MQTT talebi: tekil talep hemen, toplu iş (ota_job_id) 0-120 sn dağıtılarak planlanır |
 | [cihaz_kontrol/include/mqtt_baglanti.h:350](../../cihaz_kontrol/include/mqtt_baglanti.h#L350) | <code>} else if (action == "ota_check") {</code> | Sunucudan gelen ota_check komutu (retry ve ota_job_id burada okunur) |
 | [cihaz_kontrol/src/main.cpp:510](../../cihaz_kontrol/src/main.cpp#L510) | <code>otaCheckAndUpdate();</code> | Döngüde OTA çağrısı |
 
@@ -483,11 +486,11 @@ openssl s_client -connect mqtt.gudeteknoloji.com.tr:8883 -servername mqtt.gudete
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/include/ota_guncelleme.h:300](../../cihaz_kontrol/include/ota_guncelleme.h#L300) | <code>inline bool otaReadManifest(JsonDocument&amp; doc) {</code> | Manifest GET isteği: ?current_version=&uid= ile; hata durumu NVS'e "manifest ..." olarak yazılır |
-| [cihaz_kontrol/include/ota_guncelleme.h:33](../../cihaz_kontrol/include/ota_guncelleme.h#L33) | <code>inline constexpr char OTA_MANIFEST_URL[] =</code> | Hedefe göre manifest adresi (c3 ve wroom ayrı yol); iki tanım var, ilkini gösterir |
-| [cihaz_kontrol/include/ota_guncelleme.h:320](../../cihaz_kontrol/include/ota_guncelleme.h#L320) | <code>otaPersistStatus("manifest http hata: " + String(code));</code> | HTTP 200 dışı yanıt: negatif kod bağlantı/TLS/zaman aşımı, pozitif kod sunucu yanıtı |
-| [cihaz_kontrol/include/ota_guncelleme.h:525](../../cihaz_kontrol/include/ota_guncelleme.h#L525) | <code>Serial.print("OTA manifest hatasi: ");</code> | Hata seriye yazılır, ota_check_failed olayı yayınlanır, üstel geri çekilme başlar (10-20-40 dk) |
-| [cihaz_kontrol/include/ota_guncelleme.h:110](../../cihaz_kontrol/include/ota_guncelleme.h#L110) | <code>inline void otaPlanFailure() {</code> | Başarısız denemede geri çekilme: 10 dk, 20 dk, 40 dk ... en çok periyodik aralık |
+| [cihaz_kontrol/include/ota_guncelleme.h:355](../../cihaz_kontrol/include/ota_guncelleme.h#L355) | <code>inline bool otaReadManifest(JsonDocument&amp; doc) {</code> | Manifest GET isteği: ?current_version=&uid= ile; hata durumu NVS'e "manifest ..." olarak yazılır |
+| [cihaz_kontrol/include/ota_guncelleme.h:38](../../cihaz_kontrol/include/ota_guncelleme.h#L38) | <code>inline constexpr char OTA_MANIFEST_URL[] =</code> | Hedefe göre manifest adresi (c3 ve wroom ayrı yol); iki tanım var, ilkini gösterir |
+| [cihaz_kontrol/include/ota_guncelleme.h:376](../../cihaz_kontrol/include/ota_guncelleme.h#L376) | <code>otaPersistStatus("manifest http hata: " + String(code));</code> | HTTP 200 dışı yanıt: negatif kod bağlantı/TLS/zaman aşımı, pozitif kod sunucu yanıtı |
+| [cihaz_kontrol/include/ota_guncelleme.h:749](../../cihaz_kontrol/include/ota_guncelleme.h#L749) | <code>Serial.print("OTA manifest hatasi: ");</code> | Hata seriye yazılır, ota_check_failed olayı yayınlanır, üstel geri çekilme başlar (10-20-40 dk) |
+| [cihaz_kontrol/include/ota_guncelleme.h:151](../../cihaz_kontrol/include/ota_guncelleme.h#L151) | <code>inline void otaPlanFailure() {</code> | Başarısız denemede geri çekilme: 10 dk, 20 dk, 40 dk ... en çok periyodik aralık |
 | [cihaz_kontrol/include/tls_kok_sertifika.h:4](../../cihaz_kontrol/include/tls_kok_sertifika.h#L4) | <code>inline const char TLS_ROOT_CA[] PROGMEM = R"EOF(</code> | Manifest TLS doğrulaması bu gömülü kök CA ile yapılır |
 
 **Olası nedenler**
@@ -521,12 +524,12 @@ curl -s -o /dev/null -w "%{http_code}\n" https://api.gudeteknoloji.com.tr/firmwa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/include/ota_guncelleme.h:535](../../cihaz_kontrol/include/ota_guncelleme.h#L535) | <code>if (!manifestTarget.isEmpty() &amp;&amp; manifestTarget != OTA_TARGET) {</code> | Manifestin target alanı cihaz hedefiyle (esp32-c3 \| esp32-wroom) eşleşmezse güncelleme YAPILMAZ |
-| [cihaz_kontrol/include/ota_guncelleme.h:42](../../cihaz_kontrol/include/ota_guncelleme.h#L42) | <code>inline constexpr char OTA_ALLOWED_URL_PREFIX[] = "https://api.gudeteknoloji.com.tr/";</code> | İndirme adresi yalnız bu önekle (https + api.gudeteknoloji.com.tr) başlayabilir |
-| [cihaz_kontrol/include/ota_guncelleme.h:556](../../cihaz_kontrol/include/ota_guncelleme.h#L556) | <code>if (usbRequired) {</code> | Manifest usb_required ise OTA yapılmaz; "ota_usb_required" olayı |
-| [cihaz_kontrol/include/ota_guncelleme.h:576](../../cihaz_kontrol/include/ota_guncelleme.h#L576) | <code>if (otaSurumKarsilastir(version, String(OTA_CURRENT_VERSION)) &lt;= 0) {</code> | Yalnız artan sürüm kabul edilir; eşit/eski sürüm "downgrade reddedildi" ve cihaz "güncel" sayılır |
-| [cihaz_kontrol/include/ota_guncelleme.h:595](../../cihaz_kontrol/include/ota_guncelleme.h#L595) | <code>if (!otaSha256HexGecerli(sha256)) {</code> | Manifestte 64 hane hex sha256 yoksa güncelleme yapılmaz |
-| [cihaz_kontrol/include/ota_guncelleme.h:27](../../cihaz_kontrol/include/ota_guncelleme.h#L27) | <code>inline constexpr char OTA_VERSION_C3[] = "4.3.3";</code> | C3 sürüm sabiti (WROOM ayrı: OTA_VERSION_WROOM); manifest sürümü bundan büyük olmalı (sürüm değeri satırda; araç her sürümde yeniden yazar) |
+| [cihaz_kontrol/include/ota_guncelleme.h:759](../../cihaz_kontrol/include/ota_guncelleme.h#L759) | <code>if (!manifestTarget.isEmpty() &amp;&amp; manifestTarget != OTA_TARGET) {</code> | Manifestin target alanı cihaz hedefiyle (esp32-c3 \| esp32-wroom) eşleşmezse güncelleme YAPILMAZ |
+| [cihaz_kontrol/include/ota_guncelleme.h:47](../../cihaz_kontrol/include/ota_guncelleme.h#L47) | <code>inline constexpr char OTA_ALLOWED_URL_PREFIX[] = "https://api.gudeteknoloji.com.tr/";</code> | İndirme adresi yalnız bu önekle (https + api.gudeteknoloji.com.tr) başlayabilir |
+| [cihaz_kontrol/include/ota_guncelleme.h:792](../../cihaz_kontrol/include/ota_guncelleme.h#L792) | <code>if (usbRequired) {</code> | Manifest usb_required ise OTA yapılmaz; "ota_usb_required" olayı |
+| [cihaz_kontrol/include/ota_guncelleme.h:815](../../cihaz_kontrol/include/ota_guncelleme.h#L815) | <code>if (otaSurumKarsilastir(version, String(OTA_CURRENT_VERSION)) &lt;= 0) {</code> | Yalnız artan sürüm kabul edilir; eşit/eski sürüm "downgrade reddedildi" ve cihaz "güncel" sayılır |
+| [cihaz_kontrol/include/ota_guncelleme.h:855](../../cihaz_kontrol/include/ota_guncelleme.h#L855) | <code>if (!otaSha256HexGecerli(sha256)) {</code> | Manifestte 64 hane hex sha256 yoksa güncelleme yapılmaz |
+| [cihaz_kontrol/include/ota_guncelleme.h:32](../../cihaz_kontrol/include/ota_guncelleme.h#L32) | <code>inline constexpr char OTA_VERSION_C3[] = "4.4.0";</code> | C3 sürüm sabiti (WROOM ayrı: OTA_VERSION_WROOM); manifest sürümü bundan büyük olmalı (sürüm değeri satırda; araç her sürümde yeniden yazar) |
 
 **Olası nedenler**
 - Sunucuda yanlış klasöre firmware konmuş: wroom bin dosyası c3 manifestinde ya da tersi (iki donanımın dosyaları asla karışmamalı)
@@ -555,13 +558,13 @@ curl -s -o /dev/null -w "%{http_code}\n" https://api.gudeteknoloji.com.tr/firmwa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/include/ota_guncelleme.h:436](../../cihaz_kontrol/include/ota_guncelleme.h#L436) | <code>inline String otaIndirVeYaz(const String&amp; url, const String&amp; beklenenSha256, const String…</code> | İndirme + SHA-256 + Update; dönüş "" ise başarılı, aksi halde hata metni; agHatasi geçici ağ hatasını ayırır |
-| [cihaz_kontrol/include/ota_guncelleme.h:489](../../cihaz_kontrol/include/ota_guncelleme.h#L489) | <code>return "sha256 uyusmuyor";</code> | Hesaplanan özet manifestteki sha256 ile eşleşmezse yazılan imaj iptal edilir (boot bölümü değişmez) |
-| [cihaz_kontrol/include/ota_guncelleme.h:460](../../cihaz_kontrol/include/ota_guncelleme.h#L460) | <code>return "firmware boyutu bilinmiyor";</code> | Sunucu Content-Length vermezse indirme başlamaz |
-| [cihaz_kontrol/include/ota_guncelleme.h:465](../../cihaz_kontrol/include/ota_guncelleme.h#L465) | <code>return "Update.begin basarisiz: " + String(Update.errorString());</code> | Hedef bölüme sığmıyorsa/başlatılamıyorsa (bölüm tablosu, boyut) |
-| [cihaz_kontrol/include/ota_guncelleme.h:493](../../cihaz_kontrol/include/ota_guncelleme.h#L493) | <code>return "Update.end basarisiz: " + String(Update.errorString());</code> | İmaj doğrulaması (MD5/başlık) başarısız |
-| [cihaz_kontrol/include/ota_guncelleme.h:377](../../cihaz_kontrol/include/ota_guncelleme.h#L377) | <code>class OtaHashStream : public Stream {</code> | Gelen veriyi Update'e yazar ve SHA-256 hesaplar; flash yazma hatası hata=true yapar |
-| [cihaz_kontrol/include/ota_guncelleme.h:634](../../cihaz_kontrol/include/ota_guncelleme.h#L634) | <code>if (gOtaMqttKapat != nullptr) {</code> | İndirmeden önce MQTT TLS oturumu kapatılır (bellek); sunucuda kısa offline görülür |
+| [cihaz_kontrol/include/ota_guncelleme.h:634](../../cihaz_kontrol/include/ota_guncelleme.h#L634) | <code>inline String otaIndirVeYaz(const String&amp; url, const String&amp; beklenenSha256, const String…</code> | İndirme + SHA-256 + Update; dönüş "" ise başarılı, aksi halde hata metni; agHatasi geçici ağ hatasını ayırır |
+| [cihaz_kontrol/include/ota_guncelleme.h:696](../../cihaz_kontrol/include/ota_guncelleme.h#L696) | <code>return "sha256 uyusmuyor";</code> | Hesaplanan özet manifestteki sha256 ile eşleşmezse yazılan imaj iptal edilir (boot bölümü değişmez) |
+| [cihaz_kontrol/include/ota_guncelleme.h:667](../../cihaz_kontrol/include/ota_guncelleme.h#L667) | <code>return "firmware boyutu bilinmiyor";</code> | Sunucu Content-Length vermezse indirme başlamaz |
+| [cihaz_kontrol/include/ota_guncelleme.h:672](../../cihaz_kontrol/include/ota_guncelleme.h#L672) | <code>return "Update.begin basarisiz: " + String(Update.errorString());</code> | Hedef bölüme sığmıyorsa/başlatılamıyorsa (bölüm tablosu, boyut) |
+| [cihaz_kontrol/include/ota_guncelleme.h:708](../../cihaz_kontrol/include/ota_guncelleme.h#L708) | <code>return "Update.end basarisiz: " + String(Update.errorString());</code> | İmaj doğrulaması (MD5/başlık) başarısız |
+| [cihaz_kontrol/include/ota_guncelleme.h:433](../../cihaz_kontrol/include/ota_guncelleme.h#L433) | <code>class OtaHashStream : public Stream {</code> | Gelen veriyi Update'e yazar ve SHA-256 hesaplar; flash yazma hatası hata=true yapar |
+| [cihaz_kontrol/include/ota_guncelleme.h:924](../../cihaz_kontrol/include/ota_guncelleme.h#L924) | <code>if (gOtaMqttKapat != nullptr) {</code> | İndirmeden önce MQTT TLS oturumu kapatılır (bellek); sunucuda kısa offline görülür |
 | [cihaz_kontrol/include/mqtt_baglanti.h:524](../../cihaz_kontrol/include/mqtt_baglanti.h#L524) | <code>inline void mqttOtaOncesiKapat() {</code> | availability=offline yayınlanır ve MQTT bağlantısı kesilir |
 
 **Olası nedenler**
@@ -592,12 +595,12 @@ curl -s -o /dev/null -w "%{http_code}\n" https://api.gudeteknoloji.com.tr/firmwa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/include/ota_guncelleme.h:350](../../cihaz_kontrol/include/ota_guncelleme.h#L350) | <code>inline bool otaDenemeHakkiAyir(const String&amp; version) {</code> | Aynı sürüm için deneme sayacı NVS'te (try_ver / try_cnt) tutulur; 3 hak |
-| [cihaz_kontrol/include/ota_guncelleme.h:58](../../cihaz_kontrol/include/ota_guncelleme.h#L58) | <code>inline constexpr uint8_t OTA_MAX_DENEME = 3;                           // ayni surum icin…</code> | Aynı sürüm için en çok 3 deneme |
-| [cihaz_kontrol/include/ota_guncelleme.h:366](../../cihaz_kontrol/include/ota_guncelleme.h#L366) | <code>inline void otaDenemeHakkiIadeEt(const String&amp; version) {</code> | Yalnız geçici ağ hatasında hak iade edilir; güç kesintisi, geri alma, sha256 ve flash hatalarında hak yanar |
-| [cihaz_kontrol/include/ota_guncelleme.h:252](../../cihaz_kontrol/include/ota_guncelleme.h#L252) | <code>inline void otaDenemeSayacinaSifirla() {</code> | Yönetici ota_check ile retry:true gönderince sayaç ve geri çekilme sıfırlanır |
+| [cihaz_kontrol/include/ota_guncelleme.h:406](../../cihaz_kontrol/include/ota_guncelleme.h#L406) | <code>inline bool otaDenemeHakkiAyir(const String&amp; version) {</code> | Aynı sürüm için deneme sayacı NVS'te (try_ver / try_cnt) tutulur; 3 hak |
+| [cihaz_kontrol/include/ota_guncelleme.h:71](../../cihaz_kontrol/include/ota_guncelleme.h#L71) | <code>inline constexpr uint8_t OTA_MAX_DENEME = 3;                           // ayni surum icin…</code> | Aynı sürüm için en çok 3 deneme |
+| [cihaz_kontrol/include/ota_guncelleme.h:422](../../cihaz_kontrol/include/ota_guncelleme.h#L422) | <code>inline void otaDenemeHakkiIadeEt(const String&amp; version) {</code> | Yalnız geçici ağ hatasında hak iade edilir; güç kesintisi, geri alma, sha256 ve flash hatalarında hak yanar |
+| [cihaz_kontrol/include/ota_guncelleme.h:307](../../cihaz_kontrol/include/ota_guncelleme.h#L307) | <code>inline void otaDenemeSayacinaSifirla() {</code> | Yönetici ota_check ile retry:true gönderince sayaç ve geri çekilme sıfırlanır |
 | [cihaz_kontrol/include/mqtt_baglanti.h:351](../../cihaz_kontrol/include/mqtt_baglanti.h#L351) | <code>if (doc["retry"] &#124; false) {</code> | ota_check komutunda retry alanı |
-| [cihaz_kontrol/include/ota_guncelleme.h:615](../../cihaz_kontrol/include/ota_guncelleme.h#L615) | <code>otaPersistStatus("deneme siniri asildi (" + String(OTA_MAX_DENEME) + "): " + version, ver…</code> | Sınır aşılınca cihaz daha yeni bir sürüm bekler |
+| [cihaz_kontrol/include/ota_guncelleme.h:905](../../cihaz_kontrol/include/ota_guncelleme.h#L905) | <code>otaPersistStatus("deneme siniri asildi (" + String(OTA_MAX_DENEME) + "): " + version, ver…</code> | Sınır aşılınca cihaz daha yeni bir sürüm bekler |
 
 **Olası nedenler**
 - Aynı sürüm 3 kez denendi ve her seferinde sha256/imaj/flash hatası ya da güç kesintisi/geri alma oldu
@@ -620,12 +623,12 @@ curl -s -o /dev/null -w "%{http_code}\n" https://api.gudeteknoloji.com.tr/firmwa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/include/ota_guncelleme.h:216](../../cihaz_kontrol/include/ota_guncelleme.h#L216) | <code>otaPersistStatus("geri alindi: " + gOtaLastVersion + " yuklenemedi");</code> | Açılışta "guncelleme tamam" kayıtlı ama çalışan sürüm hedef sürüm değilse geri alma kaydedilir |
-| [cihaz_kontrol/include/ota_guncelleme.h:679](../../cihaz_kontrol/include/ota_guncelleme.h#L679) | <code>inline void otaGecerliligiDogrula(bool saglikli) {</code> | Wi-Fi + MQTT 60 sn kesintisiz sağlıklıysa imaj geçerli işaretlenir (esp_ota_mark_app_valid_cancel_rollback) |
-| [cihaz_kontrol/include/ota_guncelleme.h:57](../../cihaz_kontrol/include/ota_guncelleme.h#L57) | <code>inline constexpr unsigned long OTA_SAGLIK_SURESI_MS = 60UL * 1000UL;  // Wi-Fi+MQTT bu su…</code> | Sağlık süresi 60 sn; bundan önce yeniden başlarsa bootloader eski imaja döner |
+| [cihaz_kontrol/include/ota_guncelleme.h:257](../../cihaz_kontrol/include/ota_guncelleme.h#L257) | <code>otaPersistStatus("geri alindi: " + gOtaLastVersion + " yuklenemedi");</code> | Açılışta "guncelleme tamam" kayıtlı ama çalışan sürüm hedef sürüm değilse geri alma kaydedilir |
+| [cihaz_kontrol/include/ota_guncelleme.h:979](../../cihaz_kontrol/include/ota_guncelleme.h#L979) | <code>inline void otaGecerliligiDogrula(bool saglikli) {</code> | Wi-Fi + MQTT 60 sn kesintisiz sağlıklıysa imaj geçerli işaretlenir (esp_ota_mark_app_valid_cancel_rollback) |
+| [cihaz_kontrol/include/ota_guncelleme.h:70](../../cihaz_kontrol/include/ota_guncelleme.h#L70) | <code>inline constexpr unsigned long OTA_SAGLIK_SURESI_MS = 60UL * 1000UL;  // Wi-Fi+MQTT bu su…</code> | Sağlık süresi 60 sn; bundan önce yeniden başlarsa bootloader eski imaja döner |
 | [cihaz_kontrol/src/main.cpp:42](../../cihaz_kontrol/src/main.cpp#L42) | <code>extern "C" bool verifyRollbackLater() {</code> | true döner: Arduino çekirdeği yeni imajı kendiliğinden geçerli yapmaz; doğrulama otaGecerliligiDogrula ile yapılır |
 | [cihaz_kontrol/src/main.cpp:511](../../cihaz_kontrol/src/main.cpp#L511) | <code>otaGecerliligiDogrula(wifiHazirMi() &amp;&amp; mqttBagliMi());</code> | Her döngüde sağlık bildirilir |
-| [cihaz_kontrol/include/ota_guncelleme.h:195](../../cihaz_kontrol/include/ota_guncelleme.h#L195) | <code>inline bool otaCalisanImajPendingMi() {</code> | Açılışta çalışan imaj PENDING_VERIFY mi okunur |
+| [cihaz_kontrol/include/ota_guncelleme.h:236](../../cihaz_kontrol/include/ota_guncelleme.h#L236) | <code>inline bool otaCalisanImajPendingMi() {</code> | Açılışta çalışan imaj PENDING_VERIFY mi okunur |
 
 **Olası nedenler**
 - Yeni imaj Wi-Fi ya da MQTT bağlantısını 60 sn kesintisiz tutamadı (ör. kimlik/ağ sorunu) ve araya yeniden başlatma girdi
@@ -657,7 +660,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://api.gudeteknoloji.com.tr/firmwa
 | [cihaz_kontrol/include/ota_is_kimligi.h:81](../../cihaz_kontrol/include/ota_is_kimligi.h#L81) | <code>inline void otaIsKimligiEkle(JsonDocument&amp; doc) {</code> | Kimlik varsa olay JSON'una ota_job_id eklenir (tamsayı gelmişse tamsayı olarak) |
 | [cihaz_kontrol/include/mqtt_baglanti.h:356](../../cihaz_kontrol/include/mqtt_baglanti.h#L356) | <code>otaIsKimligiAyarla(doc["ota_job_id"]);</code> | ota_check işleyicisi kimliği kaydeder |
 | [cihaz_kontrol/include/mqtt_baglanti.h:151](../../cihaz_kontrol/include/mqtt_baglanti.h#L151) | <code>otaIsKimligiEkle(doc);  // OTA olaylari (ota_*): sunucudaki is takibi icin ota_job_id yan…</code> | Yalnız adı "ota_" ile başlayan olaylara eklenir |
-| [cihaz_kontrol/include/ota_guncelleme.h:179](../../cihaz_kontrol/include/ota_guncelleme.h#L179) | <code>if (otaOlayBitirirMi(eventName)) {</code> | OTA olayı yayınlandıktan sonra kimlik temizleme |
+| [cihaz_kontrol/include/ota_guncelleme.h:220](../../cihaz_kontrol/include/ota_guncelleme.h#L220) | <code>if (otaOlayBitirirMi(eventName)) {</code> | OTA olayı yayınlandıktan sonra kimlik temizleme |
 
 **Olası nedenler**
 - ota_job_id geçersiz karakter içeriyor, 40 karakterden uzun, sıfır/negatif ya da sayı/metin değil: cihaz kimliği yok sayar
@@ -748,7 +751,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://api.gudeteknoloji.com.tr/firmwa
 | [cihaz_kontrol/src/main.cpp:449](../../cihaz_kontrol/src/main.cpp#L449) | <code>esp_task_wdt_init(LOOP_WDT_TIMEOUT_S, true);</code> | setup'ta loop görevi izlemeye alınır (panic=true) |
 | [cihaz_kontrol/src/main.cpp:493](../../cihaz_kontrol/src/main.cpp#L493) | <code>void loop() {</code> | Her turun başında esp_task_wdt_reset(); uzun işler kendi içinde besler |
 | [cihaz_kontrol/include/mqtt_baglanti.h:464](../../cihaz_kontrol/include/mqtt_baglanti.h#L464) | <code>const bool baglandi = client.connect(clientId.c_str(), mqttUser.c_str(), mqttPass.c_str()…</code> | Bloklayan MQTT connect (DNS+TCP+TLS, 5-15 sn) öncesi ve sonrası watchdog resetlenir |
-| [cihaz_kontrol/include/ota_guncelleme.h:393](../../cihaz_kontrol/include/ota_guncelleme.h#L393) | <code>size_t write(const uint8_t* buf, size_t size) override {</code> | OTA indirmesinde her blokta watchdog beslenir |
+| [cihaz_kontrol/include/ota_guncelleme.h:449](../../cihaz_kontrol/include/ota_guncelleme.h#L449) | <code>size_t write(const uint8_t* buf, size_t size) override {</code> | OTA indirmesinde her blokta watchdog beslenir |
 | [cihaz_kontrol/src/main.cpp:65](../../cihaz_kontrol/src/main.cpp#L65) | <code>void pinBulmaTesti() {</code> | Atölye pin testi döngüyü bloklar; her adımda watchdog beslenir |
 
 **Olası nedenler**
@@ -1274,12 +1277,12 @@ curl -s http://<cihaz-ip>:8765/ahbu/status
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/platformio.ini:26](../../cihaz_kontrol/platformio.ini#L26) | <code>[env:lolin_c3_mini]</code> | C3 ortamı: -D BOARD_ESP32_C3; bölüm tablosu partitions_ota_4mb.csv |
-| [cihaz_kontrol/platformio.ini:34](../../cihaz_kontrol/platformio.ini#L34) | <code>[env:esp32_relay_wroom]</code> | WROOM ortamı: -D BOARD_ESP32_WROOM_RELAY (ekran sürücüsü, admin PIN, ekran QR yalnız bu bayrakla derlenir) |
+| [cihaz_kontrol/platformio.ini:28](../../cihaz_kontrol/platformio.ini#L28) | <code>[env:lolin_c3_mini]</code> | C3 ortamı: -D BOARD_ESP32_C3; bölüm tablosu partitions_ota_4mb.csv |
+| [cihaz_kontrol/platformio.ini:36](../../cihaz_kontrol/platformio.ini#L36) | <code>[env:esp32_relay_wroom]</code> | WROOM ortamı: -D BOARD_ESP32_WROOM_RELAY (ekran sürücüsü, admin PIN, ekran QR yalnız bu bayrakla derlenir) |
 | [cihaz_kontrol/platformio.ini:15](../../cihaz_kontrol/platformio.ini#L15) | <code>platform = espressif32@6.5.0</code> | Platform sürümü sabitlenmiştir; değiştirmek davranışı etkileyebilir |
 | [platformio.ini:13](../../platformio.ini#L13) | <code>[env]</code> | Kök platformio.ini (VS Code girişi): cihaz_kontrol kaynaklarını derler fakat bayrakları farklıdır; hangi dizinden derlendiğine dikkat |
 | [cihaz_kontrol/include/device_konfig.h:7](../../cihaz_kontrol/include/device_konfig.h#L7) | <code>#if defined(BOARD_ESP32_WROOM_RELAY)</code> | Pin sabitleri bayrağa göre seçilir: bayrak yoksa C3 değerleri kullanılır |
-| [cihaz_kontrol/include/ota_guncelleme.h:30](../../cihaz_kontrol/include/ota_guncelleme.h#L30) | <code>#if defined(BOARD_ESP32_WROOM_RELAY) &#124;&#124; defined(BOARD_ESP32_WROOM)</code> | OTA hedefi ve manifest adresi de aynı bayraktan türer |
+| [cihaz_kontrol/include/ota_guncelleme.h:35](../../cihaz_kontrol/include/ota_guncelleme.h#L35) | <code>#if defined(BOARD_ESP32_WROOM_RELAY) &#124;&#124; defined(BOARD_ESP32_WROOM)</code> | OTA hedefi ve manifest adresi de aynı bayraktan türer |
 
 **Olası nedenler**
 - cihaz_kontrol dizininde değil de kökten ya da yanlış -e ortamıyla derlendi
@@ -1331,10 +1334,10 @@ cd cihaz_kontrol && pio run -e esp32_relay_wroom
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/include/ota_guncelleme.h:604](../../cihaz_kontrol/include/ota_guncelleme.h#L604) | <code>const esp_partition_t* updatePartition = esp_ota_get_next_update_partition(nullptr);</code> | OTA için bir sonraki güncelleme bölümü yoksa (eski bölüm tablosu) güncelleme yapılmaz |
-| [cihaz_kontrol/include/ota_guncelleme.h:606](../../cihaz_kontrol/include/ota_guncelleme.h#L606) | <code>otaPersistStatus("OTA partition yok; cihaza USB ile OTA partition tablosu yuklenmeli", ve…</code> | Durum metni; ota_failed olayı yayınlanır |
+| [cihaz_kontrol/include/ota_guncelleme.h:883](../../cihaz_kontrol/include/ota_guncelleme.h#L883) | <code>const esp_partition_t* updatePartition = esp_ota_get_next_update_partition(nullptr);</code> | OTA için bir sonraki güncelleme bölümü yoksa (eski bölüm tablosu) güncelleme yapılmaz |
+| [cihaz_kontrol/include/ota_guncelleme.h:885](../../cihaz_kontrol/include/ota_guncelleme.h#L885) | <code>otaPersistStatus("OTA partition yok; cihaza USB ile OTA partition tablosu yuklenmeli", ve…</code> | Durum metni; ota_failed olayı yayınlanır |
 | [cihaz_kontrol/partitions_ota_4mb.csv:5](../../cihaz_kontrol/partitions_ota_4mb.csv#L5) | <code>app1,     app,  ota_1,   0x1F0000,0x1E0000,</code> | İki eşit uygulama bölümü (ota_0, ota_1) gerekir |
-| [cihaz_kontrol/platformio.ini:28](../../cihaz_kontrol/platformio.ini#L28) | <code>board_build.partitions = partitions_ota_4mb.csv</code> | İki ortam da OTA bölüm tablosunu kullanır |
+| [cihaz_kontrol/platformio.ini:30](../../cihaz_kontrol/platformio.ini#L30) | <code>board_build.partitions = partitions_ota_4mb.csv</code> | İki ortam da OTA bölüm tablosunu kullanır |
 
 **Olası nedenler**
 - Cihaz OTA'lı bölüm tablosu olmadan, eski tek uygulamalı tabloyla USB'den yüklenmiş: OTA hiçbir zaman çalışmaz
@@ -1383,7 +1386,7 @@ cd cihaz_kontrol && pio run -e esp32_relay_wroom
 | [cihaz_kontrol/host_test/run_all.py:22](../../cihaz_kontrol/host_test/run_all.py#L22) | <code>VCVARS = os.environ.get(</code> | Visual Studio vcvars64.bat yolu; farklıysa VCVARS ortam değişkeniyle verilir |
 | [cihaz_kontrol/host_test/run_all.py:21](../../cihaz_kontrol/host_test/run_all.py#L21) | <code>ARDUINOJSON = os.path.normpath(os.path.join(HERE, '..', '.pio', 'libdeps', 'lolin_c3_mini…</code> | ArduinoJson başlıkları .pio/libdeps/lolin_c3_mini altında aranır: önce pio run yapılmış olmalı |
 | [cihaz_kontrol/host_test/run_all.py:29](../../cihaz_kontrol/host_test/run_all.py#L29) | <code>TESTS = [</code> | Test listesi: t_core, t_udp, t_pin, t_gm60, t_mqtt (WROOM + C3) |
-| [cihaz_kontrol/host_test/README.md:19](../../cihaz_kontrol/host_test/README.md#L19) | <code>## Gereksinimler</code> | MSVC, Python 3, Node.js (t_core vektörleri) ve ArduinoJson gereksinimi |
+| [cihaz_kontrol/host_test/README.md:20](../../cihaz_kontrol/host_test/README.md#L20) | <code>## Gereksinimler</code> | MSVC, Python 3, Node.js (t_core vektörleri) ve ArduinoJson gereksinimi |
 | [cihaz_kontrol/host_test/t_core.cpp:440](../../cihaz_kontrol/host_test/t_core.cpp#L440) | <code>printf("\nSONUC: %d dogrulama gecti, %d basarisiz\n", g_pass, g_fail);</code> | Her test "SONUC: N dogrulama gecti, M basarisiz" satırı yazar; çıkış kodu 0 = hepsi geçti |
 
 **Olası nedenler**
@@ -1411,7 +1414,7 @@ cd cihaz_kontrol/host_test && python run_all.py
 | --- | --- | --- |
 | [cihaz_kontrol/include/tls_kok_sertifika.h:4](../../cihaz_kontrol/include/tls_kok_sertifika.h#L4) | <code>inline const char TLS_ROOT_CA[] PROGMEM = R"EOF(</code> | Gömülü tek kök CA; MQTT, OTA manifesti ve OTA indirmesi hepsi bunu kullanır |
 | [cihaz_kontrol/include/mqtt_baglanti.h:584](../../cihaz_kontrol/include/mqtt_baglanti.h#L584) | <code>espClientSecure.setCACert(TLS_ROOT_CA);</code> | MQTT TLS doğrulaması; kök değişirse hiçbir cihaz bağlanamaz |
-| [cihaz_kontrol/include/ota_guncelleme.h:302](../../cihaz_kontrol/include/ota_guncelleme.h#L302) | <code>otaClient.setCACert(TLS_ROOT_CA);</code> | OTA da aynı kökle doğrular: kök bozulursa OTA ile düzeltme yapılamaz |
+| [cihaz_kontrol/include/ota_guncelleme.h:357](../../cihaz_kontrol/include/ota_guncelleme.h#L357) | <code>otaClient.setCACert(TLS_ROOT_CA);</code> | OTA da aynı kökle doğrular: kök bozulursa OTA ile düzeltme yapılamaz |
 
 **Olası nedenler**
 - Sunucu zinciri farklı bir köke taşındı (ISRG Root X1 yerine başka kök): cihaz doğrulayamaz
@@ -1424,4 +1427,46 @@ cd cihaz_kontrol/host_test && python run_all.py
 - Kök değişikliğini planlarken eski + yeni kökü aynı pakette taşıyan geçiş sürümü önceden OTA ile dağıtın
 
 **Bkz.:** [cihaz-mqtt-tls-hatasi](#cihaz-mqtt-tls-hatasi), [cihaz-ota-manifest-hatasi](#cihaz-ota-manifest-hatasi), [cihaz-saat-ntp-yok](#cihaz-saat-ntp-yok)
+
+<a id="cihaz-ota-imza-reddi"></a>
+### cihaz-ota-imza-reddi · Cihaz OTA güncellemesini kurmuyor: OTA durumu ya da ota_failed ayrıntısı "imza: ..." ("imza: dosya yok", "imza: dogrulama basarisiz", "imza: anahtar yerlestirilmemis", "imza: bicim gecersiz")
+
+| Dosya:satır | Satırdaki kod | Ne işe yarar |
+| --- | --- | --- |
+| [cihaz_kontrol/include/ota_guncelleme.h:561](../../cihaz_kontrol/include/ota_guncelleme.h#L561) | <code>inline String otaImzaAl(const OtaImzaIstegi&amp; istek, uint8_t imza[OTA_IMZA_BOYUT], bool&amp; a…</code> | Önce imza alınır: manifestte signature varsa o, yoksa .sig dosyası (aracın JSON'u ya da çıplak imza); imza yoksa paket HİÇ indirilmez |
+| [cihaz_kontrol/include/ota_guncelleme.h:518](../../cihaz_kontrol/include/ota_guncelleme.h#L518) | <code>inline bool otaImzaDosyasiCozumle(const uint8_t* veri, size_t n, uint8_t imza[OTA_IMZA_BO…</code> | .sig JSON'undan yalnız format (KAPI-OTA-IMZA-V1), algorithm (Ed25519) ve 128 hane hex signature okunur; başka biçim reddedilir |
+| [cihaz_kontrol/include/ota_guncelleme.h:701](../../cihaz_kontrol/include/ota_guncelleme.h#L701) | <code>const String imzaSonuc = otaImzaYukunuDogrula(imza, imzaIstegi, static_cast&lt;uint32_t&gt;(aki…</code> | SHA-256 tuttuktan sonra, Update.end'den ÖNCE imza doğrulanır; geçersizse Update.abort ve boot bölümü değişmez |
+| [cihaz_kontrol/include/ota_guncelleme.h:613](../../cihaz_kontrol/include/ota_guncelleme.h#L613) | <code>inline String otaImzaYukunuDogrula(const uint8_t imza[OTA_IMZA_BOYUT], const OtaImzaIsteg…</code> | Yük cihazın KENDİ bildiği değerlerle (hedef, manifest sürümü, indirilen bayt sayısı, hesaplanan SHA-256 [+ rollback_max]) kurulur |
+| [cihaz_kontrol/include/ota_guncelleme.h:955](../../cihaz_kontrol/include/ota_guncelleme.h#L955) | <code>Serial.println("OTA GUVENLIK: paket imzasi dogrulanamadi; guncelleme REDDEDILDI (boot bol…</code> | Reddedilen paket seriye Türkçe güvenlik satırı olarak yazılır |
+| [cihaz_kontrol/include/ota_imza.h:298](../../cihaz_kontrol/include/ota_imza.h#L298) | <code>inline OtaImzaSonuc otaImzaDogrula(const uint8_t imza[OTA_IMZA_BOYUT], const uint8_t* ana…</code> | Anahtar HAZIR değilse hiçbir imza geçerli sayılmaz; yük kurulur ve Ed25519 doğrulanır |
+| [cihaz_kontrol/include/ota_public_key.h:30](../../cihaz_kontrol/include/ota_public_key.h#L30) | <code>inline constexpr uint8_t OTA_IMZA_GENEL_ANAHTAR[32] = {</code> | Gömülü genel anahtar: teslimde YER TUTUCU (hiçbir paket kurulmaz); gerçek anahtar cihaz_kontrol/tools/ota_anahtar.mjs yaz ile yazılır |
+
+**Olası nedenler**
+- "imza: dosya yok (http 404/403/410)": paket imzasız ya da sunucuda .sig yok (imzasız paket köprü sürümden sonra KURULMAZ; bu beklenen korumadır)
+- "imza: dogrulama basarisiz": imza gömülü anahtarla bu hedef/sürüm/boyut/SHA-256 için atılmamış (başka anahtar, manifest sürümü ≠ imzalanan sürüm, paket imzadan sonra değişti, yanlış hedef); rollback_max/allow_downgrade uyuşmazlığı da böyle görünür
+- "imza: anahtar yerlestirilmemis": gömülü genel anahtar YER TUTUCU ya da geçersiz (yer tutuculu sürüm yayınlanmış: o cihazlar bir daha OTA ile güncellenemez, USB gerekir)
+- "imza: bicim gecersiz" / "imza: dosya cok buyuk": .sig ne aracın JSON'u ne de 64 bayt ham / 128 hane hex / 88 karakter base64; dosya 1024 baytı aşıyor
+- "imza: dosya alinamadi (http N)": geçici ağ/sunucu hatası (deneme hakkı yanmaz, cihaz yeniden dener)
+
+**Adım adım kontrol**
+- Seri açılışta "OTA imza anahtari: HAZIR (Ed25519, zorunlu); parmak izi <16 hane>" satırı olmalı; parmak izi imzalama aracının key_id değeriyle AYNI olmalı (YER TUTUCU/GECERSIZ yazıyorsa kart hiçbir paketi kurmaz)
+- Sunucuda manifest'i cihazın sürümüyle okuyun: signature (128 hane hex) ve version imzalanan sürümle aynı mı; node tools/ota_imza/ota_imza.mjs dogrula <firmware.bin> --genel <genel.pem> --manifest <manifest.json>
+- Yayın öncesi ikilide yer tutucu kalmadığını doğrulayın: node cihaz_kontrol/tools/ota_anahtar.mjs kontrol <firmware.bin> <genel_anahtar>
+- Ayrıntı, köprü sürüm planı ve hata tablosu: docs/OTA_IMZA_CIHAZ.md bölüm 3 ve docs/OTA_IMZA.md bölüm 6-7
+
+**Günlükte aranacak ifadeler**
+- `OTA GUVENLIK: paket imzasi dogrulanamadi`
+- `imza: dosya yok`
+- `imza: anahtar yerlestirilmemis`
+- `imza: dogrulama basarisiz`
+
+**Komutlar**
+```bash
+curl -s "https://api.gudeteknoloji.com.tr/firmware/esp32-c3/manifest.json?current_version=4.4.0"
+curl -s -o /dev/null -w "%{http_code}\n" https://api.gudeteknoloji.com.tr/firmware/esp32-c3/firmware-v4.4.1.bin.sig
+```
+
+**İlgili testler:** [cihaz_kontrol/host_test/t_imza.cpp](../../cihaz_kontrol/host_test/t_imza.cpp), [cihaz_kontrol/host_test/t_mqtt.cpp](../../cihaz_kontrol/host_test/t_mqtt.cpp)
+
+**Bkz.:** [cihaz-ota-manifest-hatasi](#cihaz-ota-manifest-hatasi), [cihaz-ota-guncelleme-baslamiyor](#cihaz-ota-guncelleme-baslamiyor), [sunucu-firmware-yukleme-imza](10-sunucu-api.md#sunucu-firmware-yukleme-imza), [arac-ota-imza-araci](50-arac-test-ve-surec.md#arac-ota-imza-araci)
 

@@ -151,7 +151,7 @@ Ana endpoint gruplari (yol on ekleri; tam liste kodda):
   - katilim istekleri: `/manager/join-requests/:requestId/approve|reject`
 - uye / site basvurusu: `/membership/*` (cihaz sahiplenme, site kurulumu, `site-applications`)
 - sakin ve modul uclari: `/app/*` (ornek: `GET /app/my-modules`), yonetici modul uclari `/manager/sites/:siteCode/...`
-- cihaz firmware / OTA: `GET /firmware/:target/manifest.json`
+- cihaz firmware / OTA: `GET /firmware/:target/manifest.json`, `GET /firmware/:target/<imaj>.bin` ve imza dosyasi `<imaj>.bin.sig`; imzali yukleme (yalniz super kullanici): `POST|GET /admin/firmware/:target/releases` (Ed25519, `KAPI-OTA-IMZA-V1`; ayrinti `docs/OTA_IMZA.md`)
 
 ## 6. Veritabani Tasarimi
 
