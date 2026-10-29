@@ -30,6 +30,7 @@ AppTone workStatusTone(WorkStatus status) => switch (status) {
   WorkStatus.yeni => AppTone.info,
   WorkStatus.islemde => AppTone.primary,
   WorkStatus.beklemede => AppTone.warning,
+  WorkStatus.firmada => AppTone.primary,
   WorkStatus.cozuldu => AppTone.success,
   WorkStatus.kapandi => AppTone.neutral,
   WorkStatus.iptal => AppTone.danger,
@@ -40,6 +41,7 @@ IconData workStatusIcon(WorkStatus status) => switch (status) {
   WorkStatus.yeni => Icons.fiber_new_rounded,
   WorkStatus.islemde => Icons.engineering_rounded,
   WorkStatus.beklemede => Icons.hourglass_top_rounded,
+  WorkStatus.firmada => Icons.business_center_rounded,
   WorkStatus.cozuldu => Icons.check_circle_outline_rounded,
   WorkStatus.kapandi => Icons.lock_outline_rounded,
   WorkStatus.iptal => Icons.cancel_outlined,
@@ -230,6 +232,7 @@ class WorkManagedCard extends StatelessWidget {
     if (requester.isNotEmpty) semantic.write(' Açan: $requester.');
     semantic.write(' $assigneeText.');
     if (i.equipment != null) semantic.write(' Ekipman: ${i.equipment!.label}.');
+    if (i.vendor != null) semantic.write(' Firma: ${i.vendor!.name}.');
     if (due != null) semantic.write(' Hedef tarih: $due.');
     if (i.updatedAt != null) {
       semantic.write(' Güncelleme: ${_dateTime(i.updatedAt)}.');
@@ -287,6 +290,7 @@ class WorkManagedCard extends StatelessWidget {
                       InfoChip(assigneeText),
                       if (i.equipment != null)
                         InfoChip('Ekipman: ${i.equipment!.label}'),
+                      if (i.vendor != null) InfoChip('Firma: ${i.vendor!.name}'),
                       if (due != null) InfoChip('Hedef: $due'),
                       if (i.updatedAt != null)
                         InfoChip(

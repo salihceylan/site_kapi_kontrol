@@ -184,6 +184,9 @@ enum WorkStatus {
   yeni('yeni', 'Yeni'),
   islemde('islemde', 'İşlemde'),
   beklemede('beklemede', 'Beklemede'),
+
+  /// İş dış bir firmaya (taşerona) yönlendirildi (111); yalnız "Firmaya yönlendir" ile, firma bilgisiyle girilir.
+  firmada('firmada', 'Firmada'),
   cozuldu('cozuldu', 'Çözüldü'),
   kapandi('kapandi', 'Kapandı'),
   iptal('iptal', 'İptal'),
@@ -201,10 +204,14 @@ enum WorkStatus {
     yeni,
     islemde,
     beklemede,
+    firmada,
     cozuldu,
     kapandi,
     iptal,
   ];
+
+  /// Firmaya yönlendirilebilen durumlar (sunucu `VENDOR_REFERRAL_FROM`); çözülmüş / kapanmış iş yönlendirilmez.
+  bool get canReferToVendor => this == yeni || this == islemde || this == beklemede;
 
   static WorkStatus fromApi(Object? value) {
     final normalized = value?.toString().trim().toLowerCase();
@@ -288,6 +295,68 @@ class WorkEquipmentRef {
 
   @override
   int get hashCode => Object.hash(id, name, kind, isActive);
+}
+
+/// Talebin yönlendirildiği firma (taşeron; yönetim görünümü `vendor`, 111). Sakin görünümünde YOKTUR. Dış firmaya
+/// giriş yoktur: bilgiler yönetici / görevli tarafından elle girilir.
+@immutable
+class WorkVendor {
+  const WorkVendor({
+    required this.name,
+    this.contact = '',
+    this.phone = '',
+    this.amountKurus,
+    this.referredAt,
+  });
+
+  /// Firma adı (2-80 karakter).
+  final String name;
+
+  /// Firma yetkilisi (isteğe bağlı; boş = girilmedi).
+  final String contact;
+
+  /// Firma telefonu (isteğe bağlı; boş = girilmedi).
+  final String phone;
+
+  /// Anlaşılan tutar, KURUŞ (isteğe bağlı; null = girilmedi).
+  final int? amountKurus;
+
+  /// Firmaya yönlendirme zamanı (firmaya hiç yönlendirilmediyse null).
+  final DateTime? referredAt;
+
+  static WorkVendor? fromJson(Object? raw) {
+    final json = _map(raw);
+    if (json == null) return null;
+    final name = _text(json['name']);
+    if (name.isEmpty) return null;
+    return WorkVendor(
+      name: name,
+      contact: _text(json['contact']),
+      phone: _text(json['phone']),
+      amountKurus: crmIntOrNull(json['amount_kurus']),
+      referredAt: documentInstant(json['referred_at']),
+    );
+  }
+
+  /// `PATCH` gövdesindeki `vendor`: boş yetkili / telefon / tutar `null` gider (sunucuda alan boşaltılır).
+  Map<String, Object?> toJson() => <String, Object?>{
+    'name': name.trim(),
+    'contact': contact.trim().isEmpty ? null : contact.trim(),
+    'phone': phone.trim().isEmpty ? null : phone.trim(),
+    'amount_kurus': amountKurus,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is WorkVendor &&
+      other.name == name &&
+      other.contact == contact &&
+      other.phone == phone &&
+      other.amountKurus == amountKurus &&
+      other.referredAt == referredAt;
+
+  @override
+  int get hashCode => Object.hash(name, contact, phone, amountKurus, referredAt);
 }
 
 /// Konumdaki daire / blok (etiketiyle).
@@ -802,6 +871,7 @@ class WorkManagedItem {
     this.requester = const WorkRequester(),
     this.assignedTo,
     this.equipment,
+    this.vendor,
     this.dueDate,
     this.createdAt,
     this.updatedAt,
@@ -834,6 +904,9 @@ class WorkManagedItem {
 
   /// Bağlı ekipman (`equipment`; eski sunucuda ve bağ yoksa null).
   final WorkEquipmentRef? equipment;
+
+  /// Yönlendirilen firma (`vendor`, 111; eski sunucuda ve firma yoksa null). Firmadan dönen işte de kayıt olarak kalır.
+  final WorkVendor? vendor;
   final DateTime? dueDate;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -864,6 +937,7 @@ class WorkManagedItem {
       requester: WorkRequester.fromJson(json['requester']),
       assignedTo: WorkAssignee.fromJson(json['assigned_to']),
       equipment: WorkEquipmentRef.fromJson(json['equipment']),
+      vendor: WorkVendor.fromJson(json['vendor']),
       dueDate: crmDate(json['due_date']),
       createdAt: documentInstant(json['created_at']),
       updatedAt: documentInstant(json['updated_at']),

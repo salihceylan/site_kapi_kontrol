@@ -37,7 +37,7 @@ const invalid = (fn, code = 'INVALID_BODY') => assert.throws(fn, (error) => erro
 
 describe('durum geçişleri', () => {
   it('kapandi ve iptal SONDUR; her hedef geçerli bir durumdur; cozuldu yeniden açılabilir; yeni -> kapandi YOK', () => {
-    assert.deepEqual([...STATUSES], ['yeni', 'islemde', 'beklemede', 'cozuldu', 'kapandi', 'iptal']);
+    assert.deepEqual([...STATUSES], ['yeni', 'islemde', 'beklemede', 'firmada', 'cozuldu', 'kapandi', 'iptal']);
     for (const status of TERMINAL_STATUSES) assert.deepEqual([...STAFF_TRANSITIONS[status]], []);
     for (const [from, targets] of Object.entries(STAFF_TRANSITIONS)) {
       assert.ok(STATUSES.includes(from));
@@ -126,7 +126,7 @@ describe('girdi ayrıştırıcıları', () => {
 
   it('liste sorguları: durum listesi + open takma adı, atanan, sayfalama; geçersiz değer 400 INVALID_QUERY', () => {
     const f = parseListQuery({ status: 'open,iptal', category: 'bakim', priority: 'acil', assigned: 'none', q: ' asansör ', before_id: '50', limit: '500' });
-    assert.deepEqual(f.statuses.sort(), ['beklemede', 'cozuldu', 'iptal', 'islemde', 'yeni']);
+    assert.deepEqual(f.statuses.sort(), ['beklemede', 'cozuldu', 'firmada', 'iptal', 'islemde', 'yeni']);
     assert.deepEqual([f.category, f.priority, f.assigned, f.q, f.beforeId, f.limit], ['bakim', 'acil', 'none', 'asansör', 50, 100]);
     assert.equal(parseListQuery({ assigned: '77' }).assigned, 77);
     assert.equal(parseListQuery({}).limit, 30);

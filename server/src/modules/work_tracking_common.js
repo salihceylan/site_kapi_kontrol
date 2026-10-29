@@ -14,8 +14,9 @@ export const WORK_TRACKING_MODULE = 'work_tracking';
 /** Varsayılan (sistem) kategori anahtarları. Siteler `k_<ad>` anahtarlı kendi kategorilerini de ekleyebilir (100; work_categories_common.js, isCategoryKey). */
 export const CATEGORIES = Object.freeze(['ariza', 'bakim', 'sikayet_oneri', 'diger']);
 export const LOCATIONS = Object.freeze(['ortak_alan', 'daire']);
-export const STATUSES = Object.freeze(['yeni', 'islemde', 'beklemede', 'cozuldu', 'kapandi', 'iptal']);
-export const OPEN_STATUSES = Object.freeze(['yeni', 'islemde', 'beklemede', 'cozuldu']);
+// `firmada` (111): iş bir dış firmaya (taşerona) yönlendirildi; açık sayılır. Yalnız "Firmaya yönlendir" akışıyla girilir (bkz. VENDOR_REFERRAL_FROM, parsePatchInput `vendor`).
+export const STATUSES = Object.freeze(['yeni', 'islemde', 'beklemede', 'firmada', 'cozuldu', 'kapandi', 'iptal']);
+export const OPEN_STATUSES = Object.freeze(['yeni', 'islemde', 'beklemede', 'firmada', 'cozuldu']);
 export const TERMINAL_STATUSES = Object.freeze(['kapandi', 'iptal']);
 export const PRIORITIES = Object.freeze(['dusuk', 'normal', 'acil']);
 export const VISIBILITIES = Object.freeze(['internal', 'public']);
@@ -25,10 +26,24 @@ export const STAFF_TRANSITIONS = Object.freeze({
   yeni: Object.freeze(['islemde', 'beklemede', 'cozuldu', 'iptal']),
   islemde: Object.freeze(['beklemede', 'cozuldu', 'iptal']),
   beklemede: Object.freeze(['islemde', 'cozuldu', 'iptal']),
+  firmada: Object.freeze(['islemde', 'beklemede', 'cozuldu', 'iptal']),
   cozuldu: Object.freeze(['kapandi', 'islemde']),
   kapandi: Object.freeze([]),
   iptal: Object.freeze([]),
 });
+/**
+ * `firmada` durumuna YALNIZ bu durumlardan, firma bilgisiyle birlikte geçilir (STAFF_TRANSITIONS'ta `firmada` hedefi YOKTUR: ayrıntıdaki `next_statuses` düz durum
+ * seçicisine firmasız `firmada` sunmaz, eski istemci bilinmeyen bir seçenek görmez). Çözülmüş (`cozuldu`) iş yeniden firmaya gönderilmez.
+ */
+export const VENDOR_REFERRAL_FROM = Object.freeze(['yeni', 'islemde', 'beklemede']);
+
+/** Yönetici / görevli durum geçişi geçerli mi (firmaya yönlendirme ayrı kural). */
+export function isStaffTransitionAllowed(from, to) {
+  if (to === 'firmada') {
+    return VENDOR_REFERRAL_FROM.includes(from);
+  }
+  return (STAFF_TRANSITIONS[from] ?? []).includes(to);
+}
 /** Sakin yalnız KENDİ "yeni" talebini iptal edebilir. */
 export const RESIDENT_TRANSITIONS = Object.freeze({ yeni: Object.freeze(['iptal']) });
 
@@ -96,6 +111,9 @@ export const invalidQuery = () => new PlatformError(400, 'INVALID_QUERY', 'Geçe
 export const invalidAssignee = (message) => new PlatformError(400, 'INVALID_ASSIGNEE', message ?? 'Bu kişiye atama yapılamaz.');
 /** İş kaydına bağlanacak ekipman bu sitede yok ya da pasif (096). */
 export const invalidEquipment = (message) => new PlatformError(400, 'INVALID_EQUIPMENT', message ?? 'Ekipman bu siteye ait değil ya da bulunamadı.');
+/** Firmadaki (`firmada`) işin firma bilgisi silinemez (111); önce durum değiştirilir. */
+export const vendorRequired = () =>
+  new PlatformError(409, 'WORK_ITEM_VENDOR_REQUIRED', 'Firmadaki işin firma bilgisi silinemez. Önce durumu değiştirin.');
 export const invalidLocation = (message) => new PlatformError(400, 'INVALID_LOCATION', message ?? 'Daire veya blok bu siteye ait değil.');
 export const accountDeleted = () => new PlatformError(401, 'ACCOUNT_DELETED', 'Bu hesap silinmiş.');
 export const invalidTransition = (from, to) =>
@@ -224,7 +242,72 @@ export function parseCreateInput(body) {
   };
 }
 
-/** PATCH gövdesi: en az bir alan. assigned_to: kullanıcı kodu | null | "me". equipment_id (096): ekipman kimliği | null (bağı kaldırır). */
+// --- Firma (taşeron) bilgisi (111) ------------------------------------------------------------------------------
+
+export const VENDOR_NAME_MIN = 2;
+export const VENDOR_NAME_MAX = 80;
+export const VENDOR_CONTACT_MAX = 80;
+export const VENDOR_PHONE_MAX = 32;
+/** Tutar üst sınırı (kuruş; equipment_service MAX_KURUS ve DB CHECK ile aynı). */
+export const VENDOR_AMOUNT_MAX_KURUS = 1_000_000_000_000;
+
+function optionalSingleLine(value, label, max) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string') throw invalidField(`${label} geçersiz.`);
+  const text = singleLine(value);
+  if (text === '') return null;
+  if (codePointLength(text) > max) throw invalidField(`${label} en fazla ${max} karakter olabilir.`);
+  return text;
+}
+
+/** Firma telefonu (isteğe bağlı): santral / 444 numarası olabilir; yalnız rakam, boşluk ve + ( ) - . / ; 3-20 rakam, en çok 32 karakter. */
+export function normalizeWorkVendorPhone(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string') throw invalidField('Firma telefonu geçersiz.');
+  const text = singleLine(value);
+  if (text === '') return null;
+  const digits = text.replace(/\D/g, '').length;
+  if (!/^[+\d\s()\-./]+$/.test(text) || digits < 3 || digits > 20 || text.length > VENDOR_PHONE_MAX) {
+    throw invalidField('Firma telefonu geçersiz (yalnız rakam, boşluk ve + ( ) - . / kullanılabilir).');
+  }
+  return text;
+}
+
+/**
+ * `vendor` alanı: null (firma bilgisini kaldırır) ya da { name, contact?, phone?, amount_kurus? }.
+ * Ad zorunlu (2-80); yetkili ve telefon isteğe bağlı; tutar isteğe bağlı, KURUŞ cinsinden tam sayı (0 .. 1e12).
+ * @returns {null | { name: string, contact: string|null, phone: string|null, amountKurus: number|null }}
+ */
+export function parseVendorInput(value) {
+  if (value === null) return null;
+  if (!isPlainObject(value)) throw invalidField('Firma bilgisi geçersiz.');
+  if (typeof value.name !== 'string') throw invalidField('Firma adı zorunludur.');
+  const name = singleLine(value.name);
+  const length = codePointLength(name);
+  if (length < VENDOR_NAME_MIN) throw invalidField(`Firma adı en az ${VENDOR_NAME_MIN} karakter olmalıdır.`);
+  if (length > VENDOR_NAME_MAX) throw invalidField(`Firma adı en fazla ${VENDOR_NAME_MAX} karakter olabilir.`);
+  let amountKurus = null;
+  if (value.amount_kurus !== undefined && value.amount_kurus !== null) {
+    if (typeof value.amount_kurus !== 'number' || !Number.isSafeInteger(value.amount_kurus) || value.amount_kurus < 0 || value.amount_kurus > VENDOR_AMOUNT_MAX_KURUS) {
+      throw invalidField('Tutar kuruş cinsinden, sıfır ya da daha büyük bir tam sayı olmalıdır.');
+    }
+    amountKurus = value.amount_kurus;
+  }
+  return {
+    name,
+    contact: optionalSingleLine(value.contact, 'Yetkili kişi', VENDOR_CONTACT_MAX),
+    phone: normalizeWorkVendorPhone(value.phone),
+    amountKurus,
+  };
+}
+
+/** İki firma bilgisi aynı mı (değişiklik algısı; null = firma yok). */
+export function sameVendor(a, b) {
+  if (a === null || b === null) return a === b;
+  return a.name === b.name && a.contact === b.contact && a.phone === b.phone && a.amountKurus === b.amountKurus;
+}
+
+/** PATCH gövdesi: en az bir alan. assigned_to: kullanıcı kodu | null | "me". equipment_id (096): ekipman kimliği | null (bağı kaldırır). vendor (111): firma nesnesi | null (kaldırır). */
 export function parsePatchInput(body) {
   if (!isPlainObject(body)) throw invalidField('İstek gövdesi geçersiz.');
   const out = {};
@@ -258,6 +341,9 @@ export function parsePatchInput(body) {
       if (equipmentId === null) throw invalidField('Ekipman geçersiz.');
       out.equipmentId = equipmentId;
     }
+  }
+  if ('vendor' in body) {
+    out.vendor = parseVendorInput(body.vendor);
   }
   if (Object.keys(out).length === 0) throw invalidField('Değiştirilecek bir alan gönderilmedi.');
   return out;
@@ -400,6 +486,16 @@ export function mapManagerItem(row, { kind }) {
     assigned_to: row.assigned_to ? { user_code: num(row.assigned_to), name: row.assignee_name ?? DELETED_USER_NAME } : null,
     // 096: bağlı ekipman (boş = seçilmemiş). Sakin görünümünde (mapResidentItem) YOKTUR.
     equipment: row.equipment_id ? { id: num(row.equipment_id), name: row.equipment_name ?? null, kind: row.equipment_kind ?? null, is_active: row.equipment_active !== false } : null,
+    // 111: yönlendirilen firma (boş = firma yok). Sakin görünümünde (mapResidentItem) YOKTUR; yalnız durum (`firmada`) sakine görünür.
+    vendor: row.vendor_name
+      ? {
+          name: row.vendor_name,
+          contact: row.vendor_contact ?? null,
+          phone: row.vendor_phone ?? null,
+          amount_kurus: row.vendor_amount_kurus === null || row.vendor_amount_kurus === undefined ? null : Number(row.vendor_amount_kurus),
+          referred_at: toIso(row.vendor_referred_at),
+        }
+      : null,
     due_date: row.due_date ?? null,
     created_at: toIso(row.created_at),
     updated_at: toIso(row.updated_at),
