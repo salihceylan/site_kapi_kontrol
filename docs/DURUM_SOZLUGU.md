@@ -1,13 +1,13 @@
-# Durum sözlüğü (A–E): roller, durumlar ve terimler
+# Durum sözlüğü (A–F): roller, durumlar, terimler ve kabul disiplini
 
 Sistemde geçen **rol**, **durum** ve **terimlerin** tek belgelik sözlüğü. Her değer koddan alınmıştır (2026-10-28 itibarıyla): veritabanı
 `CHECK (... IN (...))` kısıtları (`server/migrations/`), sunucu sabitleri (`server/src/`) ve istemcideki Türkçe etiketler
 (`lib/models/`). Uydurma değer yoktur; bir değerin istemci modelinde **etiketi yoksa** "—" yazılır (anlamı gerekiyorsa parantez içinde ilgili belgeden verilir).
-Ekranların listesi için kardeş belge: `docs/EKRAN_ENVANTERI.md`.
+Ekranların listesi için kardeş belge: `docs/EKRAN_ENVANTERI.md`. **F bölümü bunun dışındadır:** koddan alınmış değer içermez; bir işin hangi kanıtla "bitti" sayılacağını (kabul durumları, kanıt etiketleri) tanımlar.
 
 **Okuma kılavuzu.** *Kod* = veritabanı/API değeri (`snake_case`, bazı tablolarda `BÜYÜK_HARF`); *Etiket* = istemcide görünen ad.
-**A–E**, bu belgenin beş bölümüdür: **A** Roller ve bağlar · **B** Hesap, üyelik ve başvuru durumları · **C** Kapı, cihaz ve geçiş ·
-**D** Finans ve para · **E** Modüller ve iş akışı durumları.
+**A–F**, bu belgenin altı bölümüdür: **A** Roller ve bağlar · **B** Hesap, üyelik ve başvuru durumları · **C** Kapı, cihaz ve geçiş ·
+**D** Finans ve para · **E** Modüller ve iş akışı durumları · **F** Kabul durumları ve kanıt.
 (Not: Astra karşılaştırma raporundaki "A–E sınıfı" — mevcut-tam / mevcut-eksik / yeni / ertelenmiş / sahip kararı — bir proje yönetimi
 sınıflamasıdır ve bu belgenin harfleriyle ilgisi yoktur.)
 
@@ -25,6 +25,8 @@ sınıflamasıdır ve bu belgenin harfleriyle ilgisi yoktur.)
 | Defter | Yalnız eklenen borç/tahsilat/ters kayıt satırları; tutarlar kuruş | D1 |
 | İki hesap | "İşletme Projesi (Aidat) Hesabı" (dairede oturan öder) ve "Yatırım ve Demirbaş (Fon) Hesabı" (malik öder) | D2 |
 | Dekont bildirimi | Sakinin ödeme bildirimi: İnceleniyor → Onaylandı / İptal edildi / Geri çekildi | D3 |
+| Kabul durumu | Üretildi → Denetlendi → Kapıdan geçti → Canlıda → Sahada doğrulandı; her biri ayrı kanıt ister, kod/test kanıtı saha kabulü değildir | F1, F2 |
+| Kanıt etiketi | `[ölçüldü]` (çalıştırıldı/görüldü) · `[kaynaklı]` (okunan kaynak) · `[tahmin]` (doğrulanmamış varsayım) | F4 |
 
 ---
 
@@ -398,6 +400,87 @@ denetim kaydında `lib/models/audit_log.dart` etiketleriyle ("Modül açıldı",
 
 ---
 
+## F. Kabul durumları ve kanıt
+
+Bu bölüm bir **kaydın** durumunu değil, bir **işin ne kadar kanıtlandığını** tanımlar; veritabanında ya da istemcide karşılığı yoktur. Faz sayfaları,
+`SAHA_KONTROL_LISTESI.md`, `BEKLEYEN_ISLER.md`, dalga raporları ve devir notları "bitti" derken bu sözcükleri kullanır. Yöntem fikri Astra karşılaştırma
+raporunun "yöntem olarak alınabilecekler" bölümünden gelir; Astra'nın dosya biçimi, adları ve araçları buraya **taşınmamıştır**, yalnız söz dağarcığı alınmıştır. Bölüm 2026-10-29'da eklendi.
+
+### F1. Beş kabul durumu
+
+Sıra, artan kanıt sırasıdır. Üst durum alt durumun yerine geçmez; bir durum **yalnız kendi kanıtı** varsa yazılır.
+
+| Durum | Anlamı | Kanıt (bundan azı yetmez) | Kim yazar |
+| --- | --- | --- | --- |
+| **Üretildi** | Kod, belge ya da veri yazıldı; ilgili hedefli test yerelde çalıştı. | Dal ve commit; hedefli test çıktısı. | Yazan |
+| **Denetlendi** | Yazandan başka biri (ya da ajan) değişikliği baştan sona inceledi; bulgular işlendi ya da gerekçesiyle ertelendi. | İnceleme turu kaydı (bulgular ve sonuçları). Para/yetki dokunuşunda **en az 2 tur**. | Yazan değil, inceleyen |
+| **Kapıdan geçti** | Birleştirme sonrası tam test yeşil; para/yetki işinde ayrıca **gerçek PostgreSQL** koşusu yeşil; main'e birleştirildi. | Tam test ve QA betiği çıktısı; birleştirme commit'i. | Birleştiren |
+| **Canlıda** | Değişiklik gerçek ortamdaki sürümde çalışıyor (sunucu, web, APK; hangisi gerekiyorsa). | Dağıtım kaydı (sürüm ya da zaman damgası) ve canlıda yapılan sağlık/uç nokta denetimi. | Dağıtımı yapan |
+| **Sahada doğrulandı** | Gerçek cihazda, gerçek hesapla ya da gerçek sitede, deneme maddesinin **Beklenen Sonuç**'u gözle ya da ölçüyle görüldü. | `SAHA_KONTROL_LISTESI.md` ya da deneme sayfasında, denemeyi yapanın işaretlediği madde. | **Yalnız denemeyi yapan kişi** (sahip/saha); geliştirici bu kutuyu işaretlemez |
+
+Para/yetki işinde "en az 2 tur" ve "gerçek PostgreSQL" koşulu çalışma planından gelir (`docs/superpowers/plans/2026-10-28-karsilastirma-guclendirme.md`).
+
+### F2. Kurallar
+
+1. **Kod/test kanıtı saha kabulü değildir.** Yeşil test, derleme, `flutter analyze`, ana makine testi ve gerçek-PostgreSQL QA betiği işi en çok "Kapıdan geçti"ye
+   götürür; kullanıcının telefonunu, kartı, kapıyı ya da gerçek siteyi sınamaz. `SAHA_KONTROL_LISTESI.md`'de donanım maddelerinde bu ayrım iki kutuyla yapılır:
+   üstteki kutu cihaz/saha kabulüdür ve maddeyi yalnız o kapatır; içteki "Kod/test kanıtı" kutusu işaretli olsa da üst kutu boşsa madde **kapanmamıştır**
+   (satırdaki söz: "Bu satır kartı sınamaz"). Donanım dışı maddelerde ayrı kutu zorunlu değildir, ama durum yazılırken aynı ilke geçerlidir.
+2. **Canlıda, sahada doğrulandı demek değildir.** Dağıtım sürümün yayında olduğunu gösterir, kullanıcının gördüğünün doğru olduğunu göstermez. Kullanıcıya
+   görünen bir değişikliğin durumu, ilgili deneme maddesi işaretlenene dek "Canlıda" kalır. Ekran metni de aynı ilkeye uyar: karekodla geçiş ekranı
+   "Gönderildi - Geçiş onaylandı" der, "Kapı Açıldı!" demez; kapının fiziksel olarak açıldığını yalnız sahadaki gözlem kanıtlar (`SAHA_KONTROL_LISTESI.md` madde 14.7).
+3. **Durum atlanmaz, eskir.** Denetlenmemiş işe "Kapıdan geçti" yazılmaz. Bir durum yazıldıktan sonra kod değişirse, değişikliğin kendi kanıtı gelene dek iş
+   son kanıtlanmış duruma geri döner.
+4. **Kanıtsız söz durum değildir.** "Çalışıyor", "test edildi", "hazır" tek başına durum sayılmaz: durum adı, hangi test/denetim, hangi ortam ve hangi tarih yazılır (F4 etiketleriyle).
+5. **Görünmeyen iş saha durumuna taşınmaz.** Kullanıcıya görünmeyen iç değişikliklerin (araç, belge, sunucu içi düzenleme) son durumu "Kapıdan geçti" ya da
+   "Canlıda"dır; sahada doğrulanmış gibi gösterilmez. Kullanıcıya görünen her değişiklik için deneme maddesi açılır (`tools/deneme_listesi/platform.json` ve `SAHA_KONTROL_LISTESI.md`).
+6. **Eksik kanıt açıkça yazılır.** Rapor ve devir notlarında "canlıda değil" ya da "sahada doğrulanmadı" diye yazılır; belirsiz bir sözün yerine durum adı kullanılır.
+
+### F3. Para ve yetki QA'sında bağımsız beklenen sonuç (altın veri setleri)
+
+Para ve yetki, kodun kendi çıktısıyla sınanamaz: kod yanlışsa çıktısı da yanlıştır ve "beklenen" diye kopyalanan yanlış değer testi yeşil yapar. Bu yüzden:
+
+- **Beklenen değer elle yazılır.** Sınanan kod çalıştırılarak üretilmez; hesap adımları fikstürün içinde yazılıdır. Kod bu değerle karşılaştırılır, tutmazsa test düşer.
+- **Mümkünse ikinci, bağımsız yol da yazılır.** Örnek: gecikme tazminatı hem gerçek hesapla hem gün gün kaba kuvvet tanımıyla karşılaştırılır.
+- **Sapma çıkınca önce elle hesap yeniden yapılır** (iki kez). Hesap doğruysa hata kodun hatası olarak raporlanır; beklenen değer koda uydurulmaz.
+- **Testin kendisi sınanır.** Kodu bilerek bozup testin düştüğü görülür (bozma denemesi). İlk setin iki hesaplı kontrolleri dört bozma denemesiyle sınanmış, dördü de testlerce yakalanmıştır (`docs/PLATFORM_FINANS.md`, "Altın veri seti").
+- **Yetkide aynı alışkanlık.** "Kim neyi yapabilir" beklentisi rol × işlem × sonuç (izinli ya da reddedildi ve hata kodu) tablosu olarak elle yazılır; kodun izin
+  kurallarından üretilmez. Tablo ile kod ayrışırsa tablo koda uydurularak test geçirilmez; güvenlik testleri gevşetilmez.
+- **Sınır.** Altın veri seti de kod kanıtıdır (F2, madde 1): işi "Kapıdan geçti"ye taşır, "Sahada doğrulandı"ya değil. Sahipten gelen gerçek tablo, ayrı bir set olarak eklenir.
+
+| Set | Fikstür (elle hesap) | Test | Kapsam |
+| --- | --- | --- | --- |
+| 1 | `server/test/fixtures/finance_golden_site.js` | `server/test/finance_golden_dataset.test.js` | Dağıtım, yuvarlama, gecikme tazminatı, mahsup; iki hesaplı durumlar |
+| 2 | `server/test/fixtures/finance_golden_site_2.js` | `server/test/finance_golden_dataset_2.test.js` (veritabanısız) ve `server/scripts/qa_finance_golden2_pg.mjs` (gerçek PostgreSQL) | Dalga B kuralları küçük bir sitede uçtan uca |
+
+Ayrıntı: `docs/PLATFORM_FINANS.md`, "Altın veri seti" ve "Altın veri seti 2".
+
+### F4. Kanıt etiketleri
+
+Rapor, faz sayfası ve devir notundaki her sayı ve "çalışır/çalışmaz" iddiası üç etiketten biriyle yazılır:
+
+| Etiket | Anlamı | Yanında yazılacak |
+| --- | --- | --- |
+| `[ölçüldü]` | Bu işte çalıştırıldı, ölçüldü ya da doğrudan görüldü; sonuç gözlendi. | Ne (komut, test, ekran), nerede (yerel, canlı, cihaz) ve ne zaman: `[ölçüldü: <komut>, <ortam>, <tarih>]` |
+| `[kaynaklı]` | Okunan bir kaynağa dayanır (kod, belge, mevzuat, üretici sayfası); çalıştırılmadı. | Kaynak: dosya ve satır ya da belge adı, sürüm, tarih: `[kaynaklı: server/src/modules/catalog.js]` |
+| `[tahmin]` | Bilgiye dayalı varsayım ya da çıkarım; ne ölçüldü ne okundu. | Neye dayandığı ve nasıl doğrulanacağı: `[tahmin: <dayanak>; doğrulama: <yol>]` |
+
+- **Okumak çalıştırmak değildir.** Koddan "böyle çalışır" demek `[kaynaklı]`, "çalıştırdım, şöyle çıktı" demek `[ölçüldü]`'dür.
+- **İkinci el özet kaynak değildir.** Başka bir belgenin ya da ajanın özeti, birincil kaynağa (koda, çıktıya) bakılmadan `[kaynaklı]` sayılmaz; `[tahmin]` kalır.
+- **En zayıf dayanak etiketi belirler.** Bir cümlede ölçülen ve tahmin edilen birlikteyse cümle `[tahmin]` taşır.
+- **`[tahmin]` tek başına kanıt olmaz.** F1'deki hiçbir durumun ve hiçbir kararın dayanağı olamaz; yalnız doğrulanacak bir varsayımdır.
+- **`[ölçüldü]` eskir.** Ortam ya da kod değişince yeniden ölçülür; tarihin yazılma nedeni budur.
+- **Etiketsiz iddia doğrulanmamış sayılır.**
+
+Örnek cümleler (biçimi göstermek içindir, bir durum bildirmez):
+
+| Yetersiz | Yeterli |
+| --- | --- |
+| "Aidat dağıtımı bitti, test geçti." | "Aidat dağıtımı **Kapıdan geçti** `[ölçüldü: <tam test ve altın veri seti>, yerel, <tarih>]`; **Canlıda** değil; **sahada doğrulanmadı**." |
+| "Kapı açma ekranı çalışıyor." | "Kapı açma ekranı **Canlıda** `[ölçüldü: <dağıtım kaydı>, canlı, <tarih>]`; kapının fiziksel açılışı **sahada doğrulanmadı** (deneme maddesi açık)." |
+
+---
+
 ## Kaynakların haritası
 
 | Konu | Dosya |
@@ -408,3 +491,4 @@ denetim kaydında `lib/models/audit_log.dart` etiketleriyle ("Modül açıldı",
 | Etiketler | `lib/models/*.dart` (özellikle `work_tracking_models`, `reservation_models`, `visitor_log_models`, `finance`, `payment_notice`, `door_access_log_record`, `door_permission_record`, `audit_log`) |
 | Kapı kaydı tetikleyicileri | `server/src/services/door_log_service.js` |
 | Terim sözlüğü / terim katmanı | `lib/models/management_terms.dart`, `lib/models/finance_funds.dart` |
+| Kabul durumları ve kanıt (F) | `SAHA_KONTROL_LISTESI.md` ("Kanıt türü" notu), `docs/PLATFORM_FINANS.md` ("Altın veri seti"), `server/test/fixtures/finance_golden_site*.js`, `tools/deneme_listesi/`, `docs/superpowers/plans/2026-10-28-karsilastirma-guclendirme.md` |
