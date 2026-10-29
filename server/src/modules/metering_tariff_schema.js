@@ -1,4 +1,4 @@
-// Sayac tarifesi semasi: 116. migrations/116_meter_tariffs.sql ile AYNI ifadeler, AYNI sirayla (test: metering.test.js).
+// Sayac tarifesi semasi: 116. migrations/117_meter_tariffs.sql ile AYNI ifadeler, AYNI sirayla (test: metering.test.js).
 // Tamamen idempotent (IF NOT EXISTS / katalog korumali); metering_schema.js (061) ensure'indan SONRA calisir (sites / users yukarida kurulu).
 
 function foreignKeySql(table, column, parent, parentColumn, onDelete) {

@@ -11,7 +11,7 @@ import { createTariff } from '../src/modules/metering_tariff.js';
 import { computeBillingPlan, parseBillingInput } from '../src/modules/metering_billing.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const MIGRATION = readFileSync(path.join(DEFAULT_MIGRATIONS_DIR, '116_meter_tariffs.sql'), 'utf8').replace(/\r\n/g, '\n');
+const MIGRATION = readFileSync(path.join(DEFAULT_MIGRATIONS_DIR, '117_meter_tariffs.sql'), 'utf8').replace(/\r\n/g, '\n');
 const ROUTES = readFileSync(path.join(here, '..', 'src', 'modules', 'metering_routes.js'), 'utf8');
 const DB_SOURCE = readFileSync(path.join(here, '..', 'src', 'db.js'), 'utf8');
 const norm = (text) => text.replace(/--.*$/gm, ' ').replace(/\s+/g, ' ').replace(/ ;/g, ';').trim();

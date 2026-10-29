@@ -4437,16 +4437,16 @@ Kampanya: şimdi abone olan siteye ilk 2 ay ücretsiz. Site başvurusu onaylanı
   - **Nasıl Test Edilir:** Rol: Proje sahibi. Ön koşul: Tanıtım sitesi derlenmiş ve FTP ile yayınlanmış (ana oturum yapar). Tanıtım sitesi derlenip yayınlandıktan sonra ana sayfada #paketler başlığının altına bakın. Şeridi 320 px dar ekranda ve masaüstünde, açık ve koyu temada görün. Fiyat kartlarına ve hesaplayıcıya bakın.
   - **Beklenen Sonuç:** Başlığın altında, fiyat kartlarının üstünde tek cümlelik “Şimdi abone olun: ilk 2 ay ücretsiz” şeridi görünür; her genişlikte ve iki temada okunur. Fiyat rakamları ve hesaplayıcı değişmemiştir (hesaplayıcı ücretsiz dönemi düşmez); “ücretsiz” sözcüğü sitede başka hiçbir yerde geçmez.
 
-## 156. 💧 Sayaç Tarifesi ve Tarifeli Faturalandırma (2026-10-29, migration 116)
+## 157. 💧 Sayaç Tarifesi ve Tarifeli Faturalandırma (2026-10-29, migration 116)
 
 Sayaç türü başına geçerlilik tarihli birim fiyat tarifesi; Faturalandır sekmesinde birim fiyat tarifeden alınır, önizleme onaylanınca aynı tutarlar Finans’a borç yazılır. Fiyatı yönetici kendisi girer.
 
-- [ ] **156.1. Sayaç tarifesi girilir; yeni tarife eskisini kapatır (F79.01):**
+- [ ] **157.1. Sayaç tarifesi girilir; yeni tarife eskisini kapatır (F81.01):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Sayaç modülü açık, siteye sayaç ve okuma girilmiş. Site yöneticisiyle Sayaçlar > Faturalandır sekmesini açın; “Tarifeler (birim fiyat)” kutusundan “Tarife ekle” deyin. Sayaç türünü seçin, kendi birim fiyatınızı (TL / birim) ve geçerlilik başlangıcını girip kaydedin. Aynı tür için bundan sonraki bir tarihle ikinci bir tarife ekleyin. Sonra ilk tarihten ÖNCEKİ bir tarihle üçüncü bir tarife eklemeyi deneyin.
   - **Beklenen Sonuç:** İlk tarife kutuda “<tür>: <fiyat> / birim · <tarih> tarihinden itibaren” olarak görünür. İkinci tarife eklenince kutuda yalnız yenisi geçerli görünür (eskisi yeni tarihte sona erer); başka türün tarifesi değişmez. Son tarifenin başlangıcından önce ya da aynı gün başlayan tarife reddedilir (409 TARIFF_OUT_OF_ORDER). Geçmiş faturalandırmalar aynen kalır.
-- [ ] **156.2. Tarife yokken Faturalandır sekmesi “Önce tarife girin” der (F79.02):**
+- [ ] **157.2. Tarife yokken Faturalandır sekmesi “Önce tarife girin” der (F81.02):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Tarifesi olmayan bir sayaç türü. Hiç tarifesi olmayan bir türde (örneğin elektrik) Faturalandır sekmesini açın; yöntem “Birim fiyat” olsun. “Tarife gir” düğmesine basıp tarifeyi ekleyin.
   - **Beklenen Sonuç:** “Önce tarife girin” kutusu ve “Tarife gir” düğmesi görünür; birim fiyat kutusu yoktur ve “Önizle” kapalıdır. Tarife eklenince kutu kaybolur, “Birim fiyat, dönem sonunda geçerli olan tarifeden alınır.” yazar ve “Önizle” açılır. Salt okur kurul üyesinde düğme çıkmaz.
-- [ ] **156.3. Önizleme tarifeyle hesaplanır, onaydan sonra aynı tutarlar Finans’a borç yazılır (F79.03):**
-  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F79.01 tarifesi; dönem başında ve sonunda okumalar tam. İki okuma tarihi arasını seçip “Önizle” deyin; satırlardaki tüketim ve tutarlara, üstteki “Tarife:” satırına bakın. “Borçlandır” deyip onaylayın; sonra Finans’ta bir dairenin hesabına bakın. Yeni bir tarife ekleyin ve geçmiş faturalandırmalar listesine bakın.
+- [ ] **157.3. Önizleme tarifeyle hesaplanır, onaydan sonra aynı tutarlar Finans’a borç yazılır (F81.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F81.01 tarifesi; dönem başında ve sonunda okumalar tam. İki okuma tarihi arasını seçip “Önizle” deyin; satırlardaki tüketim ve tutarlara, üstteki “Tarife:” satırına bakın. “Borçlandır” deyip onaylayın; sonra Finans’ta bir dairenin hesabına bakın. Yeni bir tarife ekleyin ve geçmiş faturalandırmalar listesine bakın.
   - **Beklenen Sonuç:** Önizlemede her dairenin tutarı tüketim x tarifedeki birim fiyattır; toplam ve daire sayısı yazar. Onaydan sonra Finans’ta yazılan borç, önizlemedeki tutarla birebir aynıdır (önizleme olmadan tahakkuk yapılamaz; önizlemeden sonra tarife değişirse kayıt “Önizleme güncel değil” diyerek reddedilir). Tarife dönem İÇİNDE başlamışsa önizlemede kırmızı uyarı çıkar. Sonradan girilen yeni tarife geçmiş faturalandırmayı değiştirmez.
