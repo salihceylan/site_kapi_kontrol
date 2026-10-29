@@ -4,6 +4,8 @@
 # (her migration icin o migration'in olusturdugu nesne: tablo / sutun / indeks / kisit / tetikleyici / islev) varlik kontrolleri + IDEMPOTANS:
 # ensureDbSchema turlarinda node CIKIS KODU ve "ENSURE_OK tur N" satiri ZORUNLUDUR; yoksa (migration/sema coktuyse) PROVA_SORUNLU basar.
 # ikinci ensureDbSchema turundan sonra TUM public semasinin parmak izi (kolon, kisit, indeks, tetikleyici, islev) ilk turla AYNI olmali.
+# 085, 088-091, 096-100, 102, 103, 110, 111 (okNNN, ok085-111 grubu): her migration'in nesneleri (tablo / sutun / indeks / kisit / tetikleyici / islev) varlik + (088 / 090) kisitlarin DOGRULANMIS olmasi;
+# ayrica yukseltme bu migration'larin tablolarina satir ekler / silerse once/sonra sayim parmak izi (ok085data) uyusmaz ve PROVA_SORUNLU basar.
 # Kullanim: bash remote_rehearse_schema.sh <TS>   (once remote_deploy.sh <TS> prepare calismis olmali)
 set -u
 TS="$1"
@@ -34,6 +36,25 @@ before_cp_sm=$($PSQL -d "$RDB" -Atc "select count(*) from site_modules where mod
 before_doc_sm=$($PSQL -d "$RDB" -Atc "select count(*) from site_modules where module_code = 'documents'" 2>/dev/null); before_doc_sm=${before_doc_sm:-0}
 # 104 (coklu malik): yukseltme malik satirlarini ne ekler ne siler; once/sonra guncel malik satiri sayisi esit olmali.
 before_owners=$($PSQL -d "$RDB" -Atc "select count(*) from apartment_residencies where is_current and relation = 'owner'" 2>/dev/null); before_owners=${before_owners:-0}
+# 085-111 (ekleyici migration'lar) once/sonra veri parmak izi: yukseltme bu migration'larin tablolarina / sutunlarina ne satir ekler ne siler. 100 varsayilan kategorileri
+# TOHUMLAMAZ (ilk kullanimda sunucu kodu tohumlar). Tablo / sutun yoksa (eski yedek) psql hatasi 0 sayilir; ensureDbSchema bos tablo olusturur, yani yine once = sonra.
+cnt() { local v; v=$($PSQL -d "$RDB" -Atc "select count(*) from $1" 2>/dev/null); echo "${v:-0}"; }
+snap085() {
+  local t s=""
+  for t in auth_attempt_limits finance_refunds finance_refund_counters finance_liability_transfers work_categories site_menu_layouts feedback_reports feedback_attachments expense_check_marks payment_notice_check_marks equipment_quotes drive_files fee_runs work_items; do
+    s="$s $t=$(cnt "$t")"
+  done
+  s="$s iade_hareketi=$(cnt "account_movements where kind = 'refund'")"
+  s="$s iade_defter=$(cnt "ledger_entries where source_kind in ('refund', 'liability_transfer')")"
+  s="$s teklif_revizyon=$(cnt "equipment_quotes where revision_no > 1")"
+  s="$s dosya_kaynakli=$(cnt "drive_files where source_type is not null")"
+  s="$s tahakkuk_dayanakli=$(cnt "fee_runs where decision_id is not null")"
+  s="$s is_ekipmanli=$(cnt "work_items where equipment_id is not null")"
+  s="$s is_firmali=$(cnt "work_items where vendor_name is not null")"
+  s="$s is_firmada=$(cnt "work_items where status = 'firmada'")"
+  echo "${s# }"
+}
+SNAP085_BEFORE="$(snap085)"
 echo "   once: sites=$before_sites users=$before_users doors=$before_doors site_memberships=$before_sm"
 echo "[3/5] yeni ensureDbSchema (2 kez, ikinci tur no-op olmali)"
 # Sema parmak izi: tum public semasi (kolonlar+varsayilanlar, kisitlar, indeksler, tetikleyiciler, islev govdeleri). Satir SAYILARI dahil degildir.
@@ -193,6 +214,44 @@ ok106=$(q "select $(tb "'trial_access_codes'" 1) and $(ix "'uq_trial_access_code
 # 107 (acil durum akisi: asansor bakim firmasi; Dalga E): tablo + 2 CHECK.
 ok107=$(q "select $(tb "'site_emergency_info'" 1) and $(ks "'chk_site_emergency_info_firm_name','chk_site_emergency_info_firm_phone'" 2)")
 echo "   [104-107] varlik kontrolleri: ok104=$ok104 (malik satiri once/sonra: $before_owners/$after_owners; muhatapli daire: $(q "select count(*) from apartment_residencies where is_current and relation = 'owner' and is_account_holder")) ok106=$ok106 ok107=$ok107"
+# 085-111 yardimcilari: kd = kisit tanimi METIN icerir (position: LIKE joker karakteri yok), kv = adi verilen kisitlar DOGRULANMIS (NOT VALID degil), fm = islev govdesi surum isareti tasir.
+kd() { echo "(select count(*) from pg_constraint where connamespace='public'::regnamespace and conname='$1' and position('$2' in pg_get_constraintdef(oid)) > 0)=1"; }
+kv() { echo "(select count(*) from pg_constraint where connamespace='public'::regnamespace and conname in ($1) and convalidated)=$2"; }
+fm() { echo "(select count(*) from pg_proc where pronamespace='public'::regnamespace and proname='$1' and position('-- $2:' in prosrc) > 0)=1"; }
+# 085 (kalici deneme sinirlari): tablo + 7 sutun + PK / 3 CHECK + zaman indeksi.
+ok085=$(q "select $(tb "'auth_attempt_limits'" 1) and $(cl "'auth_attempt_limits.scope','auth_attempt_limits.target','auth_attempt_limits.fail_count','auth_attempt_limits.window_started_at','auth_attempt_limits.locked_until','auth_attempt_limits.lock_level','auth_attempt_limits.updated_at'" 7) and $(ks "'pk_auth_attempt_limits','chk_auth_attempt_limits_scope','chk_auth_attempt_limits_target','chk_auth_attempt_limits_counters'" 4) and $(ix "'idx_auth_attempt_limits_updated'" 1)")
+# 088 (alacak iadesi): 2 tablo, account_movements.refund_id, 15 CHECK/tekil + 10 FK, 10 indeks, 5 tetikleyici, 2 islev (surum isareti fr:), hareket / defter CHECK'leri 'refund' (+ 'liability_transfer') kabul eder ve DOGRULANMIS (NOT VALID kalmamali).
+ok088=$(q "select $(tb "'finance_refunds','finance_refund_counters'" 2) and $(cl "'account_movements.refund_id'" 1) and $(ks "'chk_finance_refunds_party','chk_finance_refunds_amount','chk_finance_refunds_status','chk_finance_refunds_requester','chk_finance_refunds_method','chk_finance_refunds_text','chk_finance_refunds_resolved','chk_finance_refunds_rejected','chk_finance_refunds_approved','chk_finance_refunds_reversed','chk_finance_refunds_receipt','chk_finance_refunds_keys','uq_finance_refunds_idempotency','chk_finance_refund_counters_last','chk_finance_refund_counters_year'" 15) and $(ks "'finance_refunds_site_code_fkey','finance_refunds_apartment_id_fkey','finance_refunds_requested_by_fkey','finance_refunds_resolved_by_fkey','finance_refunds_reversed_by_fkey','finance_refunds_pay_account_id_fkey','finance_refunds_ledger_entry_id_fkey','finance_refunds_reversal_ledger_entry_id_fkey','finance_refund_counters_site_code_fkey','account_movements_refund_id_fkey'" 10) and $(ix "'idx_finance_refunds_site_status','idx_finance_refunds_apartment','idx_finance_refunds_requested_by','idx_finance_refunds_resolved_by','idx_finance_refunds_reversed_by','uq_finance_refunds_ledger','uq_finance_refunds_reversal_ledger','idx_finance_refunds_pay_account','uq_finance_refunds_receipt','uq_account_movements_refund'" 10) and $(tg "'trg_finance_refunds_guard','trg_finance_refunds_no_truncate','trg_finance_refund_counters_guard','trg_finance_refund_counters_no_truncate','trg_account_movements_check_refund'" 5) and $(fn "'trg_finance_refunds_guard','trg_account_movements_check_refund'" 2) and $(fm trg_finance_refunds_guard fr) and $(fm trg_account_movements_check_refund fr) and $(kd chk_account_movements_kind refund) and $(kd chk_account_movements_sign refund) and $(kd chk_account_movements_source refund_id) and $(kd chk_ledger_entries_source refund) and $(kd chk_ledger_entries_source liability_transfer) and $(kv "'chk_account_movements_kind','chk_account_movements_sign','chk_account_movements_source','chk_ledger_entries_source'" 4)")
+# 089 (kiraci borcunun malike devri): tablo, 11 kisit (7 CHECK/tekil + 4 FK), 3 indeks, 3 tetikleyici, kontrol islevi (surum isareti fl:).
+ok089=$(q "select $(tb "'finance_liability_transfers'" 1) and $(ks "'chk_finance_liability_transfers_parties','chk_finance_liability_transfers_total','chk_finance_liability_transfers_count','chk_finance_liability_transfers_reason','chk_finance_liability_transfers_hash','chk_finance_liability_transfers_key','uq_finance_liability_transfers_idempotency','finance_liability_transfers_site_code_fkey','finance_liability_transfers_apartment_id_fkey','finance_liability_transfers_created_by_fkey','finance_liability_transfers_reverses_fkey'" 11) and $(ix "'idx_finance_liability_transfers_apartment','uq_finance_liability_transfers_reverses','idx_finance_liability_transfers_created_by'" 3) and $(tg "'trg_finance_liability_transfers_immutable','trg_finance_liability_transfers_no_truncate','trg_finance_liability_transfers_check'" 3) and $(fn "'trg_finance_liability_transfers_check'" 1) and $(fm trg_finance_liability_transfers_check fl)")
+# 090 (demirbas / fon tahakkukunun dayanagi): fee_runs 2 sutun, CHECK (DOGRULANMIS) + board_decisions'a bilesik FK, kismi indeks.
+ok090=$(q "select $(cl "'fee_runs.decision_id','fee_runs.decision_reason'" 2) and $(ks "'chk_fee_runs_decision','fee_runs_decision_fkey'" 2) and $(kv "'chk_fee_runs_decision'" 1) and $(kd fee_runs_decision_fkey board_decisions) and $(ix "'idx_fee_runs_decision'" 1)")
+# 091 (aidat dagitim tabani person_count): db.js bu adimin hatasini YALNIZ loglar (acilisi durdurmaz); kisit person_count icermiyorsa prova burada yakalar. Eski kume (land_share) korunur.
+ok091=$(q "select $(kd chk_fee_definitions_distribution person_count) and $(kd chk_fee_definitions_distribution land_share)")
+# 096 (is kaydi <-> ekipman bagi, fotograf etiketi): 2 sutun, FK + CHECK, kismi indeks, olay turu kisiti equipment_changed kabul eder.
+ok096=$(q "select $(cl "'work_items.equipment_id','work_item_attachments.phase'" 2) and $(ks "'work_items_equipment_id_fkey','chk_work_item_attachments_phase'" 2) and $(ix "'idx_work_items_equipment'" 1) and $(kd chk_work_item_events_type equipment_changed)")
+# 097 (Drive dosya kaydi <-> kaynak kayit): 2 sutun, CHECK (bilerek NOT VALID; eski satirlar NULL/NULL), kismi indeks.
+ok097=$(q "select $(cl "'drive_files.source_type','drive_files.source_id'" 2) and $(ks "'chk_drive_files_source'" 1) and $(ix "'idx_drive_files_source'" 1)")
+# 098 (teklif karsilastirma): equipment_quotes 3 yeni sutun + 2 CHECK.
+ok098=$(q "select $(cl "'equipment_quotes.delivery_days','equipment_quotes.note','equipment_quotes.vat_included'" 3) and $(ks "'chk_equipment_quotes_delivery','chk_equipment_quotes_note'" 2)")
+# 099 (onayli teklif revizyonu): 3 sutun, 4 CHECK + tekil + bilesik FK, halef tekil indeksi, degismezlik tetikleyicisi ve islevi (surum isareti eqq:).
+ok099=$(q "select $(cl "'equipment_quotes.revision_no','equipment_quotes.previous_id','equipment_quotes.revision_reason'" 3) and $(ks "'chk_equipment_quotes_revision_no','chk_equipment_quotes_revision_reason','chk_equipment_quotes_previous_self','chk_equipment_quotes_revision','uq_equipment_quotes_site_id','equipment_quotes_previous_fkey'" 6) and $(ix "'uq_equipment_quotes_previous'" 1) and $(tg "'trg_equipment_quotes_locked'" 1) and $(fn "'trg_equipment_quotes_locked'" 1) and $(fm trg_equipment_quotes_locked eqq)")
+# 100 (is takibi kategorileri): tablo, 6 kisit, 4 indeks; work_items kategori CHECK'i yeni anahtar kumesine gecti (eski chk_work_items_category YOK, chk_work_items_category_key VAR ve k_<ad> kalibini icerir).
+ok100=$(q "select $(tb "'work_categories'" 1) and $(ks "'work_categories_site_code_fkey','work_categories_created_by_fkey','chk_work_categories_key','chk_work_categories_label_length','chk_work_categories_sort_order','chk_work_categories_system_key','chk_work_items_category_key'" 7) and $(ks "'chk_work_items_category'" 0) and $(kd chk_work_items_category_key '{1,38}') and $(ix "'uq_work_categories_site_key','uq_work_categories_site_label','idx_work_items_site_category','idx_work_item_attachments_site_sha256'" 4)")
+# 102 (site menu yerlesimi): tablo + 4 sutun + CHECK ve iki FK (satir iceri-baglantili; adlar PostgreSQL varsayilani).
+ok102=$(q "select $(tb "'site_menu_layouts'" 1) and $(cl "'site_menu_layouts.site_code','site_menu_layouts.compact_modules','site_menu_layouts.updated_by','site_menu_layouts.updated_at'" 4) and $(ks "'chk_site_menu_layouts_size','site_menu_layouts_site_code_fkey','site_menu_layouts_updated_by_fkey'" 3)")
+# 103 (geri bildirim): 2 tablo, 12 CHECK + 3 FK, 5 indeks.
+ok103=$(q "select $(tb "'feedback_reports','feedback_attachments'" 2) and $(ks "'chk_feedback_reports_role','chk_feedback_reports_screen_name','chk_feedback_reports_screen_route','chk_feedback_reports_message','chk_feedback_reports_app_version','chk_feedback_reports_platform','chk_feedback_attachments_file_name','chk_feedback_attachments_mime','chk_feedback_attachments_size','chk_feedback_attachments_status','chk_feedback_attachments_ready','chk_feedback_attachments_sha256','feedback_reports_site_code_fkey','feedback_reports_user_code_fkey','feedback_attachments_feedback_id_fkey'" 15) and $(ix "'idx_feedback_reports_site','idx_feedback_reports_user_created','idx_feedback_attachments_feedback','idx_feedback_attachments_uploading','uq_feedback_attachments_storage_key'" 5)")
+# 110 (kontrol izi): 2 yan tablo, 6 FK, 4 indeks (gider ve dekont satirlari degismez; iz ayri tablodadir).
+ok110=$(q "select $(tb "'expense_check_marks','payment_notice_check_marks'" 2) and $(ks "'expense_check_marks_expense_id_fkey','expense_check_marks_site_code_fkey','expense_check_marks_checked_by_fkey','payment_notice_check_marks_notice_id_fkey','payment_notice_check_marks_site_code_fkey','payment_notice_check_marks_checked_by_fkey'" 6) and $(ix "'idx_expense_check_marks_site','idx_expense_check_marks_by','idx_payment_notice_check_marks_site','idx_payment_notice_check_marks_by'" 4)")
+# 111 (is kaydi <-> firma yonlendirmesi): work_items 5 sutun, 2 CHECK, durum kisiti firmada kabul eder.
+ok111=$(q "select $(cl "'work_items.vendor_name','work_items.vendor_contact','work_items.vendor_phone','work_items.vendor_amount_kurus','work_items.vendor_referred_at'" 5) and $(ks "'chk_work_items_vendor','chk_work_items_firmada_vendor'" 2) and $(kd chk_work_items_status firmada)")
+# 085-111 veri parmak izi: ensureDbSchema (2 tur) sonrasi sayilar ONCEKINE esit olmali (hepsi ekleyici; satir eklemez / silmez).
+SNAP085_AFTER="$(snap085)"
+ok085data=f; [ -n "$SNAP085_BEFORE" ] && [ "$SNAP085_BEFORE" = "$SNAP085_AFTER" ] && ok085data=t
+echo "   [085-111] varlik kontrolleri: ok085=$ok085 ok088=$ok088 ok089=$ok089 ok090=$ok090 ok091=$ok091 ok096=$ok096 ok097=$ok097 ok098=$ok098 ok099=$ok099 ok100=$ok100 ok102=$ok102 ok103=$ok103 ok110=$ok110 ok111=$ok111 ok085data=$ok085data"
+echo "   [085-111] veri sayilari once/sonra: $([ "$ok085data" = t ] && echo "AYNI (esit olmali): $SNAP085_AFTER" || echo "FARKLI-SORUNLU once={$SNAP085_BEFORE} sonra={$SNAP085_AFTER}")"
+echo "   [091] aidat dagitim kisiti person_count iceriyor: $(q "select count(*) from pg_constraint where conname='chk_fee_definitions_distribution' and position('person_count' in pg_get_constraintdef(oid)) > 0") (1 olmali; db.js 091 hatasini yalniz loglar, acilisi durdurmaz)"
 echo "   [052-084] varlik kontrolleri: ok052=$ok052 ok053=$ok053 ok054=$ok054 ok055=$ok055 ok056=$ok056 ok057=$ok057 ok058=$ok058 ok059=$ok059 ok060=$ok060 ok061=$ok061 ok062=$ok062 ok063=$ok063 ok064=$ok064 ok065=$ok065 ok066=$ok066 ok067=$ok067 ok068=$ok068 ok069=$ok069 ok070=$ok070 ok071=$ok071 ok072=$ok072 ok073=$ok073 ok074=$ok074 ok075=$ok075 ok076=$ok076 ok077=$ok077 ok078=$ok078 ok079=$ok079 ok080=$ok080 ok081=$ok081 ok082=$ok082 ok083=$ok083 ok084=$ok084"
 echo "   [077] site_name_key('X'||NBSP||'  I-nokta-ustte'||'ZM'||tab||'Y') = $(q "select site_name_key('X'||chr(160)||'  '||chr(304)||'ZM'||chr(9)||'Y')") ('x izm y' olmali); yeni indeks: $(q "select string_agg(indexname, ',' order by indexname) from pg_indexes where indexname in ('uq_sites_name_key','uq_site_applications_pending_name_key')") (2 olmali); eski indeks kalan: $(q "select count(*) from pg_indexes where indexname in ('idx_sites_unique_name','idx_site_applications_pending_unique_name')") (0 olmali; mukerrer ad varsa yeni kurulamaz ve eski KALIR: acilis gunlugundaki UYARI satirlarina bak)"
 echo "   [077] FK: $(q "select string_agg(conname||'/'||confdeltype::text, ',' order by conname) from pg_constraint where conname in ('user_oauth_identities_user_code_fkey','web_push_subscriptions_user_code_fkey')") (2 olmali, 'c' = CASCADE)"
@@ -205,9 +264,11 @@ all052=t
 for v in "$ok052" "$ok053" "$ok054" "$ok055" "$ok056" "$ok057" "$ok058" "$ok059" "$ok060" "$ok061" "$ok062" "$ok063" "$ok064" "$ok065" "$ok066" "$ok067" "$ok068" "$ok069" "$ok070" "$ok071" "$ok072" "$ok073" "$ok074" "$ok075" "$ok076" "$ok077" "$ok078" "$ok079" "$ok080" "$ok081" "$ok082" "$ok083" "$ok084"; do [ "$v" = "t" ] || all052=f; done
 all104=t
 for v in "$ok104" "$ok106" "$ok107"; do [ "$v" = "t" ] || all104=f; done
+all085=t
+for v in "$ok085" "$ok088" "$ok089" "$ok090" "$ok091" "$ok096" "$ok097" "$ok098" "$ok099" "$ok100" "$ok102" "$ok103" "$ok110" "$ok111" "$ok085data"; do [ "$v" = "t" ] || all085=f; done
 idem=f; [ -n "$FP1" ] && [ "$FP1" = "$FP2" ] && idem=t
-echo "   ok035=$ok035 ok038=$ok038 ok039=$ok039 ok040=$ok040 ok041=$ok041 ok044=$ok044 ok047=$ok047 ok049=$ok049 ok051=$ok051 ok052-084=$all052 ok104-107=$all104 ensure=$ENSURE_OK_ALL idempotent=$idem"
-if [ "$before_sites" = "$after_sites" ] && [ "$before_users" = "$after_users" ] && [ "$before_sm" = "$after_sm" ] && [ "$before_am" = "$after_am" ] && [ "$typed" = "$after_sites" ] && [ "$ok035" = "t" ] && [ "$ok038" = "t" ] && [ "$ok039" = "t" ] && [ "$ok040" = "t" ] && [ "$ok041" = "t" ] && [ "$ok044" = "t" ] && [ "$ok047" = "t" ] && [ "$ok049" = "t" ] && [ "$ok051" = "t" ] && [ "$all052" = "t" ] && [ "$all104" = "t" ] && [ "$ENSURE_OK_ALL" = "t" ] && [ "$idem" = "t" ]; then
+echo "   ok035=$ok035 ok038=$ok038 ok039=$ok039 ok040=$ok040 ok041=$ok041 ok044=$ok044 ok047=$ok047 ok049=$ok049 ok051=$ok051 ok052-084=$all052 ok104-107=$all104 ok085-111=$all085 ensure=$ENSURE_OK_ALL idempotent=$idem"
+if [ "$before_sites" = "$after_sites" ] && [ "$before_users" = "$after_users" ] && [ "$before_sm" = "$after_sm" ] && [ "$before_am" = "$after_am" ] && [ "$typed" = "$after_sites" ] && [ "$ok035" = "t" ] && [ "$ok038" = "t" ] && [ "$ok039" = "t" ] && [ "$ok040" = "t" ] && [ "$ok041" = "t" ] && [ "$ok044" = "t" ] && [ "$ok047" = "t" ] && [ "$ok049" = "t" ] && [ "$ok051" = "t" ] && [ "$all052" = "t" ] && [ "$all104" = "t" ] && [ "$all085" = "t" ] && [ "$ENSURE_OK_ALL" = "t" ] && [ "$idem" = "t" ]; then
   echo "PROVA_OK"
 else
   echo "PROVA_SORUNLU"
