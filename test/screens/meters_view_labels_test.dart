@@ -88,6 +88,7 @@ void main() {
       final note = topic.note!;
       expect(note, contains('Drive bağlıysa Drive’a, değilse sunucuya kaydedilir'));
       expect(note, contains('Web’de kamera yok'));
+      expect(note, contains('Sayaç okuma izni finans / borçlandırma izni vermez'));
       expect(note, isNot(contains('Drive a,')), reason: 'kopuk kesme işareti');
       expect(note, isNot(contains('Webde')), reason: 'kopuk kesme işareti');
       expect(topic.steps.join('\n'), contains('ısı için ölçüm + alan payı'));
