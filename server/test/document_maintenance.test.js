@@ -63,7 +63,7 @@ function install() {
     if (/^SELECT to_regclass\('public\.payment_notices'\) IS NOT NULL AS present$/.test(sql)) return ok([{ present: false }]); // dekont bildirimi (066)
     if (/^SELECT storage_key FROM expense_documents WHERE storage_key = ANY\(\$1::TEXT\[\]\)$/.test(sql)) return ok(params[0].filter((key) => expenseKeys.has(key)).map((storage_key) => ({ storage_key })));
     if (/^SELECT 1 FROM (document_versions|expense_documents) WHERE site_code = \$1 LIMIT 1$/.test(sql)) return ok(siteRecords.has(Number(params[0])) ? [{ x: 1 }] : []);
-    if (/^SELECT storage_key FROM (document_versions|expense_documents) WHERE status = 'ready' ORDER BY id DESC LIMIT 20$/.test(sql)) return ok(readyKeys.map((storage_key) => ({ storage_key })));
+    if (/^SELECT storage_key FROM (document_versions|expense_documents) WHERE status = 'ready'( AND server_copy = TRUE)? ORDER BY id DESC LIMIT 20$/.test(sql)) return ok(readyKeys.map((storage_key) => ({ storage_key })));
     // varsayılan: boş sonuç (temizlenecek bir şey yok)
     if (/^(SELECT|DELETE)/.test(sql)) return ok();
     throw new Error(`BEKLENMEYEN SQL (sahte DB katı): ${sql.slice(0, 240)}`);

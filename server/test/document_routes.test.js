@@ -20,6 +20,8 @@ import {
 } from '../src/modules/document_routes.js';
 import { resetStorageCheck } from '../src/modules/document_storage.js';
 import { uploadState } from '../src/modules/document_upload.js';
+import { driveService } from '../src/modules/drive_service.js';
+import { PlatformError } from '../src/modules/errors.js';
 import { EXE_BYTES, makeJpeg, makePdf } from './fixtures/document_samples.js';
 
 const SITE_1 = 1000000001;
@@ -498,8 +500,26 @@ async function cleanStorage() {
   }
 }
 
+// YALNIZ-DRIVE: doğrulanmış gövde driveService.upload'a verilir (sunucuda son dosya TUTULMAZ). Gerçek Google'a gidilmez: upload sahtelenir.
+const DRIVE_FILE_ID = 9001;
+let driveUploads = [];
+let driveBehavior = null;
+const realDriveUpload = driveService.upload;
+
 describe('PUT .../content: ham gövde akışı', () => {
   beforeEach(cleanStorage);
+  beforeEach(() => {
+    driveUploads = [];
+    driveBehavior = null;
+    driveService.upload = async (args) => {
+      if (driveBehavior) await driveBehavior(args);
+      driveUploads.push(args);
+      return { file: { id: DRIVE_FILE_ID, status: 'stored' } };
+    };
+  });
+  afterEach(() => {
+    driveService.upload = realDriveUpload;
+  });
 
   it('kapılar: Content-Type octet-stream değilse 415 INVALID_CONTENT_TYPE; Content-Length yoksa (chunked) 411; 0 bayt 400; bildirilenden farklıysa 400 DOCUMENT_SIZE_MISMATCH', async () => {
     const pdf = makePdf();
@@ -542,7 +562,7 @@ describe('PUT .../content: ham gövde akışı', () => {
     assert.equal(res.connection, 'close', 'gövde boşaltılmaz: bağlantı kapatılır');
   });
 
-  it('tam akış: geçerli PDF diske yazılır (0600 / mevcut sha256), tmp temizlenir, sürüm ready olur, 200 { document }; KİLİT SIRASI sites -> users -> documents -> versions', async () => {
+  it('tam akış: geçerli PDF SHA-256 ile Drive aktarımına verilir (sunucuda son dosya YOK), tmp temizlenir, sürüm ready olur ve drive_file_id yazılır, 200 { document }; KİLİT SIRASI sites -> users -> documents -> versions', async () => {
     const pdf = makePdf({ padding: 200_000 });
     const seen = uploadHandlers(pdf);
     const res = await call('PUT', putUrl(), { user: users.mgrA, body: pdf, headers: OCTET });
@@ -556,9 +576,13 @@ describe('PUT .../content: ham gövde akışı', () => {
     assert.equal(sha256, crypto.createHash('sha256').update(pdf).digest('hex'));
     assert.equal(mime, 'application/pdf');
     assert.equal(displayName, 'yonetmelik.pdf');
-    const stored = await fsp.readFile(path.join(storageRoot, 'sites', KEY));
-    assert.deepEqual(stored, pdf);
-    assert.deepEqual((await leftovers()).tmp, [], '_tmp temizlendi');
+    assert.equal(driveUploads.length, 1);
+    assert.deepEqual(driveUploads[0].data, pdf);
+    assert.deepEqual(driveUploads[0].source, { type: 'document', id: 77 });
+    assert.equal(driveUploads[0].query.kind, 'belge');
+    assert.equal(driveUploads[0].query.mime, 'application/pdf');
+    assert.equal(seen.update[5], DRIVE_FILE_ID, 'sürüm Drive kaydına bağlandı');
+    assert.deepEqual(await leftovers(), { tmp: [], siteDir: [] }, '_tmp temizlendi; sunucuda son dosya tutulmaz');
     const order = log.filter((entry) => entry.client).map((entry) => entry.sql);
     const position = (pattern) => order.findIndex((sql) => pattern.test(sql));
     assert.ok(position(/FROM sites WHERE site_code = \$1 FOR KEY SHARE/) < position(/FROM users WHERE user_code = \$1 AND deleted_at IS NULL FOR KEY SHARE/));
@@ -609,6 +633,7 @@ describe('PUT .../content: ham gövde akışı', () => {
     assert.equal(uploadState.inFlight(), 0);
     assert.deepEqual(await leftovers(), { tmp: [], siteDir: [] });
     assert.equal(seen.completed, false);
+    assert.equal(driveUploads.length, 0, 'yarım gövde Drive\'a gitmedi');
     // aynı sürüm hemen yeniden yüklenebilir
     const retry = await call('PUT', putUrl(), { user: users.mgrA, body: pdf, headers: OCTET });
     assert.equal(retry.status, 200, JSON.stringify(retry.body));
@@ -682,7 +707,7 @@ describe('PUT .../content: ham gövde akışı', () => {
     assert.equal(await slow, 200);
   });
 
-  it('R9 F2 (zamanlama kancası): aynı sürümün ilk PUT\'u hedef sorgusunda BEKLERKEN gelen ikinci PUT anında 409 UPLOAD_IN_PROGRESS alır; ilk yükleme tamamlanır, dosya yalnız onun baytlarıdır, sayaçlar sızmaz', async () => {
+  it('R9 F2 (zamanlama kancası): aynı sürümün ilk PUT\'u hedef sorgusunda BEKLERKEN gelen ikinci PUT anında 409 UPLOAD_IN_PROGRESS alır; ilk yükleme tamamlanır, Drive\'a giden yalnız onun baytlarıdır, sayaçlar sızmaz', async () => {
     const pdf = makePdf({ padding: 60_000 });
     uploadHandlers(pdf);
     let release;
@@ -709,53 +734,42 @@ describe('PUT .../content: ham gövde akışı', () => {
     assert.equal(targetCalls, 1, 'ikinci istek hedef sorgusuna hiç ulaşmadı');
     release();
     assert.equal(await first, 200);
-    assert.deepEqual(await fsp.readFile(path.join(storageRoot, 'sites', KEY)), pdf);
+    assert.equal(driveUploads.length, 1, 'Drive\'a yalnız ilk yükleme gitti');
+    assert.deepEqual(driveUploads[0].data, pdf);
     assert.equal(uploadState.inFlight(), 0);
     assert.equal(uploadState.active(), 0);
     assert.deepEqual((await leftovers()).tmp, []);
   });
 
-  it('R9 F2: önceki başarısız denemenin artığı (son yolda dosya VAR, sürüm hâlâ uploading) -> dosya SİLİNMEDEN atomik (rename) değiştirilir, 200; tmp kalmaz', async () => {
+  it('yalnız-Drive: son yolda eski bir artık dosya VARSA bile dokunulmaz; yükleme Drive\'a gider, 200 (sunucudaki son yol artık kullanılmaz)', async () => {
     const pdf = makePdf({ padding: 30_000 });
-    uploadHandlers(pdf);
-    handlers.push([/^SELECT status, storage_key FROM document_versions WHERE id = \$1$/, ok([{ status: 'uploading', storage_key: KEY }])]);
+    const seen = uploadHandlers(pdf);
     const finalPath = path.join(storageRoot, 'sites', KEY);
     await fsp.mkdir(path.dirname(finalPath), { recursive: true });
     await fsp.writeFile(finalPath, 'ESKI-ARTIK');
     const res = await call('PUT', putUrl(), { user: users.mgrA, body: pdf, headers: OCTET });
     assert.equal(res.status, 200, JSON.stringify(res.body));
-    assert.deepEqual(await fsp.readFile(finalPath), pdf);
+    assert.ok(seen.completed);
+    assert.equal(await fsp.readFile(finalPath, 'utf8'), 'ESKI-ARTIK');
+    assert.equal(driveUploads.length, 1);
     assert.deepEqual((await leftovers()).tmp, []);
   });
 
-  it('R9 F2: son yolda dosya VAR ve DB\'de sürüm artık ready (bayat uploading anlık görüntüsü) -> 409 UPLOAD_ALREADY_COMPLETED + güncel belge; hazır dosyaya DOKUNULMAZ; sürüm yeniden tamamlanmaz', async () => {
+  it('yalnız-Drive: Drive aktarımı DRIVE_NOT_CONNECTED derse 409 DRIVE_REQUIRED; diğer Drive hataları (ör. 503 kuyruk dolu) aynen geçer; sürüm ready olmaz, tmp kalmaz', async () => {
     const pdf = makePdf({ padding: 30_000 });
-    const seen = uploadHandlers(pdf);
-    handlers.push([/^SELECT status, storage_key FROM document_versions WHERE id = \$1$/, ok([{ status: 'ready', storage_key: KEY }])]);
-    const finalPath = path.join(storageRoot, 'sites', KEY);
-    await fsp.mkdir(path.dirname(finalPath), { recursive: true });
-    await fsp.writeFile(finalPath, 'HAZIR-DOSYA-ICERIGI');
-    const res = await call('PUT', putUrl(), { user: users.mgrA, body: pdf, headers: OCTET });
-    assert.deepEqual([res.status, res.body.code], [409, 'UPLOAD_ALREADY_COMPLETED']);
-    assert.equal(res.body.document.id, 77);
-    assert.equal(await fsp.readFile(finalPath, 'utf8'), 'HAZIR-DOSYA-ICERIGI');
-    assert.equal(seen.completed, false);
-    assert.deepEqual((await leftovers()).tmp, []);
-  });
-
-  it('R9 F2: son yolda dosya VAR ama sürüm satırı yok / anahtarı başka -> 404 DOCUMENT_VERSION_NOT_FOUND; dosyaya dokunulmaz', async () => {
-    const pdf = makePdf({ padding: 30_000 });
-    const finalPath = path.join(storageRoot, 'sites', KEY);
-    await fsp.mkdir(path.dirname(finalPath), { recursive: true });
-    for (const rows of [[], [{ status: 'uploading', storage_key: '1000000001/aaaaaaaa-e89b-42d3-a456-426614174000' }]]) {
+    for (const [thrown, expected] of [
+      [new PlatformError(409, 'DRIVE_NOT_CONNECTED', 'Önce sitenin Google Drive hesabını bağlayın.'), [409, 'DRIVE_REQUIRED']],
+      [new PlatformError(503, 'DRIVE_QUEUE_FULL', 'Kuyruk dolu.'), [503, 'DRIVE_QUEUE_FULL']],
+    ]) {
       handlers = [];
-      uploadHandlers(pdf);
-      handlers.push([/^SELECT status, storage_key FROM document_versions WHERE id = \$1$/, ok(rows)]);
-      await fsp.writeFile(finalPath, 'BASKASININ-DOSYASI');
+      const seen = uploadHandlers(pdf);
+      driveBehavior = async () => {
+        throw thrown;
+      };
       const res = await call('PUT', putUrl(), { user: users.mgrA, body: pdf, headers: OCTET });
-      assert.deepEqual([res.status, res.body.code], [404, 'DOCUMENT_VERSION_NOT_FOUND']);
-      assert.equal(await fsp.readFile(finalPath, 'utf8'), 'BASKASININ-DOSYASI');
-      assert.deepEqual((await leftovers()).tmp, []);
+      assert.deepEqual([res.status, res.body.code], expected);
+      assert.equal(seen.completed, false, 'sürüm ready yapılmadı');
+      assert.deepEqual(await leftovers(), { tmp: [], siteDir: [] });
     }
   });
 
@@ -771,15 +785,15 @@ describe('PUT .../content: ham gövde akışı', () => {
     assert.match(target.sql, /\(v\.created_at < NOW\(\) - make_interval\(mins => \$4::INTEGER\)\) AS expired/);
   });
 
-  it('R16 P1-1: yükleme sürerken süre dolarsa (completeUpload FOR UPDATE altında expired) 410 UPLOAD_EXPIRED; son dosya SİLİNİR (ready olmayan sürümün dosyası bırakılmaz), sürüm ready olmaz', async () => {
+  it('R16 P1-1: yükleme sürerken süre dolarsa (completeUpload FOR UPDATE altında expired) 410 UPLOAD_EXPIRED; sürüm ready olmaz, sunucuda dosya kalmaz (Drive kopyası yetim kalır, silinmez: K6)', async () => {
     const pdf = makePdf({ padding: 20_000 });
     const seen = uploadHandlers(pdf);
     handlers.unshift([VERSION_LOCK, ok([{ id: '501', status: 'uploading', storage_key: KEY, version_no: 1, display_name: 'yonetmelik.pdf', expired: true }])]);
-    handlers.push([/^SELECT status, storage_key FROM document_versions WHERE id = \$1$/, ok([{ status: 'uploading', storage_key: KEY }])]);
     const res = await call('PUT', putUrl(), { user: users.mgrA, body: pdf, headers: OCTET });
     assert.deepEqual([res.status, res.body.code], [410, 'UPLOAD_EXPIRED']);
     assert.equal(seen.completed, false, 'sürüm ready yapılmadı');
-    assert.deepEqual(await leftovers(), { tmp: [], siteDir: [] }, 'son dosya da silindi');
+    assert.equal(driveUploads.length, 1, 'Drive kopyası silinmez (K6)');
+    assert.deepEqual(await leftovers(), { tmp: [], siteDir: [] }, 'sunucuda dosya kalmadı');
   });
 });
 
