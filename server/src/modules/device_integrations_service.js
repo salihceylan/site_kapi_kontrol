@@ -8,6 +8,8 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEq
 import { pool } from '../db.js';
 import { PlatformError } from './errors.js';
 import { normalizePlate } from './people_common.js';
+import { recordAudit } from './audit_service.js';
+import { probeTcp } from './camera_probe.js';
 
 // Kart ödemesi (sağlayıcı arayüzü) AYRI modül değildir: Aidat ve Finans'ın (temel modül, her sitede açık) parçasıdır; kapısı `finance` modülüdür.
 // Eski `card_payments` modül kodu kataloktan kaldırıldı (migrations/083); uçların yolları (`/card-payments`) ve veri tablosu (payment_provider_settings) aynı kalır.
@@ -193,6 +195,27 @@ export async function deactivateCamera({ siteCode, rawId }) {
   );
   if (!result.rows[0]) throw notFound('Kamera');
   return { camera: mapCamera(result.rows[0]) };
+}
+
+/**
+ * "Sına": kameranın adresine sunucudan zaman aşımı sınırlı TCP denemesi (görüntü / olay işlenmez, kimlik bilgisi gönderilmez).
+ * Yerel ağdaki kamera sunucudan sınanamaz; bu dürüstçe söylenir. Her deneme denetim kaydına yazılır.
+ */
+export async function testCamera({ siteCode, rawId, actor }, { probe = probeTcp, audit = recordAudit } = {}) {
+  const id = Number(rawId);
+  if (!Number.isSafeInteger(id) || id <= 0) throw notFound('Kamera');
+  const found = await pool.query(`SELECT id, host, port, is_active, last_event_at FROM camera_devices WHERE id = $1 AND site_code = $2`, [id, siteCode]);
+  const row = found.rows[0];
+  if (!row) throw notFound('Kamera');
+  if (!row.is_active) throw new PlatformError(409, 'CAMERA_INACTIVE', 'Kamera pasif.');
+  const outcome = await probe({ host: row.host, port: row.port ?? 80 });
+  await audit(pool, { actor, action: 'cctv.plate_camera_tested', siteCode, targetType: 'camera_device', targetId: String(id), details: { ok: outcome.ok, reason: outcome.reason } });
+  return {
+    ok: outcome.ok,
+    reason: outcome.reason,
+    message: outcome.message,
+    last_event_at: row.last_event_at ? new Date(row.last_event_at).toISOString() : null,
+  };
 }
 
 export async function listPlateEvents(siteCode, query = {}) {

@@ -6,7 +6,8 @@
 //   POST   cctv/cameras                       201 { camera }
 //   PATCH  cctv/cameras/:id                   duzenle (parola / kullanici adi yazilir, donmez; clear_credentials)
 //   DELETE cctv/cameras/:id                   sil
-//   GET    cctv/cameras/:id/snapshot          anlik goruntu (image/jpeg | image/png) ya da 424 SNAPSHOT_UNAVAILABLE; denetim kaydi
+//   POST   cctv/cameras/:id/test              "Sina": sunucudan zaman asimi sinirli TCP denemesi { ok, reason, message } (yalniz yazar; yerel adres sinanamaz; denetim kaydi)
+//   GET    cctv/cameras/:id/snapshot         anlik goruntu (image/jpeg | image/png) ya da 424 SNAPSHOT_UNAVAILABLE; denetim kaydi
 //   GET    cctv/events?limit&door_id          son kapi olaylari + eslenmis aktif kameralar (kapi gunlugu salt okunur)
 //   POST   cctv/clip-link { log_id, camera_id }  kayit baglantisi { url, start, end }; denetim kaydi
 //
@@ -127,6 +128,7 @@ write('patch', '/cameras/:id', 'cctv_camera_update', 'Kamera güncellenemedi.', 
 write('delete', '/cameras/:id', 'cctv_camera_delete', 'Kamera silinemedi.', ({ siteCode, actor, req }) =>
   svc.deleteCamera({ siteCode, rawId: req.params.id, actor }),
 );
+write('post', '/cameras/:id/test', 'cctv_camera_test', 'Kamera sınanamadı.', ({ siteCode, actor, req }) => svc.testCamera({ siteCode, rawId: req.params.id, actor }));
 read('/cameras/:id/snapshot', 'cctv_snapshot', 'Görüntü alınamadı.', ({ siteCode, actor, req }) => svc.getSnapshot({ siteCode, rawId: req.params.id, actor }), {
   limiter: cctvViewLimiter,
   binary: true,
