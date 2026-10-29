@@ -145,6 +145,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:site_kapi_kontrol/config/app_config.dart';
 import 'package:site_kapi_kontrol/models/feedback_models.dart';
 import 'package:site_kapi_kontrol/services/feedback_api.dart';
+import 'package:site_kapi_kontrol/services/finance_4b_api.dart' show Finance4bService;
 import 'package:site_kapi_kontrol/ui/dialogs/feedback_dialog.dart';
 import 'package:site_kapi_kontrol/ui/views/feedback_inbox_view.dart';
 import 'package:site_kapi_kontrol/models/reservation_models.dart';
@@ -7362,6 +7363,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onApproveDeleteSite: _approveDeleteSite,
           onRejectDeleteSite: _rejectDeleteSite,
           onDeleteSiteWithEmail: _deleteSiteWithEmailVerification,
+          legalGateService: session.role == UserRole.superUser
+              ? Finance4bService.of(widget.authService)
+              : null,
         );
 
 

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
+import 'package:site_kapi_kontrol/services/finance_4b_api.dart' show Finance4bService;
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/site_legal_gate_tile.dart';
 
 /// Sitenin ikon rozeti tonu (ton anlam taşır): silme onayı bekliyorsa hata, kurulum onayı bekliyorsa
 /// uyarı, aksi hâlde birincil. Yanındaki durum rozetinin (`StatusChip`) tonuyla aynı dildir.
@@ -35,6 +37,7 @@ class SiteCard extends StatefulWidget {
     this.onRejectDeletion,
     this.onDeleteWithEmail,
     this.isSuperUser = false,
+    this.legalGateService,
   });
 
   final SiteRecord site;
@@ -56,6 +59,9 @@ class SiteCard extends StatefulWidget {
   final VoidCallback? onRejectDeletion;
   final VoidCallback? onDeleteWithEmail;
   final bool isSuperUser;
+
+  /// Süper kullanıcıda site detayına "Hukuk onayı" anahtarını ekler (verilmezse anahtar yoktur).
+  final Finance4bService? legalGateService;
 
   @override
   State<SiteCard> createState() => _SiteCardState();
@@ -293,6 +299,15 @@ class _SiteCardState extends State<SiteCard> {
               ),
           ],
         ),
+        // Süper kullanıcı detayı: sitenin hukuk onayı bayrağı (açıldığında GET ile okunur; değişiklik onaylı PUT).
+        if (widget.isSuperUser && widget.legalGateService != null) ...[
+          const SizedBox(height: AppSpace.md),
+          SiteLegalGateTile(
+            key: ValueKey<String>('site_hukuk_onayi_${site.id}'),
+            siteCode: site.id,
+            service: widget.legalGateService!,
+          ),
+        ],
         if (groups.isNotEmpty) const SizedBox(height: AppSpace.md),
         for (var i = 0; i < groups.length; i++) ...[
           if (i > 0) const SizedBox(height: AppSpace.sm),
