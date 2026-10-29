@@ -170,7 +170,45 @@ export function parseListQuery(query = {}) {
   const limit = Math.min(Math.max(Number.parseInt(query.limit, 10) || LIST_DEFAULT_LIMIT, 1), LIST_MAX_LIMIT);
   const before = Number.parseInt(query.before_id, 10);
   const decision = DECISIONS.includes(String(query.decision ?? '').toUpperCase()) ? String(query.decision).toUpperCase() : null;
-  return { limit, beforeId: Number.isSafeInteger(before) && before > 0 ? before : null, decision };
+  const live = ['1', 'true'].includes(String(query.live ?? '').toLowerCase()) || hasValue(query.since);
+  const feed = liveFeedConfig();
+  const rawLimit = Number.parseInt(query.limit, 10);
+  const since = parseSince(query.since);
+  return {
+    limit: live && !(rawLimit > 0) ? feed.limit : limit,
+    beforeId: Number.isSafeInteger(before) && before > 0 ? before : null,
+    decision,
+    live,
+    sinceId: since.id,
+    sinceAt: since.at,
+  };
+}
+
+const hasValue = (value) => value !== undefined && value !== null && String(value).trim() !== '';
+
+/** `since`: kayıt numarası (yalnız daha yeniler) ya da ISO zamanı. Geçersizse 400. */
+export function parseSince(value) {
+  if (!hasValue(value)) return { id: null, at: null };
+  const text = String(value).trim();
+  if (/^\d{1,15}$/.test(text)) return { id: Number(text), at: null };
+  const at = new Date(text);
+  if (Number.isNaN(at.getTime())) throw invalidField('since bir kayıt numarası ya da ISO zamanı olmalı.', 'since');
+  return { id: null, at };
+}
+
+/**
+ * Canlı akış ayarı (yenileme aralığı + liste boyu): sunucuda tek yer; PLATE_LIVE_REFRESH_SECONDS / PLATE_LIVE_LIMIT ile değişir,
+ * istemci değeri yanıttan okur (istemcide sabit yok). Aralık 2-60 sn, boy 10-100.
+ */
+export function liveFeedConfig(env = process.env) {
+  const pick = (raw, fallback, min, max) => {
+    const n = Number.parseInt(raw, 10);
+    return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+  };
+  return {
+    refresh_seconds: pick(env.PLATE_LIVE_REFRESH_SECONDS, 5, 2, 60),
+    limit: pick(env.PLATE_LIVE_LIMIT, 30, 10, 100),
+  };
 }
 
 export function iso(value) {

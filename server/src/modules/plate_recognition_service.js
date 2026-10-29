@@ -18,6 +18,7 @@ import {
   decidePlate,
   formatPlate,
   iso,
+  liveFeedConfig,
   maskPlate,
   normalizeTrPlate,
   notFound,
@@ -138,23 +139,28 @@ export async function handlePlateEvent({ siteCode, deviceId, eventId, plate, bod
 // --- Olay listesi ----------------------------------------------------------------------------------------------------
 
 export async function listDecisions(siteCode, query = {}) {
-  const { limit, beforeId, decision } = parseListQuery(query);
+  const { limit, beforeId, decision, live, sinceId, sinceAt } = parseListQuery(query);
   const result = await pool.query(
-    `SELECT d.id, d.plate, d.decision, d.reason, d.confidence, d.auto_action, d.decided_at, e.seen_at, c.name AS device_name, g.door_name
+    `SELECT d.id, d.plate, d.decision, d.reason, d.confidence, d.auto_action, d.decided_at, e.seen_at, e.direction, e.decision_kind,
+            c.name AS device_name, COALESCE(pg.name, g.door_name) AS door_name
        FROM plate_decisions d
        LEFT JOIN plate_events e ON e.id = d.event_id
+       LEFT JOIN plate_gates pg ON pg.id = e.gate_id AND pg.site_code = d.site_code
        LEFT JOIN camera_devices c ON c.id = d.device_id
        LEFT JOIN site_doors g ON g.id = d.door_id
       WHERE d.site_code = $1 AND ($2::BIGINT IS NULL OR d.id < $2) AND ($4::TEXT IS NULL OR d.decision = $4)
+        AND ($5::BIGINT IS NULL OR d.id > $5) AND ($6::TIMESTAMPTZ IS NULL OR COALESCE(e.seen_at, d.decided_at) > $6)
       ORDER BY d.id DESC LIMIT $3`,
-    [siteCode, beforeId, limit + 1, decision],
+    [siteCode, beforeId, limit + 1, decision, sinceId, sinceAt],
   );
   const rows = result.rows.slice(0, limit);
-  return {
+  const body = {
     events: rows.map((row) => ({
       id: Number(row.id),
       plate: formatPlate(row.plate),
       decision: row.decision,
+      decision_kind: row.decision_kind ?? null,
+      direction: row.direction ?? null,
       reason: row.reason,
       reason_label: REASON_LABELS[row.reason] ?? row.reason,
       confidence: row.confidence === null ? null : Number(row.confidence),
@@ -165,6 +171,10 @@ export async function listDecisions(siteCode, query = {}) {
     })),
     next_before_id: result.rows.length > limit ? Number(rows[rows.length - 1].id) : null,
   };
+  if (!live) return body;
+  // Canlı akış: içerideki araç sayısı (plate_presence) + istemcinin okuyacağı yenileme ayarı. Ek kişisel veri yok.
+  const inside = await pool.query(`SELECT COUNT(*)::INT AS n FROM plate_presence WHERE site_code = $1 AND inside`, [siteCode]);
+  return { ...body, inside_count: inside.rows[0]?.n ?? 0, server_time: new Date().toISOString(), ...liveFeedConfig() };
 }
 
 // --- Kara liste ------------------------------------------------------------------------------------------------------

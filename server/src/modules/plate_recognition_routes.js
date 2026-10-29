@@ -1,7 +1,8 @@
 // Plaka Tanıma uçları (modül `plate_recognition`, varsayılan KAPALI). Sözleşme: docs/PLATFORM_PLAKA_TANIMA.md.
 //
 // Yönetim (hepsi /manager/sites/:siteCode/plate-recognition altında):
-//   GET  events?limit&before_id&decision=ALLOWED|DENIED|UNKNOWN   karar kayıtları (plaka, zaman, karar, neden)
+//   GET  events?limit&before_id&decision=ALLOWED|DENIED|UNKNOWN   karar kayıtları (plaka, zaman, karar, neden, yön, kapı)
+//        &since=<kayıt no|ISO zaman> (yalnız daha yeniler) / &live=1  canlı akış: + inside_count, refresh_seconds, limit, server_time
 //   GET  permits?status=active|all    POST permits { apartment_id, plate, duration: day|week|custom, days?, note? }    POST permits/:id/revoke
 //   GET  apartments?q=                daire arama (izin formu)
 //   GET  blacklist    POST blacklist { plate, reason? }    POST blacklist/:id/remove
@@ -138,7 +139,17 @@ function managerHandler({ context, fallback, write = false, status = 200, limite
 
 const BASE = '/manager/sites/:siteCode/plate-recognition';
 
-plateRecognitionRouter.get(`${BASE}/events`, ...managerHandler({ context: 'plate_events', fallback: 'Plaka kayıtları yüklenemedi.' }, ({ req, access }) => listDecisions(access.siteCode, req.query)));
+// Canlı akış (since / live=1) birkaç saniyede bir yoklanır: genel okuma sınırından daha geniş, yine de kullanıcı + IP başına sınırlı.
+export const eventsLimiter = createRuleLimiter({
+  rules: [
+    { windowMs: HOUR_MS, max: 3600, key: userKey },
+    { windowMs: HOUR_MS, max: 36000, key: ipKey },
+  ],
+  message: 'Çok fazla istek. Biraz sonra tekrar deneyin.',
+  includeRetryBody: true,
+});
+
+plateRecognitionRouter.get(`${BASE}/events`, ...managerHandler({ context: 'plate_events', fallback: 'Plaka kayıtları yüklenemedi.', limiter: eventsLimiter },({ req, access }) => listDecisions(access.siteCode, req.query)));
 
 plateRecognitionRouter.get(`${BASE}/permits`, ...managerHandler({ context: 'plate_permits', fallback: 'Misafir izinleri yüklenemedi.' }, ({ req, access }) => listPermits(access.siteCode, req.query)));
 plateRecognitionRouter.post(
