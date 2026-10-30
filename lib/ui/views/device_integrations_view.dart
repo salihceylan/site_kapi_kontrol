@@ -1,8 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:site_kapi_kontrol/models/plate_gates.dart' show GateColor;
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/device_integrations_api.dart';
@@ -300,13 +300,17 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> with Wid
   Widget _autoOpenCard(BuildContext context, PlateCamerasOverview overview) {
     final p = context.palette;
     final theme = Theme.of(context).textTheme;
-    final status = overview.autoOpen;
-    final tone = status.active ? AppTone.success : AppTone.warning;
-    final label = status.active ? 'Etkin' : 'Etkin değil';
-    final message = status.message.isEmpty ? (status.active ? 'Kenar PC bağlı ve okuma modeli onaylı.' : 'Plakayla kapı açma şu an çalışmıyor.') : status.message;
+    final hasCameras = overview.cameras.any((c) => c.isActive && c.host.isNotEmpty);
+    final isLocalStation = !kIsWeb || hasCameras;
+    final active = isLocalStation || overview.autoOpen.active;
+    final tone = active ? AppTone.success : AppTone.warning;
+    final label = active ? 'Etkin' : 'Etkin değil';
+    final message = active
+        ? 'Bu sistem yerel ağdaki kameraları izler, plakaları okur ve kapıya SmartKeyPass (UDP 8765) üzerinden açıl komutu gönderir.'
+        : (overview.autoOpen.message.isNotEmpty ? overview.autoOpen.message : 'Plakayla kapı açma şu an yapılandırılmamış.');
     return AppCard(
       key: const ValueKey<String>('auto_open_card'),
-      tone: status.active ? null : AppTone.warning,
+      tone: active ? null : AppTone.warning,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -315,7 +319,7 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> with Wid
             runSpacing: AppSpace.xs,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: <Widget>[
-              Icon(status.active ? Icons.verified_outlined : Icons.info_outline_rounded, color: tone.ink(p)),
+              Icon(active ? Icons.verified_outlined : Icons.info_outline_rounded, color: tone.ink(p)),
               Text('Plakayla otomatik kapı açma', style: theme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
               Container(
                 key: const ValueKey<String>('auto_open_badge'),
@@ -329,45 +333,15 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> with Wid
           Text(message, key: const ValueKey<String>('auto_open_message'), style: theme.bodyMedium),
           const SizedBox(height: AppSpace.xs),
           Text(
-            'Kapıyı yalnız kenar PC\'nin yerel kararı açar (okuma modeli onaylı olmalı); sunucu kapı açmaz. Açma komutu cihazca kabul edilince "tetiklendi" yazılır.',
+            'Ayrı bir kenar istemciye gerek yoktur; kamera izleme, plaka tanıma ve SmartKeyPass (UDP 8765) kapı tetikleme doğrudan bu istasyon tarafından yürütülür.',
             style: theme.bodySmall?.copyWith(color: p.textSecondary),
           ),
-          if (overview.edge.clients.isNotEmpty) const SizedBox(height: AppSpace.sm),
-          for (final client in overview.edge.clients) _edgeRow(context, client),
         ],
       ),
     );
   }
 
-  Widget _edgeRow(BuildContext context, EdgeClientInfo client) {
-    final p = context.palette;
-    final theme = Theme.of(context).textTheme;
-    final (tone, text) = switch (client.status.color) {
-      GateColor.yesil => (AppTone.success, 'Çevrimiçi'),
-      GateColor.sari => (AppTone.warning, 'Gecikmeli'),
-      GateColor.kirmizi => (AppTone.danger, 'Çevrimdışı'),
-      GateColor.gri => (AppTone.neutral, 'Hiç bağlanmadı'),
-    };
-    final seen = client.lastSeenAt == null ? '' : ' · son görülme ${_fmt(client.lastSeenAt!)}';
-    final model = client.recognitionReady == null ? '' : (client.recognitionReady! ? ' · okuma modeli onaylı' : ' · okuma modeli onaylanmadı');
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpace.xs),
-      child: Semantics(
-        container: true,
-        label: 'Kenar PC ${client.name}: $text$seen$model',
-        child: ExcludeSemantics(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Icon(Icons.computer_rounded, size: 18, color: tone.ink(p)),
-              const SizedBox(width: AppSpace.xs),
-              Expanded(child: Text('${client.name}: $text$seen$model', style: theme.bodySmall?.copyWith(color: p.textSecondary))),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+
 
   Widget _actions(BuildContext context, DeviceSite site, PlateCamerasOverview overview) {
     return Wrap(
@@ -385,17 +359,11 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> with Wid
 
   Widget _mainBody(BuildContext context, DeviceSite site, PlateCamerasOverview overview) {
     final theme = Theme.of(context).textTheme;
+    final hasCameras = overview.cameras.any((c) => c.isActive && c.host.isNotEmpty);
+    final isLocalStation = !kIsWeb || hasCameras;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        if (widget.embedded && overview.edge.count == 0) ...<Widget>[
-          const InlineNoticeText(
-            key: ValueKey<String>('edge_hint'),
-            tone: AppTone.warning,
-            text: 'Ağda arama ve görüntü için önce Kenar istemci ekleyin (Geçiş noktaları sekmesi).',
-          ),
-          const SizedBox(height: AppSpace.md),
-        ],
         _autoOpenCard(context, overview),
         const SizedBox(height: AppSpace.md),
         Text('Kameralar', style: theme.titleMedium),
@@ -405,20 +373,14 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> with Wid
         if (overview.cameras.isEmpty)
           AppCard(
             key: const ValueKey<String>('no_cameras'),
-            child: Text(
-              widget.embedded && overview.edge.count == 0
-                  ? 'Henüz kamera eklenmemiş. "Kamera ekle" ile IP adresiyle ekleyebilirsiniz.'
-                  : overview.edge.count == 0
-                  ? 'Henüz kamera eklenmemiş. Önce Plaka Tanıma > Geçiş noktaları bölümünden kenar istemci (güvenlik kulübesindeki PC) ekleyin; sonra "Ağda kamera ara" ile kameraları bulun.'
-                  : 'Henüz kamera eklenmemiş. "Ağda kamera ara" ile kameraları bulun ya da "Kamera ekle" ile IP adresiyle ekleyin.',
-            ),
+            child: const Text('Henüz kamera eklenmemiş. "Ağda kamera ara" ile kameraları bulabilir ya da "Kamera ekle" ile IP adresiyle ekleyebilirsiniz.'),
           )
         else
           PlateCameraGrid(
             service: _cameras,
             siteCode: site.code,
             cameras: overview.cameras,
-            edgeOnline: overview.edge.online,
+            edgeOnline: isLocalStation || overview.edge.online,
             refresh: Duration(seconds: overview.snapshot.intervalSeconds),
             canWrite: site.canWrite,
             onAction: (action, camera) => unawaited(_onCameraAction(action, camera)),

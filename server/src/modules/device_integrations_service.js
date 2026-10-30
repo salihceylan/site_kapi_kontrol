@@ -254,7 +254,8 @@ export async function recordPlateEvent({ rawToken, body, isModuleOn, onRecorded 
   const row = device.rows[0];
   if (!row || !row.is_active || !tokenMatches(token.secret, row.token_hash)) throw invalidToken();
   const siteCode = Number(row.site_code);
-  if (!(await isModuleOn(siteCode, PLATE_CAMERAS_MODULE))) throw moduleDisabled(PLATE_CAMERAS_MODULE, 'Kamera ve Plaka');
+  const isPlateOn = (await isModuleOn(siteCode, 'plate_cameras')) || (await isModuleOn(siteCode, 'plate_recognition'));
+  if (!isPlateOn) throw moduleDisabled('plate_recognition', 'Plaka Tanıma');
   const { plate, seenAt } = parsePlateEvent(body);
   const vehicle = await pool.query(`SELECT id FROM vehicles WHERE site_code = $1 AND plate = $2 AND is_active LIMIT 1`, [siteCode, plate]);
   const vehicleId = vehicle.rows[0]?.id ?? null;

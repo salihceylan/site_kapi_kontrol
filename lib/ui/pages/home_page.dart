@@ -199,7 +199,6 @@ import 'package:site_kapi_kontrol/ui/views/annual_report_view.dart';
 import 'package:site_kapi_kontrol/services/plate_recognition_api.dart' show PlateAccess, PlateSite;
 import 'package:site_kapi_kontrol/ui/views/plate_recognition_view.dart';
 import 'package:site_kapi_kontrol/services/device_integrations_api.dart' show DeviceSite;
-import 'package:site_kapi_kontrol/ui/views/device_integrations_view.dart';
 import 'package:site_kapi_kontrol/services/cctv_api.dart' show CctvSite;
 import 'package:site_kapi_kontrol/ui/views/cctv_view.dart';
 import 'package:site_kapi_kontrol/services/equipment_api.dart' show EquipmentSite;
@@ -413,7 +412,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<NeighborBoardViewState> _neighborBoardKey = GlobalKey<NeighborBoardViewState>();
   final GlobalKey<AnnualReportViewState> _annualReportKey = GlobalKey<AnnualReportViewState>();
   final GlobalKey<PlateRecognitionViewState> _plateRecognitionKey = GlobalKey<PlateRecognitionViewState>();
-  final GlobalKey<DeviceIntegrationsViewState> _deviceIntegrationsKey = GlobalKey<DeviceIntegrationsViewState>();
   final GlobalKey<CctvViewState> _cctvKey = GlobalKey<CctvViewState>();
   final GlobalKey<EquipmentViewState> _equipmentKey = GlobalKey<EquipmentViewState>();
   final GlobalKey<VisitorManagerViewState> _visitorManagerKey = GlobalKey<VisitorManagerViewState>();
@@ -1166,8 +1164,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_neighborBoardSites(role).isNotEmpty) SirketMenuItem.komsuPanosu,
         if (_annualReportSites(role).isNotEmpty) SirketMenuItem.faaliyetRaporu,
         if (_plateRecognitionSites(role).isNotEmpty) SirketMenuItem.plakaTanima,
-        if (_deviceIntegrationSites(role).isNotEmpty) SirketMenuItem.odemeKamera,
-        if (_cctvSites(role).isNotEmpty) SirketMenuItem.kameraCctv,
         if (_equipmentSites(role).isNotEmpty) SirketMenuItem.ekipmanBakim,
         if (_siteAuditLogSites(role).isNotEmpty) SirketMenuItem.islemKayitlari,
         if (_canAccessVisitorManage(role)) SirketMenuItem.ziyaretciKayitlari,
@@ -1459,16 +1455,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   /// "Kamera (CCTV)" ekranındaki siteler: `cctv_link` modülü AÇIK siteler; yönetici yazar, kurul üyesi ve görevli salt okur (sakin görmez).
   /// FAIL-OPEN YOK: modül verisi yoksa ya da süper kullanıcıda (modül süzgeci yok) liste boştur.
-  List<CctvSite> _cctvSites(UserRole role) {
-    if (role == UserRole.superUser || !_moduleAccess.isFiltering) return const <CctvSite>[];
-    final canManage = _canManagePeople(role);
-    return <CctvSite>[
-      for (final site in _moduleAccess.result!.sites)
-        if (site.isEnabled(PlatformModuleCodes.cctvLink) &&
-            ((site.role == 'manager' && canManage) || site.isBoardMember || site.role == 'staff'))
-          CctvSite(code: site.siteCode, name: site.siteName, canWrite: site.role == 'manager' && canManage),
-    ];
-  }
+  List<CctvSite> _cctvSites(UserRole role) => const <CctvSite>[];
 
   /// "Ekipman ve Bakım" ekranındaki siteler: `equipment` modülü AÇIK siteler; yönetici yazar, kurul üyesi ve görevli salt okur.
   /// FAIL-OPEN YOK: modül verisi yoksa ya da süper kullanıcıda (modül süzgeci yok) liste boştur.
@@ -1532,7 +1519,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final canManage = _canManagePeople(role);
     return <PlateSite>[
       for (final site in _moduleAccess.result!.sites)
-        if (site.isEnabled(PlatformModuleCodes.plateRecognition))
+        if (site.isEnabled(PlatformModuleCodes.plateRecognition) || site.isEnabled(PlatformModuleCodes.plateCameras))
           if (site.role == 'manager' && canManage)
             PlateSite(code: site.siteCode, name: site.siteName, access: PlateAccess.manager)
           else if (site.role == 'staff' || site.isBoardMember)
@@ -2228,10 +2215,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return _annualReportSites(role).isNotEmpty;
     }
     if (item == SirketMenuItem.plakaTanima) {
-      return _plateRecognitionSites(role).isNotEmpty;
+      return _plateRecognitionSites(role).isNotEmpty || _deviceIntegrationSites(role).isNotEmpty;
     }
     if (item == SirketMenuItem.odemeKamera) {
-      return _deviceIntegrationSites(role).isNotEmpty;
+      return false; // Birleşik modül: Plaka Tanıma & Kameralar altında toplandı.
     }
     if (item == SirketMenuItem.kameraCctv) {
       return _cctvSites(role).isNotEmpty;
@@ -2435,10 +2422,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.faaliyetRaporu:
         return 'Faaliyet Raporu';
       case SirketMenuItem.plakaTanima:
-        // Sakinde ekranın içindeki başlık "Misafir plakası"dır; menü adı herkeste aynıdır.
-        return 'Plaka Tanıma';
       case SirketMenuItem.odemeKamera:
-        return 'Kamera ve Plaka';
+        // Sakinde ekranın içindeki başlık "Misafir plakası"dır; menü adı herkeste aynıdır.
+        return 'Plaka Tanıma & Kameralar';
       case SirketMenuItem.kameraCctv:
         return 'Kamera (CCTV)';
       case SirketMenuItem.ekipmanBakim:
@@ -6232,9 +6218,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.faaliyetRaporu:
         await _annualReportKey.currentState?.reload();
       case SirketMenuItem.plakaTanima:
-        await _plateRecognitionKey.currentState?.reload();
       case SirketMenuItem.odemeKamera:
-        await _deviceIntegrationsKey.currentState?.reload();
+        await _plateRecognitionKey.currentState?.reload();
         break;
       case SirketMenuItem.kameraCctv:
         await _cctvKey.currentState?.reload();
@@ -7614,17 +7599,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         );
 
       case SirketMenuItem.plakaTanima:
+      case SirketMenuItem.odemeKamera:
         return PlateRecognitionView(
           key: _plateRecognitionKey,
           authService: widget.authService,
           sites: _plateRecognitionSites(session.role),
-        );
-
-      case SirketMenuItem.odemeKamera:
-        return DeviceIntegrationsView(
-          key: _deviceIntegrationsKey,
-          authService: widget.authService,
-          sites: _deviceIntegrationSites(session.role),
         );
 
       case SirketMenuItem.kameraCctv:

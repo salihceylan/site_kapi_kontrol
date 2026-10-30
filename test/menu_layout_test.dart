@@ -184,7 +184,6 @@ void main() {
         PlatformModuleCodes.visitorLog,
         PlatformModuleCodes.contracts,
         PlatformModuleCodes.equipment,
-        PlatformModuleCodes.cctvLink,
         PlatformModuleCodes.decisionBook,
         PlatformModuleCodes.directory,
         PlatformModuleCodes.budget,

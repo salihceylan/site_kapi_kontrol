@@ -4538,3 +4538,36 @@ Güvenlik kulübesindeki kenar PC uygulaması artık sunucunun gerçek kenar sö
 - [ ] **161.8. Canlı akış: otomatik yenileme aç/kapa, bağlantı kopunca son liste korunur, boş durum (F85.08):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Plaka Tanıma modülü açık; yeni uygulama sürümü ve sunucu sürümü. Canlı akış sekmesinde “Otomatik” düğmesine dokunarak yenilemeyi kapatın; bir araç geçirin ve kartın eklenmediğini görün; “Şimdi yenile” düğmesine basın. Otomatik yenilemeyi tekrar açın (hemen bir yenileme yapılır); sonra cihazın internetini kapatıp birkaç saniye bekleyin, internet gelince bekleyin. Hiç geçişi olmayan yeni bir sitede aynı sekmeyi açın.
   - **Beklenen Sonuç:** Kapalıyken liste kendiliğinden değişmez, “Şimdi yenile” ile güncellenir ve ekranda “Son güncelleme” saati yazar. Bağlantı kopunca liste silinmez; üstte “Bağlantı kesildi; son bilinen liste gösteriliyor” uyarısı çıkar, bağlantı dönünce uyarı kendiliğinden kalkar. İlk açılışta bağlantı yoksa “Bağlantı kurulamadı” ve “Yeniden dene” düğmesi görünür. Hiç geçiş yoksa “Henüz geçiş yok” yazar ve sayaç “İçeride: 0 araç” gösterir. Başka bir sekmeye geçince yenileme durur (arka planda istek atılmaz).
+
+
+- [ ] **162. Genişletilmiş Kamera Ekranları ve Canlı Plaka HUD Gösterimi (Yerel İstasyon Mimarisi):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Plaka Tanıma & Kameralar modülü açık, masaüstü (Windows) uygulaması açık. Sitede 1 veya 2 kamera tanımlı olsun. Sanal kamera veya ağdaki IP kamera akışı açıkken "Kameralar" sekmesine gelin. Araç kameranın görüş alanına girdiğinde kamera ekranını izleyin.
+  - **Beklenen Sonuç:** 
+    1. Kamera ekranları ekrana tam oturacak şekilde büyütülmüş olarak görünür (tek kamerada tam genişlik, 2 kamerada geniş çift sütun).
+    2. Kamera görüntüsü üzerinde yeşil/sarı hedefleme köşebentleri ve altında gerçekçi Türk Plaka tasarımı (mavi TR şeridi, kalın siyah plaka fontu ve onay/durum rozeti) canlı olarak belirir.
+    3. Ekranın sol üstünde "Çevrimiçi" rozeti yanar; "Kenar istemci yok" veya "Kenar PC çevrimdışı" gibi harici istemci uyarıları kesinlikle yer almaz.
+    4. Plaka algılandığında yerel ağdan SmartKeyPass UDP 8765 aç komutu gönderilir ve kartın altındaki "Son okunan plaka" alanı güncellenir.
+
+
+---
+
+## 163. 🚗 SmartKeyPass Kapı Entegrasyonu, Windows İstasyon İzolasyonu ve CCTV Temizliği
+*Plaka okuma modülünün SmartKeyPass kapılarıyla doğrudan çalışması, Windows dışı sistemlerde izleme modu ve CCTV modülünün kaldırılması.*
+
+- [ ] **163.1. SmartKeyPass Bağımlılık Denetimi (Modül Talebi ve Açılışı):**
+  - **Nasıl Test Edilir:** Geçiş Kontrol (SmartKeyPass) modülü kapalı olan bir sitede, site yöneticisi veya süper kullanıcı olarak "Modül Talepleri" veya modül yönetim ekranından "Plaka Tanıma ve Kapı Açma" modülünü açmayı veya talep etmeyi deneyin.
+  - **Beklenen Sonuç:** Sistem işlemi engellemeli ve `"Plaka okuma ile kapı açma sistemi için önce Geçiş Kontrol (SmartKeyPass) modülü aktif olmalıdır. İki modülü birlikte talep edebilir veya önce SmartKeyPass modülünü açabilirsiniz."` uyarısını vermelidir.
+- [ ] **163.2. Plaka Tanıma Ekranında Kapı Yönetimi Sınırlandırması ve Otomatik Kapı Senkronu:**
+  - **Nasıl Test Edilir:** Plaka Tanıma ekranında "Geçiş noktaları" sekmesine girin.
+  - **Beklenen Sonuç:** 
+    1. Ekranda "Geçiş noktası ekle", kapı kartlarında "Düzenle" veya "Sil" butonları KESİNLİKLE yer almaz.
+    2. Kapılar doğrudan Geçiş Kontrol (SmartKeyPass) modülünden otomatik olarak listelenir.
+    3. Kapı kartında yöneticinin yapabileceği tek işlem "Kamera ata / ekle" işlemidir; atanan kameranın okuduğu kayıtlı araç plakasında kapı otomatik olarak açılır.
+- [ ] **163.3. Windows Masaüstü İstasyon İzolasyonu ve Web/Mobil İzleme Modu:**
+  - **Nasıl Test Edilir:** Plaka Tanıma ekranını Chrome tarayıcıdan (Web) veya Android/iOS telefondan açın; ardından aynı ekranı Windows masaüstü uygulamasında açın.
+  - **Beklenen Sonuç:** 
+    1. Web ve mobil ekranında üstte `"İzleme Modu (Web / Mobil): Kamera ile otomatik plaka tespiti ve SmartKeyPass kapı tetikleme işlemi kameralarla aynı yerel ağda (LAN) çalışan Windows masaüstü güvenlik / yönetim bilgisayarında yürütülür."` bilgi kartı görünür; cihaz arka planda gereksiz kamera OCR döngüsü çalıştırmaz.
+    2. Windows masaüstü uygulamasında `"Windows Saha Plaka Tanıma & Kapı Motoru: Aktif"` kartı görünür ve yerel ağdaki kameralardan gelen araçlar anında okunup UDP 8765 ile kapıyı açar.
+- [ ] **163.4. Kamera (CCTV) Modülünün Kaldırılması:**
+  - **Nasıl Test Edilir:** Yan menüyü, modül vitrinini (Panel) ve modül kataloğunu inceleyin.
+  - **Beklenen Sonuç:** "Kamera (CCTV) - Kapı olaylarını kamera kayıtlarıyla eşleştirin" modülü vitrinden, menüden ve modül listesinden tamamen kalkmıştır. Kafa karışıklığı yaratacak ikinci bir kamera modülü bulunmaz.

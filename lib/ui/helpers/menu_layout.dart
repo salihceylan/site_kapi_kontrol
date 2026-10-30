@@ -37,7 +37,6 @@ const Map<SirketMenuItem, String> menuModuleCodes = <SirketMenuItem, String>{
   SirketMenuItem.faaliyetRaporu: PlatformModuleCodes.annualReport,
   SirketMenuItem.plakaTanima: PlatformModuleCodes.plateRecognition,
   SirketMenuItem.odemeKamera: PlatformModuleCodes.plateCameras,
-  SirketMenuItem.kameraCctv: PlatformModuleCodes.cctvLink,
   SirketMenuItem.ekipmanBakim: PlatformModuleCodes.equipment,
 };
 

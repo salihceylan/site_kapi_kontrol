@@ -7,7 +7,6 @@ import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/plate_recognition_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
-import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/status_dot.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
@@ -117,20 +116,6 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
     );
   }
 
-  Future<void> _editGate([PlateGate? gate]) async {
-    final draft = await showDialog<GateDraft>(context: context, builder: (_) => GateEditDialog(overview: _o, gate: gate));
-    if (draft == null) return;
-    if (gate == null) {
-      await _run(() => widget.service.createGatePoint(widget.siteCode, draft), 'Geçiş noktası eklendi.');
-    } else {
-      await _run(() => widget.service.updateGatePoint(widget.siteCode, gate.id, draft), 'Geçiş noktası güncellendi.');
-    }
-  }
-
-  Future<void> _deleteGate(PlateGate gate) async {
-    if (!await _confirm('Geçiş noktası silinsin mi?', '"${gate.name}" ve kamera bağlantıları kaldırılır. Geçmiş kayıtlar silinmez.', 'Sil')) return;
-    await _run(() => widget.service.deleteGatePoint(widget.siteCode, gate.id), 'Geçiş noktası silindi.');
-  }
 
   Future<void> _addEdge() async {
     final controller = TextEditingController();
@@ -286,7 +271,7 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
               Row(
                 children: <Widget>[
                   Expanded(child: Text('Kamera bağlı değil.', style: theme.textTheme.bodySmall)),
-                  if (widget.canWrite && widget.onAddCamera != null)
+                  if (widget.canWrite && widget.onAddCamera != null && gate.cameras.isNotEmpty)
                     TextButton.icon(
                       key: ValueKey<String>('gate_add_camera_${gate.id}'),
                       onPressed: () => widget.onAddCamera!(gate),
@@ -311,14 +296,16 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
                   ],
                 ),
               ),
-            if (widget.canWrite)
+            if (widget.canWrite && widget.onAddCamera != null)
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: <Widget>[
-                  if (gate.cameras.isNotEmpty && widget.onAddCamera != null)
-                    TextButton(key: ValueKey<String>('gate_add_camera_${gate.id}'), onPressed: () => widget.onAddCamera!(gate), child: const Text('Kamera ekle')),
-                  TextButton(onPressed: () => _editGate(gate), child: const Text('Düzenle')),
-                  TextButton(onPressed: () => _deleteGate(gate), child: const Text('Sil')),
+                  TextButton.icon(
+                    key: ValueKey<String>('gate_add_camera_${gate.id}'),
+                    onPressed: () => widget.onAddCamera!(gate),
+                    icon: const Icon(Icons.add_a_photo_outlined, size: 16),
+                    label: const Text('Kamera ata / ekle'),
+                  ),
                 ],
               ),
           ],
@@ -375,9 +362,9 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
         _note('Her kapı için kameralar ve SmartKeyPass cihazı ile kenar bilgisayarın çalışma durumu burada görünür. Kapı ve kamera sayısı sınırsızdır; kapıyı plaka okuyan kenar bilgisayar karar verip SmartKeyPass ile açar, kapatma emniyeti bariyerin kendi sensörünündür.'),
         _section(
           'Geçiş noktaları',
-          actions: <Widget>[if (widget.canWrite) PrimaryActionButton(label: 'Geçiş noktası ekle', icon: Icons.add_rounded, expand: false, onPressed: () => _editGate())],
+          actions: const <Widget>[],
         ),
-        if (o.gates.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: AppSpace.md), child: Text('Henüz geçiş noktası tanımlanmamış.')),
+        if (o.gates.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: AppSpace.md), child: Text('SmartKeyPass üzerinde kayıtlı kapı bulunamadı. Önce Geçiş Kontrol modülünden kapı ekleyiniz.')),
         for (final gate in o.gates) _gateCard(gate),
         _section(
           'Kenar istemci (güvenlik kulübesi PC)',
@@ -460,6 +447,7 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
 }
 
 /// Kapı ekle / düzenle penceresi. Kamera yönü yalnız çift yönlü kapıda seçilir; tek yönlü kapıda kamera yönü kapıdan gelir.
+@visibleForTesting
 class GateEditDialog extends StatefulWidget {
   const GateEditDialog({super.key, required this.overview, this.gate});
 

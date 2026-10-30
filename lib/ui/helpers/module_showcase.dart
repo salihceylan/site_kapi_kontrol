@@ -79,7 +79,6 @@ const Set<SirketMenuItem> _featureModuleItems = <SirketMenuItem>{
   SirketMenuItem.sozlesmeler,
   SirketMenuItem.sayaclar,
   SirketMenuItem.odemeKamera,
-  SirketMenuItem.kameraCctv,
   SirketMenuItem.ekipmanBakim,
   SirketMenuItem.acilDurum,
 };
@@ -110,7 +109,6 @@ const Map<SirketMenuItem, ModuleArtKind> _artKinds = <SirketMenuItem, ModuleArtK
   SirketMenuItem.faaliyetRaporu: ModuleArtKind.finance,
   SirketMenuItem.plakaTanima: ModuleArtKind.devices,
   SirketMenuItem.odemeKamera: ModuleArtKind.devices,
-  SirketMenuItem.kameraCctv: ModuleArtKind.devices,
   SirketMenuItem.ekipmanBakim: ModuleArtKind.contracts,
   SirketMenuItem.acilDurum: ModuleArtKind.help,
   SirketMenuItem.siteler: ModuleArtKind.sites,
@@ -165,7 +163,6 @@ const Map<SirketMenuItem, String> _descriptions = <SirketMenuItem, String>{
   SirketMenuItem.faaliyetRaporu: 'Yıllık rapor taslağı ve PDF',
   SirketMenuItem.plakaTanima: 'Araç plakası kayıtları ve misafir plakası',
   SirketMenuItem.odemeKamera: 'Plaka tanıyan kameralar',
-  SirketMenuItem.kameraCctv: 'Kapı olaylarını kamera kayıtlarıyla eşleştirin',
   SirketMenuItem.ekipmanBakim: 'Ekipman, bakım planı ve teklifler',
   SirketMenuItem.acilDurum: '112, yangın ve asansör arızası',
   SirketMenuItem.siteler: 'Site, blok, daire ve kapılar',

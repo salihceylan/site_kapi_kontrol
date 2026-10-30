@@ -76,7 +76,6 @@ void main() {
     expect(find.byType(DeviceIntegrationsView), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('btn_discover')), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('btn_add_camera')), findsOneWidget);
-    expect(find.text('Ağda arama ve görüntü için önce Kenar istemci ekleyin (Geçiş noktaları sekmesi).'), findsOneWidget);
     expect(find.text('Canlı akış'), findsOneWidget, reason: 'yalnız sekme düğmesi; panelde ikinci başlık yok');
     await tester.pumpWidget(const SizedBox());
   });

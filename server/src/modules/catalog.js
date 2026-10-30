@@ -121,14 +121,6 @@ export const MODULE_CATALOG = Object.freeze([
     defaultEnabled: false,
   }),
   defineModule({
-    code: 'plate_cameras',
-    name: 'Kamera ve Plaka',
-    description: 'Plaka tanıyan kameralardan gelen olayların araç listesiyle karşılaştırılıp kaydı. Kapı açmaz.',
-    core: false,
-    status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
-  }),
-  defineModule({
     code: 'contracts',
     name: 'Firma ve Sözleşme Takibi',
     description: 'Firmalar, sözleşme bitiş tarihleri ve hatırlatmalar.',
@@ -190,8 +182,8 @@ export const MODULE_CATALOG = Object.freeze([
   }),
   defineModule({
     code: 'plate_recognition',
-    name: 'Plaka Tanıma',
-    description: 'Araç plakasını tanıyarak otopark kapısını açma; plaka kayıtları.',
+    name: 'Plaka Tanıma ve Kapı Açma',
+    description: 'Kameralarla araç plakasını okuyarak SmartKeyPass kapılarını otomatik açma ve geçiş kaydı.',
     core: false,
     status: MODULE_STATUS_AVAILABLE,
     defaultEnabled: false,
@@ -202,14 +194,6 @@ export const MODULE_CATALOG = Object.freeze([
     description: 'HGS etiketiyle araç geçişi; dış sistem bağlantısı.',
     core: false,
     status: MODULE_STATUS_COMING_SOON,
-    defaultEnabled: false,
-  }),
-  defineModule({
-    code: 'cctv_link',
-    name: 'Kamera (CCTV) Bağlantısı',
-    description: 'Kapı olaylarını kamera kayıtlarıyla eşleştirme; kayıt sistemi bağlantısı.',
-    core: false,
-    status: MODULE_STATUS_AVAILABLE,
     defaultEnabled: false,
   }),
   defineModule({
@@ -230,7 +214,10 @@ export const MODULE_CODES = Object.freeze(MODULE_CATALOG.map((definition) => def
  * Eski uygulama sürümleri hâlâ `documents` kodunu gönderebilir (modül talebi, aç/kapa): bu kod Dosya Deposu'na çevrilir, 404 ya da 500 dönmez.
  * Katalogda ayrı modül olarak ASLA görünmez; yalnız kod çevirisi ve eski kodlu geçmiş kayıtların (talep, denetim) adı için kullanılır.
  */
-export const LEGACY_MODULE_ALIASES = Object.freeze({ documents: 'drive_storage' });
+export const LEGACY_MODULE_ALIASES = Object.freeze({
+  documents: 'drive_storage',
+  plate_cameras: 'plate_recognition',
+});
 
 /** Eski modül kodunu güncel koda çevirir; tanınmayan ya da metin olmayan değer olduğu gibi döner. */
 export function canonicalModuleCode(code) {
@@ -257,6 +244,7 @@ export function getModuleDefinition(code) {
 // temel modüllerle AYNI sözleşmeyle (400 MODULE_NOT_TOGGLEABLE + açıklayıcı metin) yanıtlanır.
 const RETIRED_MODULE_NOTICES = new Map([
   ['card_payments', 'Kart Ödemesi artık Aidat ve Finans modülünün içindedir; her sitede hep açıktır, ayrıca açılıp kapatılamaz ya da talep edilemez.'],
+  ['cctv_link', 'Kamera (CCTV) modülü platformdan kaldırılmıştır.'],
 ]);
 
 /** Kataloktan kaldırılmış modül kodu için açıklama metni; kaldırılmış değilse (ya da metin olmayan değerse) null. */
@@ -269,7 +257,8 @@ export function retiredModuleNotice(code) {
 
 // Kataloktan KALDIRILMIŞ ve başka bir koda ÇEVRİLMEYEN modül kodları -> eski kodlu GEÇMİŞ kayıtlarda (modül talebi) gösterilen ad.
 // `documents` burada yoktur: `canonicalModuleCode` ile güncel modülün (Dosya Deposu) adına çevrilir. Yalnız görünen ad içindir.
-const RETIRED_MODULE_NAMES = new Map([['card_payments', 'Kart Ödemesi (Aidat ve Finans)']]);
+const RETIRED_MODULE_NAMES = new Map([['card_payments', 'Kart Ödemesi (Aidat ve Finans)'],
+  ['cctv_link', 'Kamera (CCTV) Bağlantısı']]);
 
 /** Kataloktan kaldırılmış modül kodunun geçmiş kayıtlarda gösterilen adı; kaldırılmış değilse (ya da metin olmayan değerse) null. */
 export function retiredModuleName(code) {

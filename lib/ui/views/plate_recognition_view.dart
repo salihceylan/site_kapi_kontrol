@@ -7,7 +7,9 @@ import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/device_integrations_api.dart' show DeviceSite;
 import 'package:site_kapi_kontrol/services/plate_cameras_api.dart';
+import 'package:flutter/foundation.dart';
 import 'package:site_kapi_kontrol/services/plate_recognition_api.dart';
+import 'package:site_kapi_kontrol/services/plate_recognition_engine.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
@@ -60,11 +62,27 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
   PlateGatesOverview? _gates;
   PlateInside? _inside;
   PlateResidentOverview? _resident;
+  StreamSubscription<PlateEngineDecision>? _engineDecisionSub;
+
+  @override
+  void dispose() {
+    _engineDecisionSub?.cancel();
+    super.dispose();
+  }
 
   @override
   void initState() {
     super.initState();
     _site = widget.sites.isEmpty ? null : widget.sites.first;
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      _engineDecisionSub = PlateRecognitionEngine.instance.decisionsStream.listen((decision) {
+        if (!mounted) return;
+        setState(() {});
+        if (_tab == 0 || _tab == 1 || _tab == 4) {
+          unawaited(reload());
+        }
+      });
+    }
     unawaited(reload());
   }
 
@@ -129,6 +147,9 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
           _error = null;
           _loading = false;
         });
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows && !site.isResident) {
+          unawaited(_syncWindowsEngine(site));
+        }
       }
     } on ApiException catch (e) {
       if (_isCurrent(token)) {
@@ -358,7 +379,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
             if (e.wouldOpen)
               Padding(
                 padding: const EdgeInsets.only(top: AppSpace.xs),
-                child: Text('Otomatik açma kaydı: bu bağlantı türü kapı komutu göndermez (kapı açma kenar sistemindedir)', style: Theme.of(context).textTheme.bodySmall),
+                child: Text('Otomatik açma kaydı: bu bağlantı türü kapı komutu göndermez (kapı açma doğrudan masaüstü / SmartKeyPass motorundadır)', style: Theme.of(context).textTheme.bodySmall),
               ),
           ],
         ),
@@ -505,8 +526,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
     final settings = _settings;
     if (settings == null) return const <Widget>[];
     return <Widget>[
-      _note('Kapı açma kenar (güvenlik bilgisayarı) sistemindedir; bu doğrudan-bildirim yolu yalnız kayıt tutar, kapıya komut göndermez.'),
-      _note('Kameralar "Kameralar" sekmesinden eklenir; burada kameranın hangi kapıya baktığını eşlersiniz. Kamera okuma güvenini (confidence) göndermiyorsa otomatik açma yapılmaz.'),
+      _note('Kameralar "Kameralar" sekmesinden eklenir; burada kameranın hangi kapıya baktığını eşlersiniz.'),
       if (settings.doors.isEmpty) _empty('Bu sitede tanımlı kapı yok.'),
       for (final door in settings.doors)
         _GateCard(
@@ -520,7 +540,343 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
     ];
   }
 
+  Future<void> _syncWindowsEngine(PlateSite site) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows || site.isResident) return;
+    try {
+      final camerasOverview = await _cameras.overview(site.code);
+      final blacklist = await _service.blacklist(site.code);
+      final permits = await _service.permits(site.code);
+      final inside = await _service.inside(site.code);
+
+      final parkingSlots = <int, int>{};
+      final insideCounts = <int, int>{};
+      for (final apt in inside.apartments) {
+        parkingSlots[apt.hashCode] = apt.parkingSlots;
+        insideCounts[apt.hashCode] = apt.insideCount;
+      }
+
+      final vehiclesMap = <String, Map<String, dynamic>>{};
+      try {
+        final session = widget.authService.session;
+        if (session != null) {
+          final page = await widget.authService.api.listVehicles(
+            token: session.token,
+            siteCode: site.code,
+            limit: 200,
+          );
+          for (final v in page.items) {
+            final norm = canonicalTrPlate(v.plate);
+            if (norm.isNotEmpty) {
+              vehiclesMap[norm] = <String, dynamic>{
+                'plate': norm,
+                'person_label': v.personName,
+                'apartment_label': v.apartmentLabel,
+              };
+            }
+          }
+        }
+      } catch (_) {}
+
+      PlateRecognitionEngine.instance.start(
+        siteCode: site.code,
+        baseUrl: widget.authService.api.baseUrl,
+        token: widget.authService.session?.token,
+        cameras: camerasOverview.cameras,
+        blacklist: blacklist,
+        guestPermits: permits,
+        vehicles: vehiclesMap,
+        parkingSlots: parkingSlots,
+        insideCounts: insideCounts,
+      );
+      if (mounted) setState(() {});
+    } catch (_) {}
+  }
+
+  Widget _buildNonWindowsInfoBanner(PlateSite site) => Padding(
+    padding: const EdgeInsets.only(bottom: AppSpace.md),
+    child: AppCard(
+      padding: const EdgeInsets.all(AppSpace.md),
+      child: Row(
+        children: <Widget>[
+          Icon(Icons.info_outline_rounded, color: context.palette.action, size: 24),
+          const SizedBox(width: AppSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  'İzleme Modu (Web / Mobil)',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: context.palette.text),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Kamera ile otomatik plaka tespiti ve SmartKeyPass kapı tetikleme işlemi kameralarla aynı yerel ağda (LAN) çalışan Windows masaüstü güvenlik / yönetim bilgisayarında yürütülür. Web ve mobil cihazlardan canlı akış ve olay kayıtları izlenebilir.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.palette.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _buildWindowsEngineBanner(PlateSite site) {
+    final engine = PlateRecognitionEngine.instance;
+    final isRunning = engine.isRunning;
+    final lastDecision = engine.lastDecision;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      child: AppCard(
+        padding: const EdgeInsets.all(AppSpace.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isRunning ? context.palette.statusOk : context.palette.statusCrit,
+                  ),
+                ),
+                const SizedBox(width: AppSpace.sm),
+                Expanded(
+                  child: Text(
+                    isRunning
+                      ? 'Windows Saha Plaka Tanıma & Kapı Motoru: Aktif'
+                      : 'Windows Plaka Tanıma Motoru: Durduruldu',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: AppSpace.sm),
+                OutlinedButton.icon(
+                  onPressed: () => _showPlateSimulationDialog(site),
+                  icon: const Icon(Icons.speed_rounded, size: 18),
+                  label: const Text('Plaka Test Et'),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: AppSpace.xs),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpace.sm),
+            Wrap(
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.xs,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: <Widget>[
+                Chip(
+                  avatar: const Icon(Icons.videocam_rounded, size: 16),
+                  label: Text(' Kamera Dinleniyor'),
+                  visualDensity: VisualDensity.compact,
+                ),
+                if (lastDecision != null) ...<Widget>[
+                  Text(
+                    'Son Okunan:',
+                    style: TextStyle(fontSize: 12, color: context.palette.textSecondary),
+                  ),
+                  LicensePlateBadge(plate: lastDecision.plate, compact: true),
+                  _engineDecisionBadge(lastDecision),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _engineDecisionBadge(PlateEngineDecision decision) {
+    final (label, tone) = switch (decision.decision) {
+      PlateDecisionType.acildi => ('İzinli • Kapı Açıldı', AppTone.success),
+      PlateDecisionType.red => ('Giriş Reddedildi • ', AppTone.danger),
+      PlateDecisionType.karaListe => ('KARA LİSTE • Kapı Açılmadı', AppTone.danger),
+      PlateDecisionType.tanimsiz => ('Tanımsız Plaka', AppTone.warning),
+    };
+    return StatusDot(label: label, tone: tone);
+  }
+
+  Future<void> _showPlateSimulationDialog(PlateSite site) async {
+    final plateController = TextEditingController(text: '34 ABC 123');
+    String direction = 'giris';
+    PlateEngineDecision? simulationResult;
+    bool processing = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: const Row(
+            children: <Widget>[
+              Icon(Icons.directions_car_rounded),
+              SizedBox(width: AppSpace.sm),
+              Expanded(child: Text('Plaka Okuma & Kapı Açma Testi')),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text(
+                  'Bu ekrandan doğrudan plaka girerek otopark kurallarını (kara liste, sakin, misafir doluluk) ve SmartKeyPass UDP kapı tetikleme sinyalini test edebilirsiniz.',
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: AppSpace.md),
+                TextField(
+                  controller: plateController,
+                  inputFormatters: const <TextInputFormatter>[PlateInputFormatter()],
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                    labelText: 'Plaka',
+                    hintText: '34 ABC 123',
+                    prefixIcon: Icon(Icons.badge_rounded),
+                  ),
+                ),
+                const SizedBox(height: AppSpace.sm),
+                Row(
+                  children: <Widget>[
+                    const Text('Yön: ', style: TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(width: AppSpace.sm),
+                    ChoiceChip(
+                      label: const Text('Giriş'),
+                      selected: direction == 'giris',
+                      onSelected: (v) => setLocal(() => direction = 'giris'),
+                    ),
+                    const SizedBox(width: AppSpace.xs),
+                    ChoiceChip(
+                      label: const Text('Çıkış'),
+                      selected: direction == 'cikis',
+                      onSelected: (v) => setLocal(() => direction = 'cikis'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpace.sm),
+                const Text('Hızlı Örnekler:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: AppSpace.xs),
+                Wrap(
+                  spacing: AppSpace.xs,
+                  runSpacing: AppSpace.xs,
+                  children: <Widget>[
+                    ActionChip(
+                      label: const Text('Sakin Aracı (34 SKN 01)'),
+                      onPressed: () => setLocal(() => plateController.text = '34 SKN 01'),
+                    ),
+                    ActionChip(
+                      label: const Text('Misafir Aracı (34 MSF 02)'),
+                      onPressed: () => setLocal(() => plateController.text = '34 MSF 02'),
+                    ),
+                    ActionChip(
+                      label: const Text('Kara Liste (34 KRA 99)'),
+                      onPressed: () => setLocal(() => plateController.text = '34 KRA 99'),
+                    ),
+                    ActionChip(
+                      label: const Text('Tanımsız (06 TNM 10)'),
+                      onPressed: () => setLocal(() => plateController.text = '06 TNM 10'),
+                    ),
+                  ],
+                ),
+                if (simulationResult != null) ...<Widget>[
+                  const Divider(height: AppSpace.lg),
+                  Text('Test Sonucu:', style: TextStyle(fontWeight: FontWeight.bold, color: context.palette.textSecondary)),
+                  const SizedBox(height: AppSpace.xs),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: simulationResult!.decision == PlateDecisionType.acildi
+                          ? Colors.green.shade50
+                          : Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                      border: Border.all(
+                        color: simulationResult!.decision == PlateDecisionType.acildi
+                            ? Colors.green.shade200
+                            : Colors.red.shade200,
+                      ),
+                    ),
+                    padding: const EdgeInsets.all(AppSpace.sm),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Row(
+                          children: <Widget>[
+                            Icon(
+                              simulationResult!.decision == PlateDecisionType.acildi
+                                  ? Icons.check_circle_rounded
+                                  : Icons.cancel_rounded,
+                              color: simulationResult!.decision == PlateDecisionType.acildi
+                                  ? Colors.green.shade700
+                                  : Colors.red.shade700,
+                            ),
+                            const SizedBox(width: AppSpace.xs),
+                            Expanded(
+                              child: Text(
+                                simulationResult!.decision == PlateDecisionType.acildi
+                                    ? 'KAPI AÇILDI ✓'
+                                    : 'KAPI AÇILMADI (Giriş Engellendi)',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: simulationResult!.decision == PlateDecisionType.acildi
+                                      ? Colors.green.shade900
+                                      : Colors.red.shade900,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpace.xs),
+                        Text('Neden: ', style: const TextStyle(fontSize: 13)),
+                        if (simulationResult!.isGateTriggered) ...<Widget>[
+                          const SizedBox(height: AppSpace.xs),
+                          Text(
+                            'Sinyal: SmartKeyPass UDP 8765 yayınlandı.',
+                            style: TextStyle(fontSize: 12, color: Colors.green.shade800, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Kapat'),
+            ),
+            FilledButton.icon(
+              onPressed: processing
+                  ? null
+                  : () async {
+                      setLocal(() => processing = true);
+                      final res = await PlateRecognitionEngine.instance.testProcessPlate(
+                        plateController.text,
+                        direction: direction,
+                      );
+                      setLocal(() {
+                        simulationResult = res;
+                        processing = false;
+                      });
+                    },
+              icon: const Icon(Icons.play_arrow_rounded),
+              label: const Text('Test Et & Tetikle'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   List<Widget> _managerBody(PlateSite site) => <Widget>[
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows)
+      _buildWindowsEngineBanner(site)
+    else
+      _buildNonWindowsInfoBanner(site),
     Wrap(
       spacing: AppSpace.sm,
       children: <Widget>[
@@ -688,7 +1044,7 @@ class _GateCardState extends State<_GateCard> {
             const SizedBox(height: AppSpace.sm),
             if (!widget.canWrite) ...<Widget>[
               Text('Kamera: ${camera.isEmpty ? 'eşleşmedi' : camera.first.name}'),
-              Text('Otomatik açma: ${widget.door.autoOpen ? 'Açık (komutu kenar sistemi gönderir)' : 'Kapalı'}'),
+              Text('Otomatik açma: ${widget.door.autoOpen ? 'Açık (SmartKeyPass UDP)' : 'Kapalı'}'),
               Text('Güven eşiği ${_pct(widget.door.minConfidence)}  •  aynı plaka ${widget.door.cooldownSeconds} sn içinde tekrar açmaz'),
             ] else ...<Widget>[
               DropdownButtonFormField<int?>(
@@ -710,7 +1066,7 @@ class _GateCardState extends State<_GateCard> {
                 value: _draft.autoOpen,
                 onChanged: _draft.deviceId == null ? null : _toggleAuto,
                 title: const Text('Plakayla otomatik açma'),
-                subtitle: const Text('Kapı açma kenar sistemindedir; bu yol yalnız kayıt tutar.'),
+                subtitle: const Text('İzinli plaka okunduğunda yerel SmartKeyPass (UDP 8765) açıl komutu gönderir; sunucu doğrudan kapı komutu göndermez.'),
               ),
               Row(
                 children: <Widget>[

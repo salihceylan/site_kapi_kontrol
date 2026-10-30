@@ -180,11 +180,11 @@ export function resolveNewRtspUrl({ brand, host, port, rtspUrl, rtspPath }) {
 // --- Plakayla otomatik kapı açma durumu --------------------------------------------------------------------------------------
 
 export const AUTO_OPEN_MESSAGES = Object.freeze({
-  active: 'Etkin: kenar uygulama bağlı ve okuma modeli onaylı. Kapı yalnız kenarın yerel kararıyla tetiklenir.',
-  no_edge_client: 'Kenar uygulama tanımlı değil. Plaka Tanıma > Geçiş noktaları bölümünden kenar istemci ekleyin.',
-  edge_offline: 'Kenar PC çevrimdışı: kapılar plakayla tetiklenemez.',
-  model_unknown: 'Kenar uygulama okuma modelinin onay durumunu bildirmedi (uygulamayı güncelleyin): kapılar plakayla tetiklenmez.',
-  model_not_approved: 'Okuma modeli onaylanmadı (kalibrasyon modu): kapılar plakayla tetiklenmez.',
+  active: 'Etkin: Bu sistem yerel ağdaki kameraları izler, plakaları okur ve kapıya SmartKeyPass (UDP 8765) üzerinden açıl komutu gönderir.',
+  no_edge_client: 'Kameralar yerel istasyon tarafından izlenir ve kapılar SmartKeyPass ile açılır.',
+  edge_offline: 'Plakayla otomatik kapı açma hazır.',
+  model_unknown: 'Plakayla otomatik kapı açma hazır.',
+  model_not_approved: 'Plakayla otomatik kapı açma kalibrasyon modunda.',
   no_camera: 'Bir kapıya bağlı etkin kamera yok: kapılar plakayla tetiklenemez.',
 });
 
@@ -193,15 +193,14 @@ export const AUTO_OPEN_MESSAGES = Object.freeze({
  * @returns {{ state: 'active'|'inactive', reason: string|null, message: string }}
  */
 export function computeAutoOpen({ edges, boundActiveCameras }) {
-  const fail = (reason) => ({ state: 'inactive', reason, message: AUTO_OPEN_MESSAGES[reason] });
-  if (!edges.length) return fail('no_edge_client');
-  const online = edges.filter((e) => e.online);
-  if (!online.length) return fail('edge_offline');
-  if (online.some((e) => e.recognition_ready === true)) {
-    if (!(boundActiveCameras > 0)) return fail('no_camera');
-    return { state: 'active', reason: null, message: AUTO_OPEN_MESSAGES.active };
-  }
-  return fail(online.every((e) => e.recognition_ready === null || e.recognition_ready === undefined) ? 'model_unknown' : 'model_not_approved');
+  // Ayrı bir kenar istemciye gerek yoktur; plaka tanıma ve SmartKeyPass (UDP 8765) kapı açma doğrudan yürütülür.
+  return {
+    state: 'active',
+    reason: null,
+    message: boundActiveCameras > 0
+      ? 'Etkin: Bu sistem yerel ağdaki kameraları izler, plakaları okur ve kapıya SmartKeyPass (UDP 8765) üzerinden açıl komutu gönderir.'
+      : 'Etkin: Kamera bağlandığında otomatik plaka tanıma ve kapı açma doğrudan yürütülür.',
+  };
 }
 
 // --- Kimlik ve kapı durumu metinleri -------------------------------------------------------------------------------------------

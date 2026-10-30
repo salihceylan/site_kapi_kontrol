@@ -248,6 +248,28 @@ export async function createModuleRequest({ siteCode, moduleCode, note, actor })
       throw new PlatformError(409, 'MODULE_REQUEST_PENDING', 'Bu modül için bekleyen bir talebiniz var.');
     }
 
+    if (code === 'plate_recognition') {
+      const doorDef = getModuleDefinition('door_control');
+      const doorModuleResult = await client.query(
+        `SELECT enabled FROM site_modules WHERE site_code = $1 AND module_code = 'door_control' LIMIT 1`,
+        [site],
+      );
+      const isDoorEnabled = computeModuleEnabled(doorDef, doorModuleResult.rows?.[0]);
+      if (!isDoorEnabled) {
+        const pendingDoor = await client.query(
+          `SELECT id FROM module_requests WHERE site_code = $1 AND module_code = 'door_control' AND status = 'pending' LIMIT 1`,
+          [site],
+        );
+        if (!pendingDoor.rows?.[0]) {
+          throw new PlatformError(
+            400,
+            'SMARTKEYPASS_REQUIRED',
+            'Plaka okuma ile kapı açma sistemi için önce Geçiş Kontrol (SmartKeyPass) modülü aktif olmalıdır. İki modülü birlikte talep edebilir veya önce SmartKeyPass modülünü açabilirsiniz.',
+          );
+        }
+      }
+    }
+
     let insertResult;
     try {
       insertResult = await client.query(
@@ -485,6 +507,21 @@ export async function decideModuleRequest({ requestId, decision, note, actor }) 
       );
       if (computeModuleEnabled(definition, currentResult.rows?.[0])) {
         throw new PlatformError(409, 'MODULE_ALREADY_ENABLED', 'Bu modül zaten açık.');
+      }
+
+      if (moduleCode === 'plate_recognition') {
+        const doorDef = getModuleDefinition('door_control');
+        const doorModuleResult = await client.query(
+          `SELECT enabled FROM site_modules WHERE site_code = $1 AND module_code = 'door_control' LIMIT 1`,
+          [siteCode],
+        );
+        if (!computeModuleEnabled(doorDef, doorModuleResult.rows?.[0])) {
+          throw new PlatformError(
+            400,
+            'SMARTKEYPASS_REQUIRED',
+            'Plaka tanıma modülü onaylanamaz: Sitede Geçiş Kontrol (SmartKeyPass) modülü aktif olmalıdır.',
+          );
+        }
       }
       await client.query(
         `

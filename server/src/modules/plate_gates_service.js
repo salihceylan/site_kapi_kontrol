@@ -102,7 +102,26 @@ export async function saveSiteSettings({ siteCode, body, authUser }) {
 // --- Kapı yapılandırması (yönetici ekranı + kenar senkronu ortak) ------------------------------------------------------------------
 
 /** Kapılar ve kamera bağları (durum alanları dahil). */
+export async function syncDoorsFromSmartKeyPass(db, siteCode) {
+  try {
+    await db.query(
+      `INSERT INTO plate_gates (site_code, name, direction_mode, device_uid, door_id, sort_order, is_active)
+       SELECT d.site_code, d.door_name, 'cift', dev.device_uid, d.id, d.door_index, d.is_active
+       FROM site_doors d
+       LEFT JOIN devices dev ON dev.id = d.assigned_device_id
+       WHERE d.site_code = $1
+       ON CONFLICT (site_code, lower(name)) DO UPDATE
+       SET door_id = EXCLUDED.door_id,
+           device_uid = EXCLUDED.device_uid,
+           is_active = EXCLUDED.is_active,
+           sort_order = EXCLUDED.sort_order`,
+      [siteCode],
+    );
+  } catch (_) {}
+}
+
 export async function loadGateConfig(db, siteCode) {
+  await syncDoorsFromSmartKeyPass(db, siteCode);
   const [gates, bindings] = await Promise.all([
     db.query(
       `SELECT id, name, direction_mode, device_uid, door_id, sort_order, is_active FROM plate_gates WHERE site_code = $1 ORDER BY sort_order, id`,
@@ -257,22 +276,11 @@ async function inGateTransaction(siteCode, work) {
 }
 
 export async function createGate({ siteCode, body, authUser }) {
-  const input = parseGateInput(body);
-  const cameras = input.cameras ?? [];
-  assertCameraDirections(input.direction_mode, cameras);
-  const actor = actorFromAuthUser(authUser);
-  await inGateTransaction(siteCode, async (client) => {
-    await assertGateRefs(client, siteCode, input, cameras, null);
-    const row = await client.query(
-      `INSERT INTO plate_gates (site_code, name, direction_mode, device_uid, door_id, sort_order, is_active, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-      [siteCode, input.name, input.direction_mode, input.device_uid ?? null, input.door_id ?? null, input.sort_order ?? 0, input.is_active ?? true, actor.userCode],
-    );
-    const gateId = Number(row.rows[0].id);
-    await insertBindings(client, siteCode, gateId, cameras);
-    await audit(client, authUser, 'plate.gate_created', siteCode, 'plate_gate', gateId, { name: input.name, direction_mode: input.direction_mode, cameras: cameras.length });
-  });
-  return getGatesOverview(siteCode);
+  throw new PlatformError(
+    400,
+    'DOORS_MANAGED_BY_SMARTKEYPASS',
+    'Kapılar SmartKeyPass modülünden yönetilir. Plaka modülünde yeni kapı eklenemez; kapı ekleme SmartKeyPass modülünden yapılır.',
+  );
 }
 
 const UPDATABLE = Object.freeze(['name', 'direction_mode', 'device_uid', 'door_id', 'sort_order', 'is_active']);
@@ -307,14 +315,11 @@ export async function updateGate({ siteCode, rawId, body, authUser }) {
 }
 
 export async function deleteGate({ siteCode, rawId, authUser }) {
-  const gateId = parsePositive(rawId, 'Kapı', 'GATE_NOT_FOUND');
-  await inGateTransaction(siteCode, async (client) => {
-    await client.query(`DELETE FROM plate_gate_cameras WHERE gate_id = $1 AND site_code = $2`, [gateId, siteCode]);
-    const removed = await client.query(`DELETE FROM plate_gates WHERE id = $1 AND site_code = $2 RETURNING name`, [gateId, siteCode]);
-    if (!removed.rows[0]) throw notFound('Kapı', 'GATE_NOT_FOUND');
-    await audit(client, authUser, 'plate.gate_deleted', siteCode, 'plate_gate', gateId, { name: removed.rows[0].name });
-  });
-  return getGatesOverview(siteCode);
+  throw new PlatformError(
+    400,
+    'DOORS_MANAGED_BY_SMARTKEYPASS',
+    'Kapılar SmartKeyPass modülünden yönetilir. Plaka modülünde kapı silinemez; kapı kaldırma SmartKeyPass modülünden yapılır.',
+  );
 }
 
 // --- Kenar istemci kayıtları -------------------------------------------------------------------------------------------------------

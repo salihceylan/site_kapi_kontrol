@@ -1599,9 +1599,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
     case SirketMenuItem.faaliyetRaporu:
       return 'Faaliyet Raporu';
     case SirketMenuItem.plakaTanima:
-      return 'Plaka Tanıma';
     case SirketMenuItem.odemeKamera:
-      return 'Kamera ve Plaka';
+      return 'Plaka Tanıma & Kameralar';
     case SirketMenuItem.kameraCctv:
       return 'Kamera (CCTV)';
     case SirketMenuItem.ekipmanBakim:

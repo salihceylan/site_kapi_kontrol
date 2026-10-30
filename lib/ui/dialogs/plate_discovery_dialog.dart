@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/services/plate_discovery_local.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/plate_cameras_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
@@ -80,6 +82,41 @@ class _PlateDiscoveryDialogState extends State<PlateDiscoveryDialog> {
       _pollWarning = null;
       _command = null;
     });
+
+    // Windows Masaüstü ise yerel ağda doğrudan ve anında ara (tarayıcı ve sunucu kısıtı yok)
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      try {
+        final localDevices = await LocalCameraDiscoveryService.instance.discoverCameras(timeout: const Duration(seconds: 3));
+        if (!mounted) return;
+        setState(() {
+          _starting = false;
+          _command = EdgeCommand(
+            id: 1,
+            kind: 'discover',
+            status: 'done',
+            waitingOffline: false,
+            createdAt: DateTime.now(),
+            completedAt: DateTime.now(),
+            result: <String, dynamic>{
+              'devices': localDevices.map((d) => <String, dynamic>{
+                'ip': d.ip,
+                'ports': d.ports,
+                'name': d.name,
+                'model': d.model,
+                'source': d.source,
+                'label': d.label,
+                'rtsp_port': d.rtspPort,
+              }).toList(),
+              'summary': '${localDevices.length} kamera yerel ağda anında bulundu',
+            },
+          );
+        });
+        return;
+      } catch (err) {
+        debugPrint('[PlateDiscovery] Yerel ağ tarama hatası, sunucuya geçiliyor: $err');
+      }
+    }
+
     try {
       final started = await widget.service.startDiscovery(widget.siteCode, edgeClientId: edgeId);
       if (!mounted) return;

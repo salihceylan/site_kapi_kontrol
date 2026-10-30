@@ -92,7 +92,10 @@ async function resolveAccess(req, res, moduleCode, write) {
     res.status(404).json(SITE_NOT_FOUND_BODY);
     return null;
   }
-  if (!(await isModuleEnabled(siteCode, moduleCode))) {
+  const isModuleActive = (moduleCode === PLATE_CAMERAS_MODULE)
+    ? (await isModuleEnabled(siteCode, 'plate_cameras')) || (await isModuleEnabled(siteCode, 'plate_recognition'))
+    : (await isModuleEnabled(siteCode, moduleCode));
+  if (!isModuleActive) {
     const error = moduleDisabled(moduleCode, MODULE_NAMES[moduleCode]);
     res.status(error.statusCode).json({ error: error.message, code: error.code, ...error.extra });
     return null;

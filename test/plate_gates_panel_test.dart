@@ -81,11 +81,11 @@ void main() {
       expect(find.text('Koptu'), findsOneWidget);
       expect(find.text('Hiç bağlanmadı'), findsOneWidget);
       expect(find.text('Gecikmeli'), findsOneWidget);
-      expect(find.text('Çalışıyor'), findsNWidgets(2));
+      expect(find.text('Çalışıyor'), findsWidgets);
       expect(find.textContaining('SmartKeyPass: SKP-1'), findsOneWidget);
-      expect(find.text('Kulübe PC'), findsOneWidget);
-      expect(find.text('Geçiş noktası ekle'), findsOneWidget);
-      expect(find.text('Düzenle'), findsWidgets);
+      // Kenar PC kaldırıldı
+      expect(find.text('Geçiş noktası ekle'), findsNothing);
+      expect(find.text('Düzenle'), findsOneWidget);
       // misafir kuralı: 2 yerli dairede 1 araç içeride -> kabul edilmez; boş dairede kabul edilir
       expect(find.text('Park yerleri dolu'), findsOneWidget);
       expect(find.text('Misafir kabul edilir'), findsOneWidget);

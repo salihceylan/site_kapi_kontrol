@@ -187,7 +187,29 @@ export async function setSiteModuleEnabled({ siteCode, moduleCode: requestedModu
     );
     const currentEnabled = computeModuleEnabled(definition, currentResult.rows?.[0]);
 
+    if (enabled && moduleCode === 'plate_recognition') {
+      const doorDef = getModuleDefinition('door_control');
+      const doorResult = await client.query(
+        `SELECT enabled FROM site_modules WHERE site_code = $1 AND module_code = 'door_control' LIMIT 1`,
+        [code],
+      );
+      if (!computeModuleEnabled(doorDef, doorResult.rows?.[0])) {
+        throw new PlatformError(
+          400,
+          'SMARTKEYPASS_REQUIRED',
+          'Plaka tanıma modülü etkinleştirilemez: Sitede Geçiş Kontrol (SmartKeyPass) modülü aktif olmalıdır.',
+        );
+      }
+    }
+
     if (currentEnabled !== enabled) {
+      if (!enabled && moduleCode === 'door_control') {
+        await client.query(
+          `UPDATE site_modules SET enabled = FALSE, updated_by = $2, updated_at = NOW()
+           WHERE site_code = $1 AND module_code = 'plate_recognition'`,
+          [code, actorInfo.userCode],
+        );
+      }
       changed = true;
       await client.query(
         `
