@@ -196,7 +196,7 @@ class LocalCameraDiscoveryService {
           String brand = 'IP Kamera';
           if (openPorts.contains(8000)) brand = 'Hikvision / Tiandy Kamera';
           if (openPorts.contains(37777)) brand = 'Dahua Kamera';
-          if (openPorts.contains(8080)) brand = 'Sanal / IP Kamera';
+          if (openPorts.contains(8080)) brand = 'IP Kamera';
 
           return DiscoveredDevice(
             ip: ip,
