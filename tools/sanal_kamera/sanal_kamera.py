@@ -85,6 +85,9 @@ class SimplePlateDetector:
                 if 2.5 <= aspect <= 6.0 and ch > 15 and cw > 55 and y > h * 0.30:
                     candidates.append((x, y, cw, ch))
 
+        if not candidates:
+            return frame, None
+
         detected_plate = fallback_plate
         if not detected_plate:
             # Video zamanına göre bilinen plakalardan döngüsel ata
@@ -124,7 +127,8 @@ class CameraSource:
         self.lock = threading.Lock()
         self.running = True
         self.detector = SimplePlateDetector()
-        self.last_plate = "34 YC 3368"
+        self.last_plate = None
+        self.last_plate_time = 0
         self.last_plate_time = time.time()
         self.frame_count = 0
         self.fps_measured = target_fps
@@ -277,6 +281,12 @@ class CameraSource:
             pw, ph = 140, 35
             px = car_x + car_w - pw - 10
             py = car_y + 80
+
+            if 200 < car_x < 900:
+                self.last_plate = plate_text
+                self.last_plate_time = time.time()
+            elif (car_x >= 900 or car_x <= 200) and (time.time() - self.last_plate_time > 3.0):
+                self.last_plate = None
 
             cv2.rectangle(frame, (px, py), (px + pw, py + ph), (255, 255, 255), -1)
             cv2.rectangle(frame, (px, py), (px + pw, py + ph), (0, 0, 0), 2)

@@ -73,6 +73,22 @@ class PlateRecognitionEngine {
   PlateEngineDecision? _lastDecision;
   PlateEngineDecision? get lastDecision => _lastDecision;
 
+  /// Son okunan plaka kararı (8 saniye sonra otomatik zaman aşımına uğrar)
+  PlateEngineDecision? get currentActiveDecision {
+    final d = _lastDecision;
+    if (d == null) return null;
+    if (DateTime.now().difference(d.timestamp).inSeconds > 8) {
+      return null;
+    }
+    return d;
+  }
+
+  /// Ekrandaki okunan plakayı ve kamera plaka önbelleğini sıfırlar
+  void clearDecision() {
+    _lastDecision = null;
+    _lastCameraPlates.clear();
+  }
+
   final StreamController<Map<int, Uint8List>> _framesController = StreamController<Map<int, Uint8List>>.broadcast();
   Stream<Map<int, Uint8List>> get framesStream => _framesController.stream;
 
@@ -185,6 +201,8 @@ class PlateRecognitionEngine {
           _lastFrames[camera.id] = captured.bytes;
           if (captured.plate != null && captured.plate!.isNotEmpty) {
             _lastCameraPlates[camera.id] = captured.plate!;
+          } else {
+            _lastCameraPlates.remove(camera.id);
           }
           _framesController.add(_lastFrames);
 

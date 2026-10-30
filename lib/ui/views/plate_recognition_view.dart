@@ -624,7 +624,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
   Widget _buildWindowsEngineBanner(PlateSite site) {
     final engine = PlateRecognitionEngine.instance;
     final isRunning = engine.isRunning;
-    final lastDecision = engine.lastDecision;
+    final lastDecision = engine.currentActiveDecision;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
@@ -673,7 +673,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
               children: <Widget>[
                 Chip(
                   avatar: const Icon(Icons.videocam_rounded, size: 16),
-                  label: Text(' Kamera Dinleniyor'),
+                  label: Text(lastDecision == null ? ' Kamera Dinleniyor • Araç Bekleniyor' : ' Kamera Dinleniyor'),
                   visualDensity: VisualDensity.compact,
                 ),
                 if (lastDecision != null) ...<Widget>[
@@ -681,8 +681,21 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
                     'Son Okunan:',
                     style: TextStyle(fontSize: 12, color: context.palette.textSecondary),
                   ),
-                  LicensePlateBadge(plate: lastDecision.plate, compact: true),
+                  IntrinsicWidth(
+                    child: LicensePlateBadge(plate: lastDecision.plate, compact: true),
+                  ),
                   _engineDecisionBadge(lastDecision),
+                  InkWell(
+                    onTap: () {
+                      engine.clearDecision();
+                      setState(() {});
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4.0),
+                      child: Icon(Icons.close_rounded, size: 16, color: context.palette.textSecondary),
+                    ),
+                  ),
                 ],
               ],
             ),

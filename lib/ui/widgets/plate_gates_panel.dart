@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/plate_gates.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/plate_recognition_api.dart';
@@ -88,76 +87,9 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
     return ok == true;
   }
 
-  Future<void> _showKey(String key) {
-    return showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Kenar istemci anahtarı'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            const Text('Bu anahtar yalnız şimdi gösterilir; sunucuda düz saklanmaz. Güvenlik kulübesindeki bilgisayarın ayarına yazın, kaybederseniz yenileyin.'),
-            const SizedBox(height: AppSpace.sm),
-            SelectableText(key, style: const TextStyle(fontFamily: 'monospace')),
-          ],
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: key));
-              if (context.mounted) AppSnack.show(context, 'Kopyalandı.');
-            },
-            child: const Text('Kopyala'),
-          ),
-          FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Tamam')),
-        ],
-      ),
-    );
-  }
 
 
-  Future<void> _addEdge() async {
-    final controller = TextEditingController();
-    final go = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Kenar istemci ekle'),
-        content: TextField(controller: controller, maxLength: 60, decoration: const InputDecoration(labelText: 'Ad (örn. Güvenlik kulübesi PC)')),
-        actions: <Widget>[
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Vazgeç')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Oluştur')),
-        ],
-      ),
-    );
-    final name = controller.text;
-    controller.dispose();
-    if (go != true || name.trim().isEmpty) return;
-    try {
-      final key = await widget.service.createEdgeClient(widget.siteCode, name);
-      if (!mounted) return;
-      await _showKey(key);
-      widget.onChanged();
-    } on ApiException catch (e) {
-      if (mounted) AppSnack.show(context, e.message, kind: AppSnackKind.error);
-    }
-  }
 
-  Future<void> _edgeAction(EdgeClientRow client, String action) async {
-    if (action == 'rotate') {
-      if (!await _confirm('Anahtar yenilensin mi?', 'Eski anahtar hemen geçersiz olur; kenar PC yeni anahtarla yeniden bağlanmalı.', 'Yenile')) return;
-      try {
-        final key = await widget.service.rotateEdgeKey(widget.siteCode, client.id);
-        if (!mounted) return;
-        await _showKey(key);
-        widget.onChanged();
-      } on ApiException catch (e) {
-        if (mounted) AppSnack.show(context, e.message, kind: AppSnackKind.error);
-      }
-    } else if (await _confirm('Kenar istemci kaldırılsın mı?', '"${client.name}" artık sunucuya bağlanamaz.', 'Kaldır')) {
-      await _run(() => widget.service.revokeEdgeClient(widget.siteCode, client.id), 'Kenar istemci kaldırıldı.');
-    }
-  }
 
   Future<void> _editSettings() async {
     final s = _o.settings;
@@ -314,44 +246,6 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
     );
   }
 
-  Widget _edgeCard(EdgeClientRow client) => Padding(
-    padding: const EdgeInsets.only(bottom: AppSpace.sm),
-    child: AppCard(
-      padding: const EdgeInsets.all(AppSpace.md),
-      child: Row(
-        children: <Widget>[
-          const Icon(Icons.computer_rounded),
-          const SizedBox(width: AppSpace.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(client.name, style: Theme.of(context).textTheme.titleSmall),
-                Text(
-                  <String>[
-                    if (client.appVersion != null) 'sürüm ${client.appVersion}',
-                    client.lastSeenAt == null ? 'henüz bağlanmadı' : 'son haber ${_fmt(client.lastSeenAt!)}',
-                    if ((client.queueDepth ?? 0) > 0) 'bekleyen olay ${client.queueDepth}',
-                  ].join('  •  '),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-          GateBadgeView(badge: client.status),
-          if (widget.canWrite)
-            PopupMenuButton<String>(
-              tooltip: 'Kenar istemci işlemleri',
-              onSelected: (v) => unawaited(_edgeAction(client, v)),
-              itemBuilder: (_) => const <PopupMenuEntry<String>>[
-                PopupMenuItem<String>(value: 'rotate', child: Text('Anahtarı yenile')),
-                PopupMenuItem<String>(value: 'revoke', child: Text('Kaldır')),
-              ],
-            ),
-        ],
-      ),
-    ),
-  );
 
   @override
   Widget build(BuildContext context) {
@@ -359,19 +253,14 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        _note('Her kapı için kameralar ve SmartKeyPass cihazı ile kenar bilgisayarın çalışma durumu burada görünür. Kapı ve kamera sayısı sınırsızdır; kapıyı plaka okuyan kenar bilgisayar karar verip SmartKeyPass ile açar, kapatma emniyeti bariyerin kendi sensörünündür.'),
+        _note('SmartKeyPass kapılarına bağlı kameralar ve çalışma durumları burada listelenir. Plaka okunduğunda kapı yerel ağdan SmartKeyPass ile otomatik açılır, kapatma emniyeti bariyerin kendi dedektöründedir.'),
         _section(
           'Geçiş noktaları',
           actions: const <Widget>[],
         ),
         if (o.gates.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: AppSpace.md), child: Text('SmartKeyPass üzerinde kayıtlı kapı bulunamadı. Önce Geçiş Kontrol modülünden kapı ekleyiniz.')),
         for (final gate in o.gates) _gateCard(gate),
-        _section(
-          'Kenar istemci (güvenlik kulübesi PC)',
-          actions: <Widget>[if (widget.canWrite) TextButton.icon(onPressed: _addEdge, icon: const Icon(Icons.add_rounded), label: const Text('Ekle'))],
-        ),
-        if (o.edgeClients.isEmpty) const Text('Kayıtlı kenar istemci yok.'),
-        for (final client in o.edgeClients) _edgeCard(client),
+
         _section(
           'Misafir kuralı ve eşikler',
           actions: <Widget>[if (widget.canWrite) TextButton(onPressed: _editSettings, child: const Text('Düzenle'))],
