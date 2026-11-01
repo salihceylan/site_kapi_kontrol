@@ -586,6 +586,15 @@ void main() {
       });
     }
 
+    testWidgets('masaüstü geniş ekran (820x1180 x1.0): yan yana hızlı düğmelerde sınırsız yükseklik hatası yok', (t) async {
+      final service = _FakeService(sites: <EmergencySite>[_gul, _lale]);
+      await _pump(t, service: service, channel: _FakeChannel(may: false), width: 820, height: 1180, scale: 1.0);
+      expect(t.takeException(), isNull);
+      await _tapKey(t, 'emergency_quick_fire');
+      await settleFor(t);
+      expect(t.takeException(), isNull);
+    });
+
     listMatrix('acil durum: firma yok, hata ve adres yok durumları', (t, width, height, scale, dark) async {
       final service = _FakeService(sites: <EmergencySite>[const EmergencySite(siteCode: 1, siteName: 'Çok Uzun Adlı Büyük Toplu Konut Sitesi Yönetimi', canEdit: true)])
         ..listError = ApiException('Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.');

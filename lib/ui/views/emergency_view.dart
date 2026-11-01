@@ -287,13 +287,15 @@ class EmergencyViewState extends State<EmergencyView> {
             children: [fire, const SizedBox(height: AppSpace.sm), elevator],
           );
         }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(child: fire),
-            const SizedBox(width: AppSpace.sm),
-            Expanded(child: elevator),
-          ],
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: fire),
+              const SizedBox(width: AppSpace.sm),
+              Expanded(child: elevator),
+            ],
+          ),
         );
       },
     );

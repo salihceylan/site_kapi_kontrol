@@ -320,13 +320,13 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
 
         // Canlı video karesi
         if (hasLiveFrame)
-          Image.memory(
-            bytes,
-            fit: BoxFit.cover,
-            width: double.infinity,
-            height: double.infinity,
-            gaplessPlayback: true,
-            filterQuality: FilterQuality.medium,
+          Positioned.fill(
+            child: Image.memory(
+              bytes,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+              filterQuality: FilterQuality.medium,
+            ),
           )
         else
           Center(
@@ -414,9 +414,18 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
         ? ClipRRect(borderRadius: widget.borderRadius!, child: content)
         : content;
 
-    return GestureDetector(
+    final interactive = GestureDetector(
       onTap: hasLiveFrame ? _openFullscreen : null,
       child: clipped,
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (!constraints.hasBoundedHeight) {
+          return SizedBox(height: 180, child: interactive);
+        }
+        return interactive;
+      },
     );
   }
 }

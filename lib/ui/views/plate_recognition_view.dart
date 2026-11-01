@@ -817,9 +817,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
                     'Son Okunan:',
                     style: TextStyle(fontSize: 12, color: context.palette.textSecondary),
                   ),
-                  IntrinsicWidth(
-                    child: LicensePlateBadge(plate: lastDecision.plate, compact: true),
-                  ),
+                  LicensePlateBadge(plate: lastDecision.plate, compact: true),
                   _engineDecisionBadge(lastDecision),
                   InkWell(
                     onTap: () {

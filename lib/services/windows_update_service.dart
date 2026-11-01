@@ -117,6 +117,7 @@ class WindowsUpdateService {
   /// Güncelleme kontrolünü tetikler ve gerekirse kullanıcıya diyalog sunar.
   Future<void> checkForUpdates(BuildContext context, {bool silent = false}) async {
     if (!isSupported || _isChecking || _isUpdating) return;
+    if (silent && kDebugMode) return;
     _isChecking = true;
 
     try {

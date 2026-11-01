@@ -52,11 +52,12 @@ class LicensePlateBadge extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             // Sol mavi TR bandı
             Container(
               width: trWidth,
+              height: h,
               color: const Color(0xFF003399),
               alignment: Alignment.center,
               child: Text(
