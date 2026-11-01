@@ -81,14 +81,14 @@ void main() {
       await _close(tester);
     });
 
-    testWidgets('görüntü yoksa yer tutucu: kenar çevrimdışıysa "Kenar PC çevrimdışı", değilse "Görüntü bekleniyor"', (tester) async {
+    testWidgets('görüntü yoksa yer tutucu: "Kamera görüntüsü bekleniyor"', (tester) async {
       final service = FakeCamerasService(); // varsayılan: kare yok (404 NO_SNAPSHOT)
       final cameras = _cams(<Map<String, dynamic>>[cameraJson(id: 1, snapshot: false)]);
       await _pump(tester, service, cameras, edgeOnline: false);
-      expect(find.text('Kenar PC çevrimdışı'), findsOneWidget);
+      expect(find.text('Kamera görüntüsü bekleniyor'), findsOneWidget);
       await _close(tester);
       await _pump(tester, service, cameras);
-      expect(find.text('Görüntü bekleniyor'), findsOneWidget);
+      expect(find.text('Kamera görüntüsü bekleniyor'), findsOneWidget);
       expect(find.byKey(const ValueKey<String>('tile_image')), findsNothing);
       await _close(tester);
     });

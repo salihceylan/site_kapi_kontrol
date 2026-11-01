@@ -309,6 +309,20 @@ export async function probeCamera({ siteCode, rawId, body = {}, authUser }) {
 
 // --- Ağda kamera ara --------------------------------------------------------------------------------------------------------------------
 
+export async function deleteCamera({ siteCode, rawId, authUser }) {
+  const cameraId = parsePositive(rawId, 'Kamera', 'CAMERA_NOT_FOUND');
+  await inCameraTransaction(siteCode, async (client) => {
+    const found = (await client.query('SELECT id, name FROM camera_devices WHERE id = $1 AND site_code = $2', [cameraId, siteCode])).rows[0];
+    if (!found) throw notFound('Kamera', 'CAMERA_NOT_FOUND');
+    await client.query('DELETE FROM plate_camera_snapshots WHERE camera_id = $1', [cameraId]);
+    await client.query('DELETE FROM plate_gate_cameras WHERE camera_id = $1 AND site_code = $2', [cameraId, siteCode]);
+    await client.query('DELETE FROM plate_edge_commands WHERE camera_id = $1', [cameraId]);
+    await client.query('DELETE FROM camera_devices WHERE id = $1 AND site_code = $2', [cameraId, siteCode]);
+    await audit(client, authUser, 'plate.camera_deleted', siteCode, 'camera_device', cameraId, { name: found.name });
+  });
+  return { ok: true };
+}
+
 export async function startDiscovery({ siteCode, body = {}, authUser }) {
   const requested = Number(body.edge_client_id);
   const requestedEdgeId = Number.isSafeInteger(requested) && requested > 0 ? requested : null;

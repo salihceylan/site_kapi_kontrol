@@ -391,9 +391,9 @@ class DiscoveryStart {
 @immutable
 class PlateCameraDraft {
   const PlateCameraDraft({
-    required this.name,
-    required this.brand,
-    required this.host,
+    this.name = '',
+    this.brand = 'onvif',
+    this.host = '',
     this.port,
     this.rtspInput,
     this.username,
@@ -421,10 +421,12 @@ class PlateCameraDraft {
     final isUrl = rtsp.toLowerCase().startsWith('rtsp://') || rtsp.toLowerCase().startsWith('rtsps://');
     final portText = (port ?? '').trim();
     final user = (username ?? '').trim();
+    final nameText = name.trim();
+    final hostText = host.trim();
     return <String, Object?>{
-      'name': name.trim(),
-      'brand': brand,
-      'host': host.trim(),
+      if (!edit || nameText.isNotEmpty) 'name': nameText,
+      if (!edit || brand.isNotEmpty) 'brand': brand,
+      if (!edit || hostText.isNotEmpty) 'host': hostText,
       if (portText.isNotEmpty) 'port': int.tryParse(portText) ?? portText,
       if (rtsp.isNotEmpty) (isUrl ? 'rtsp_url' : 'rtsp_path'): isUrl || rtsp.startsWith('/') ? rtsp : '/$rtsp',
       if (user.isNotEmpty || edit) 'username': user.isEmpty ? null : user,
@@ -475,6 +477,10 @@ class PlateCamerasApi {
   Future<PlateCameraRow> setActive(String token, int site, int cameraId, {required bool active}) async {
     final json = await _send('PUT', _site(site, 'cameras/$cameraId'), token, body: <String, Object?>{'is_active': active});
     return PlateCameraRow.fromJson(_map(json['camera']));
+  }
+
+  Future<void> deleteCamera(String token, int site, int cameraId) async {
+    await _send('DELETE', _site(site, 'cameras/$cameraId'), token);
   }
 
   Future<EdgeCommand> probe(String token, int site, int cameraId) async {
@@ -579,7 +585,7 @@ class PlateCamerasApi {
       case PlateCameraErrors.moduleDisabled:
         return 'Kamera ızgarası ve canlı akış için Plaka Tanıma modülünün bu site için açık olması gerekir.';
       case PlateCameraErrors.noEdgeClient:
-        return 'Ağda kamera aramak için Windows masaüstü uygulamasını kullanabilir veya kamerayı IP adresiyle ekleyebilirsiniz.';
+        return 'Ağda kamera aramak için Windows masaüstü uygulamasını kullanabilir veya kamerayı Geçiş noktaları sekmesinden IP adresiyle ekleyebilirsiniz.';
       case PlateCameraErrors.edgeClientRequired:
         return 'Birden çok kenar PC var; komutun hangisine verileceğini seçin.';
       case 'FORBIDDEN_ROLE':
@@ -621,6 +627,7 @@ class PlateCamerasService {
   Future<({PlateCameraRow camera, int? probeCommandId})> createCamera(int site, PlateCameraDraft draft) => _guard((t) => api.createCamera(t, site, draft));
   Future<({PlateCameraRow camera, int? probeCommandId})> updateCamera(int site, int cameraId, PlateCameraDraft draft) => _guard((t) => api.updateCamera(t, site, cameraId, draft));
   Future<PlateCameraRow> setActive(int site, int cameraId, {required bool active}) => _guard((t) => api.setActive(t, site, cameraId, active: active));
+  Future<void> deleteCamera(int site, int cameraId) => _guard((t) => api.deleteCamera(t, site, cameraId));
   Future<EdgeCommand> probe(int site, int cameraId) => _guard((t) => api.probe(t, site, cameraId));
   Future<DiscoveryStart> startDiscovery(int site, {int? edgeClientId}) => _guard((t) => api.startDiscovery(t, site, edgeClientId: edgeClientId));
   Future<EdgeCommand?> latestDiscovery(int site) => _guard((t) => api.latestDiscovery(t, site));

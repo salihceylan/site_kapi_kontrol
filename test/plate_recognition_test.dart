@@ -1,13 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/plate_audit_label.dart';
+import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/models/plate_gates.dart';
 import 'package:site_kapi_kontrol/services/plate_recognition_api.dart';
 import 'package:site_kapi_kontrol/ui/views/plate_recognition_view.dart';
 
-class _FakeAuth extends Fake implements AuthService {}
+class _FakeAuth extends Fake implements AuthService {
+  @override
+  AuthApi get api => AuthApi(baseUrl: 'http://localhost');
+}
 
 class _FakeService extends Fake implements PlateRecognitionService {
+  @override
+  Future<PlateGatesOverview> gatesOverview(int site) async => PlateGatesOverview.fromJson(<String, dynamic>{
+    'settings': <String, dynamic>{'guest_rule': 'tum_bos', 'heartbeat_warn_seconds': 180, 'heartbeat_crit_seconds': 600},
+    'guest_rules': <dynamic>[],
+    'direction_modes': <dynamic>[],
+    'gates': <dynamic>[],
+    'unassigned_cameras': <dynamic>[],
+    'devices': <dynamic>[],
+    'edge_clients': <dynamic>[],
+    'inside_total': 0,
+  });
+
+  @override
+  Future<PlateInside> inside(int site) async => PlateInside.fromJson(<String, dynamic>{'total': 0, 'items': <dynamic>[], 'apartments': <dynamic>[]});
   @override
   Future<List<PlateDecisionRow>> events(int site, {String? decision}) async => <PlateDecisionRow>[
     PlateDecisionRow.fromJson(<String, dynamic>{
@@ -124,15 +143,20 @@ void main() {
       await _pump(tester, const PlateSite(code: 1, name: 'Gül Sitesi', access: PlateAccess.manager));
       expect(tester.takeException(), isNull);
       expect(find.text('Plaka Tanıma'), findsOneWidget);
+      expect(find.text('Geçiş noktaları'), findsWidgets);
+      expect(find.text('Olaylar'), findsOneWidget);
+      await tester.tap(find.text('Olaylar'));
+      await tester.pumpAndSettle();
       expect(find.text('34 ABC 123'), findsOneWidget);
       expect(find.text('İzinli'), findsOneWidget);
       expect(find.text('Engelli'), findsOneWidget);
       expect(find.text('Bilinmiyor'), findsOneWidget);
       expect(find.textContaining('Araçlar ekranından yönetilir'), findsOneWidget);
       expect(find.textContaining('kapı komutu göndermez'), findsOneWidget);
-      for (final tab in <String>['Olaylar', 'Misafir izinleri', 'Kara liste', 'Ayarlar']) {
+      for (final tab in <String>['Olaylar', 'Canlı akış', 'Ayarlar']) {
         expect(find.text(tab), findsOneWidget, reason: tab);
       }
+      expect(find.text('Geçiş noktaları'), findsWidgets);
     });
 
     testWidgets('sakin: sade "Misafir plakası" ekranı, izin listesi ve kalan hak', (tester) async {

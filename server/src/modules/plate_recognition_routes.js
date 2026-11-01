@@ -293,6 +293,12 @@ plateRecognitionRouter.put(
     updateCamera({ siteCode: access.siteCode, rawId: req.params.id, body: bodyOf(req), authUser: access.authUser }),
   ),
 );
+plateRecognitionRouter.delete(
+  `${BASE}/cameras/:id`,
+  ...managerHandler({ context: 'plate_camera_delete', fallback: 'Kamera silinemedi.', write: true }, ({ req, access }) =>
+    deleteCamera({ siteCode: access.siteCode, rawId: req.params.id, authUser: access.authUser }),
+  ),
+);
 plateRecognitionRouter.post(
   `${BASE}/cameras/:id/probe`,
   ...managerHandler({ context: 'plate_camera_probe', fallback: 'Sınama komutu verilemedi.', write: true, status: 202 }, ({ req, access }) =>

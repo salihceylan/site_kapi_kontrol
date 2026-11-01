@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/plate_gates.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
-import 'package:site_kapi_kontrol/services/device_integrations_api.dart' show DeviceSite;
 import 'package:site_kapi_kontrol/services/plate_cameras_api.dart';
 import 'package:flutter/foundation.dart';
 import 'package:site_kapi_kontrol/services/plate_recognition_api.dart';
@@ -18,8 +17,8 @@ import 'package:site_kapi_kontrol/ui/design/status_dot.dart';
 import 'package:site_kapi_kontrol/ui/design/license_plate.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/plate_camera_form_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/plate_discovery_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/plate_input.dart';
-import 'package:site_kapi_kontrol/ui/views/device_integrations_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/plate_gates_panel.dart';
 import 'package:site_kapi_kontrol/ui/widgets/plate_live_feed_panel.dart';
 
@@ -47,12 +46,13 @@ class PlateRecognitionView extends StatefulWidget {
 class PlateRecognitionViewState extends State<PlateRecognitionView> {
   late final PlateRecognitionService _service = widget.service ?? PlateRecognitionService(authService: widget.authService);
   late final PlateCamerasService _cameras = widget.camerasService ?? PlateCamerasService(authService: widget.authService);
-  static const List<String> _tabs = <String>['Olaylar', 'Canlı akış', 'Misafir izinleri', 'Kara liste', 'Geçiş noktaları', 'Kameralar', 'Ayarlar'];
+  static const List<String> _tabs = <String>['Geçiş noktaları', 'Olaylar', 'Canlı akış', 'Ayarlar'];
   static const String _kvkkNote =
       'Plaka kişisel veridir; yalnızca site güvenliği amacıyla işlenir ve sakinlerle paylaşılmaz.';
 
   PlateSite? _site;
   int _tab = 0;
+  int _settingsSubTab = 0;
   bool _loading = true;
   String? _error;
   int _loadToken = 0;
@@ -79,7 +79,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
       _engineDecisionSub = PlateRecognitionEngine.instance.decisionsStream.listen((decision) {
         if (!mounted) return;
         setState(() {});
-        if (_tab == 0 || _tab == 1 || _tab == 4) {
+        if (_tab == 0 || _tab == 1 || _tab == 2) {
           unawaited(reload());
         }
       });
@@ -114,20 +114,6 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
       } else {
         switch (_tab) {
           case 0:
-            final rows = await _service.events(site.code);
-            if (!_isCurrent(token)) return;
-            setState(() => _events = rows);
-          case 1:
-            break; // Canlı akış: panel kendi verisini yükler ve yeniler.
-          case 2:
-            final rows = await _service.permits(site.code);
-            if (!_isCurrent(token)) return;
-            setState(() => _permits = rows);
-          case 3:
-            final rows = await _service.blacklist(site.code);
-            if (!_isCurrent(token)) return;
-            setState(() => _blacklist = rows);
-          case 4:
             final gates = await _service.gatesOverview(site.code);
             final inside = await _service.inside(site.code);
             if (!_isCurrent(token)) return;
@@ -135,12 +121,22 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
               _gates = gates;
               _inside = inside;
             });
-          case 5:
-            break; // Kameralar: panel kendi verisini yükler ve yeniler.
-          default:
-            final data = await _service.settings(site.code);
+          case 1:
+            final rows = await _service.events(site.code);
             if (!_isCurrent(token)) return;
-            setState(() => _settings = data);
+            setState(() => _events = rows);
+          case 2:
+            break; // Canlı akış
+          default:
+            final settings = await _service.settings(site.code);
+            final permits = await _service.permits(site.code);
+            final blacklist = await _service.blacklist(site.code);
+            if (!_isCurrent(token)) return;
+            setState(() {
+              _settings = settings;
+              _permits = permits;
+              _blacklist = blacklist;
+            });
         }
       }
       if (_isCurrent(token)) {
@@ -426,6 +422,14 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
   }
 
   List<Widget> _eventsTab() => <Widget>[
+    _buildTabHeader(
+      title: 'Plaka Geçiş Olayları & Denetim İzi',
+      subtitle: 'Kameralardan tespit edilen araç plakaları, izin kararları ve geçiş zamanları.',
+      icon: Icons.receipt_long_rounded,
+      watermarkIcon: Icons.directions_car_filled_outlined,
+      accentColor: const Color(0xFF3B82F6),
+    ),
+    const SizedBox(height: AppSpace.md),
     _note('Yetkili araçlar Araçlar ekranından yönetilir. Burada kameradan gelen plakalar ve verilen karar listelenir.'),
     _note(_kvkkNote),
     if (_events.isEmpty) _empty('Henüz plaka kaydı yok.') else for (final e in _events) _eventTile(e),
@@ -476,20 +480,52 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
     final inside = _inside;
     if (gates == null || inside == null) return const <Widget>[];
     return <Widget>[
+      _buildTabHeader(
+        title: 'Geçiş Noktaları & Kapı Kameraları',
+        subtitle: 'SmartKeyPass kapılarına bağlı IP kameralar, yön atamaları ve otomatik plaka tanıma durumu.',
+        icon: Icons.door_sliding_rounded,
+        watermarkIcon: Icons.camera_alt_outlined,
+        accentColor: const Color(0xFF10B981),
+        actions: <Widget>[
+          if (site.canWrite) ...<Widget>[
+            OutlinedButton.icon(
+              onPressed: () => _showDiscoveryDialog(site),
+              icon: const Icon(Icons.wifi_find_rounded, size: 16),
+              label: const Text('Ağda Kamera Ara'),
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+            const SizedBox(width: AppSpace.xs),
+            FilledButton.icon(
+              onPressed: () => _addCameraForGate(site, gates.gates.isNotEmpty ? gates.gates.first : null),
+              icon: const Icon(Icons.add_a_photo_outlined, size: 16),
+              label: const Text('Kamera Ekle'),
+              style: FilledButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                backgroundColor: const Color(0xFF10B981),
+              ),
+            ),
+          ],
+        ],
+      ),
+      const SizedBox(height: AppSpace.md),
       PlateGatesPanel(
         service: _service,
+        camerasService: _cameras,
         siteCode: site.code,
         canWrite: site.canWrite,
         overview: gates,
         inside: inside,
         onChanged: () => unawaited(reload()),
         onAddCamera: (gate) => unawaited(_addCameraForGate(site, gate)),
+        onDiscoverCameras: () => unawaited(_showDiscoveryDialog(site)),
       ),
     ];
   }
 
-  /// Kapı satırından "Kamera ekle": kamera ekleme formu o kapı ön seçili açılır; kayıttan sonra kapı listesi yenilenir.
-  Future<void> _addCameraForGate(PlateSite site, PlateGate gate) async {
+  /// Kapı satırından "Kamera ekle / ata": kamera formu açılır, kayıttan sonra liste yenilenir.
+  Future<void> _addCameraForGate(PlateSite site, PlateGate? gate) async {
     try {
       final overview = await _cameras.overview(site.code);
       if (!mounted) return;
@@ -497,7 +533,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
       final saved = await showPlateCameraForm(
         context,
         overview: overview,
-        initialGateId: gate.id,
+        initialGateId: gate?.id,
         onSave: (draft) async {
           final created = await _cameras.createCamera(site.code, draft);
           probeId = created.probeCommandId;
@@ -511,33 +547,103 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
     }
   }
 
-  /// "Kameralar" sekmesi: Kamera ve Plaka ekranının paneli (ızgara, ağda ara, ekle / düzenle); canlı akış kendi sekmesinde olduğu için gömülü kipte çizilmez.
-  List<Widget> _camerasTab(PlateSite site) => <Widget>[
-    DeviceIntegrationsView(
-      key: ValueKey<String>('cameras_${site.code}'),
-      authService: widget.authService,
-      sites: <DeviceSite>[DeviceSite(code: site.code, name: site.name, canWrite: site.canWrite)],
-      camerasService: _cameras,
-      plateService: _service,
-      embedded: true,
+  Future<void> _showDiscoveryDialog(PlateSite site) async {
+    try {
+      final overview = await _cameras.overview(site.code);
+      if (!mounted) return;
+      final choice = await showPlateDiscoveryDialog(
+        context,
+        service: _cameras,
+        siteCode: site.code,
+        edge: overview.edge,
+      );
+      if (choice != null && mounted) {
+        int? probeId;
+        final saved = await showPlateCameraForm(
+          context,
+          overview: overview,
+          prefill: choice.device,
+          onSave: (draft) async {
+            final res = await _cameras.createCamera(site.code, draft);
+            probeId = res.probeCommandId;
+          },
+        );
+        if (saved == true && mounted) {
+          AppSnack.show(context, plateCameraSavedMessage(probeId, overview), kind: AppSnackKind.success);
+          await reload();
+        }
+      }
+    } on ApiException catch (e) {
+      if (mounted) AppSnack.show(context, e.message, kind: AppSnackKind.error);
+    }
+  }
+
+  List<Widget> _liveFeedTab(PlateSite site) => <Widget>[
+    _buildTabHeader(
+      title: 'Canlı Kamera Akışları',
+      subtitle: 'Tüm kapılara bağlı IP kameraların gerçek zamanlı RTSP video yayınları.',
+      icon: Icons.videocam_rounded,
+      watermarkIcon: Icons.smart_display_outlined,
+      accentColor: const Color(0xFF8B5CF6),
     ),
+    const SizedBox(height: AppSpace.md),
+    PlateLiveFeedPanel(key: ValueKey<int>(site.code), service: _service, siteCode: site.code),
   ];
 
   List<Widget> _settingsTab(PlateSite site) {
-    final settings = _settings;
-    if (settings == null) return const <Widget>[];
     return <Widget>[
-      _note('Kameralar "Kameralar" sekmesinden eklenir; burada kameranın hangi kapıya baktığını eşlersiniz.'),
-      if (settings.doors.isEmpty) _empty('Bu sitede tanımlı kapı yok.'),
-      for (final door in settings.doors)
-        _GateCard(
-          key: ValueKey<String>('gate_${door.doorId}_${door.deviceId}_${door.autoOpen}_${door.minConfidence}_${door.cooldownSeconds}'),
-          door: door,
-          cameras: settings.cameras,
-          canWrite: site.canWrite,
-          onConfirmAutoOpen: _confirmAutoOpen,
-          onSave: (draft) => _saveGate(site, door, draft),
-        ),
+      _buildTabHeader(
+        title: 'Plaka & Güvenlik Ayarları',
+        subtitle: 'Kara liste yönetimi, misafir geçiş izinleri, otomatik kapı açma kuralları ve eşikler.',
+        icon: Icons.tune_rounded,
+        watermarkIcon: Icons.security_rounded,
+        accentColor: const Color(0xFF6366F1),
+      ),
+      const SizedBox(height: AppSpace.md),
+      Wrap(
+        spacing: AppSpace.sm,
+        runSpacing: AppSpace.xs,
+        children: <Widget>[
+          ChoiceChip(
+            avatar: const Icon(Icons.block_rounded, size: 16),
+            label: Text('Kara Liste (${_blacklist.length})'),
+            selected: _settingsSubTab == 0,
+            onSelected: (_) => setState(() => _settingsSubTab = 0),
+          ),
+          ChoiceChip(
+            avatar: const Icon(Icons.badge_outlined, size: 16),
+            label: Text('Misafir İzinleri (${_permits.length})'),
+            selected: _settingsSubTab == 1,
+            onSelected: (_) => setState(() => _settingsSubTab = 1),
+          ),
+          ChoiceChip(
+            avatar: const Icon(Icons.settings_outlined, size: 16),
+            label: const Text('Kapı & Eşik Ayarları'),
+            selected: _settingsSubTab == 2,
+            onSelected: (_) => setState(() => _settingsSubTab = 2),
+          ),
+        ],
+      ),
+      const SizedBox(height: AppSpace.md),
+      if (_settingsSubTab == 0)
+        ..._blacklistTab(site)
+      else if (_settingsSubTab == 1)
+        ..._permitsTab(site)
+      else ...<Widget>[
+        _note('SmartKeyPass kapılarının otomatik plaka açma ve güven eşiklerini yapılandırın.'),
+        if ((_settings?.doors ?? const <PlateGateSetting>[]).isEmpty)
+          _empty('Bu sitede tanımlı kapı yok.')
+        else
+          for (final door in _settings!.doors)
+            _GateCard(
+              key: ValueKey<String>('gate_${door.doorId}_${door.deviceId}_${door.autoOpen}_${door.minConfidence}_${door.cooldownSeconds}'),
+              door: door,
+              cameras: _settings!.cameras,
+              canWrite: site.canWrite,
+              onConfirmAutoOpen: _confirmAutoOpen,
+              onSave: (draft) => _saveGate(site, door, draft),
+            ),
+      ],
     ];
   }
 
@@ -901,26 +1007,186 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
     );
   }
 
+  Widget _buildTabHeader({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required IconData watermarkIcon,
+    required Color accentColor,
+    List<Widget> actions = const <Widget>[],
+  }) {
+    final p = context.palette;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[
+            accentColor.withValues(alpha: 0.18),
+            accentColor.withValues(alpha: 0.06),
+            p.surface,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: accentColor.withValues(alpha: 0.35), width: 1.2),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: Stack(
+          children: <Widget>[
+            Positioned(
+              right: -15,
+              bottom: -20,
+              child: Icon(
+                watermarkIcon,
+                size: 130,
+                color: accentColor.withValues(alpha: 0.07),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(AppSpace.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: <Widget>[
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: accentColor.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: accentColor.withValues(alpha: 0.5)),
+                        ),
+                        child: Icon(icon, color: accentColor, size: 24),
+                      ),
+                      const SizedBox(width: AppSpace.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              title,
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: p.text,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              subtitle,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: p.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (actions.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: AppSpace.sm),
+                    Wrap(
+                      spacing: AppSpace.xs,
+                      runSpacing: AppSpace.xs,
+                      children: actions,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildColoredTabs() {
+    final tabConfigs = [
+      (
+        label: _tabs[0],
+        icon: Icons.door_sliding_outlined,
+        activeIcon: Icons.door_sliding_rounded,
+        color: const Color(0xFF10B981),
+      ),
+      (
+        label: _tabs[1],
+        icon: Icons.receipt_long_outlined,
+        activeIcon: Icons.receipt_long_rounded,
+        color: const Color(0xFF3B82F6),
+      ),
+      (
+        label: _tabs[2],
+        icon: Icons.videocam_outlined,
+        activeIcon: Icons.videocam_rounded,
+        color: const Color(0xFF8B5CF6),
+      ),
+      (
+        label: _tabs[3],
+        icon: Icons.tune_outlined,
+        activeIcon: Icons.tune_rounded,
+        color: const Color(0xFF6366F1),
+      ),
+    ];
+
+    final p = context.palette;
+
+    return Wrap(
+      spacing: AppSpace.sm,
+      runSpacing: AppSpace.xs,
+      children: <Widget>[
+        for (var i = 0; i < tabConfigs.length; i++) ...<Widget>[
+          InkWell(
+            key: ValueKey<String>('plate_tab_$i'),
+            onTap: () {
+              if (_tab == i) return;
+              setState(() => _tab = i);
+              unawaited(reload());
+            },
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: 8),
+              decoration: BoxDecoration(
+                color: _tab == i ? tabConfigs[i].color.withValues(alpha: 0.18) : p.surface,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(
+                  color: _tab == i ? tabConfigs[i].color : p.border,
+                  width: _tab == i ? 1.5 : 1.0,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(
+                    _tab == i ? tabConfigs[i].activeIcon : tabConfigs[i].icon,
+                    size: 18,
+                    color: _tab == i ? tabConfigs[i].color : p.textSecondary,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    tabConfigs[i].label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: _tab == i ? FontWeight.bold : FontWeight.normal,
+                      color: _tab == i ? tabConfigs[i].color : p.text,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   List<Widget> _managerBody(PlateSite site) => <Widget>[
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows)
       _buildWindowsEngineBanner(site)
     else
       _buildNonWindowsInfoBanner(site),
-    Wrap(
-      spacing: AppSpace.sm,
-      children: <Widget>[
-        for (var i = 0; i < _tabs.length; i++)
-          ChoiceChip(
-            label: Text(_tabs[i]),
-            selected: _tab == i,
-            onSelected: (_) {
-              if (_tab == i) return;
-              setState(() => _tab = i);
-              unawaited(reload());
-            },
-          ),
-      ],
-    ),
+    _buildColoredTabs(),
     const SizedBox(height: AppSpace.md),
     if (_loading)
       const Center(child: Padding(padding: EdgeInsets.all(AppSpace.lg), child: CircularProgressIndicator()))
@@ -928,12 +1194,9 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
       AppCard(child: Text(_error!))
     else
       ...switch (_tab) {
-        0 => _eventsTab(),
-        1 => <Widget>[PlateLiveFeedPanel(key: ValueKey<int>(site.code), service: _service, siteCode: site.code)],
-        2 => _permitsTab(site),
-        3 => _blacklistTab(site),
-        4 => _gatesTab(site),
-        5 => _camerasTab(site),
+        0 => _gatesTab(site),
+        1 => _eventsTab(),
+        2 => _liveFeedTab(site),
         _ => _settingsTab(site),
       },
   ];

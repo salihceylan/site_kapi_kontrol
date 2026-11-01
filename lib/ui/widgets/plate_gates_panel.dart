@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/plate_gates.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
+import 'package:site_kapi_kontrol/services/plate_cameras_api.dart';
 import 'package:site_kapi_kontrol/services/plate_recognition_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/status_dot.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/plate_camera_form_dialog.dart';
 
 AppTone _tone(GateColor color) => switch (color) {
   GateColor.yesil => AppTone.success,
@@ -29,9 +31,9 @@ class GateBadgeView extends StatelessWidget {
 String _fmt(DateTime d) =>
     '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
-/// "Geçiş noktaları" sekmesi (Plaka Tanıma): kapı / kamera / SmartKeyPass / kenar PC DURUM ekranı, kapı CRUD, kenar PC anahtarları,
-/// misafir kuralı + eşik ayarı ve "içeride" doluluğu. Kapı / kamera sayısı sınırsızdır; her şey sunucu kaydıdır.
-/// Salt okur kullanıcıda (kurul / görevli) hiçbir yazma düğmesi çizilmez. Başarılı her işlemden sonra [onChanged] ile ekran yeniden yüklenir.
+/// "Geçiş noktaları" sekmesi (Plaka Tanıma): SmartKeyPass kapıları ve bunlara bağlı
+/// çerçeveli kameralar, her kameranın müstakil ayar menüsü / butonları, atanmamış kameralar
+/// ve "içeride" araç doluluğu.
 class PlateGatesPanel extends StatefulWidget {
   const PlateGatesPanel({
     super.key,
@@ -41,18 +43,24 @@ class PlateGatesPanel extends StatefulWidget {
     required this.overview,
     required this.inside,
     required this.onChanged,
+    this.camerasService,
     this.onAddCamera,
+    this.onDiscoverCameras,
   });
 
   final PlateRecognitionService service;
+  final PlateCamerasService? camerasService;
   final int siteCode;
   final bool canWrite;
   final PlateGatesOverview overview;
   final PlateInside inside;
   final VoidCallback onChanged;
 
-  /// Kapı satırındaki "Kamera ekle": kamera ekleme diyaloğunu o kapı ön seçili açar (yalnız yazma yetkisinde çizilir; null ise düğme yok).
+  /// Kapı satırındaki "Kamera ekle / ata": kamera ekleme diyaloğunu o kapı ön seçili açar.
   final void Function(PlateGate gate)? onAddCamera;
+
+  /// Ağda kamera ara (otomatik ONVIF keşfi).
+  final VoidCallback? onDiscoverCameras;
 
   @override
   State<PlateGatesPanel> createState() => _PlateGatesPanelState();
@@ -87,9 +95,140 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
     return ok == true;
   }
 
+  Future<void> _probeCamera(int cameraId) async {
+    final cs = widget.camerasService;
+    if (cs == null) return;
+    await _run(() async {
+      await cs.probe(widget.siteCode, cameraId);
+    }, 'Kamera bağlantısı sınanıyor.');
+  }
 
+  Future<void> _unlinkCamera(PlateGate gate, GateCamera cam) async {
+    final cs = widget.camerasService;
+    if (cs == null) return;
+    if (!await _confirm('Kapıdan Ayır', '${cam.name} kamerası ${gate.name} kapısından ayrılsın mı? Kamera sistemde kalır ancak plaka okunduğunda bu kapıyı açmaz.', 'Kapıdan Ayır')) {
+      return;
+    }
+    await _run(() async {
+      await cs.updateCamera(widget.siteCode, cam.cameraId, const PlateCameraDraft(gateId: null));
+    }, 'Kamera kapıdan ayrıldı.');
+  }
 
+  Future<void> _toggleCamera(GateCamera cam) async {
+    final cs = widget.camerasService;
+    if (cs == null) return;
+    final nextState = !cam.isActive;
+    await _run(() async {
+      await cs.setActive(widget.siteCode, cam.cameraId, active: nextState);
+    }, nextState ? 'Kamera başlatıldı.' : 'Kamera durduruldu.');
+  }
 
+  Future<void> _deleteCamera(int cameraId, String cameraName) async {
+    final cs = widget.camerasService;
+    if (cs == null) return;
+    if (!await _confirm('Kamerayı Sil', '$cameraName kamerası sistemden tamamen silinecek. Bu işlem geri alınamaz.', 'Sil')) {
+      return;
+    }
+    await _run(() async {
+      await cs.deleteCamera(widget.siteCode, cameraId);
+    }, 'Kamera sistemden silindi.');
+  }
+
+  Future<void> _editCamera(int cameraId) async {
+    final cs = widget.camerasService;
+    if (cs == null) return;
+    try {
+      final overview = await cs.overview(widget.siteCode);
+      if (!mounted) return;
+      final camRow = overview.cameras.cast<PlateCameraRow?>().firstWhere((c) => c!.id == cameraId, orElse: () => null);
+      if (camRow == null) {
+        AppSnack.show(context, 'Kamera bilgisi bulunamadı.', kind: AppSnackKind.error);
+        return;
+      }
+      int? probeId;
+      final saved = await showPlateCameraForm(
+        context,
+        overview: overview,
+        editing: camRow,
+        onSave: (draft) async {
+          final res = await cs.updateCamera(widget.siteCode, cameraId, draft);
+          probeId = res.probeCommandId;
+        },
+      );
+      if (saved == true && mounted) {
+        AppSnack.show(context, plateCameraSavedMessage(probeId, overview), kind: AppSnackKind.success);
+        widget.onChanged();
+      }
+    } on ApiException catch (e) {
+      if (mounted) AppSnack.show(context, e.message, kind: AppSnackKind.error);
+    }
+  }
+
+  Future<void> _assignCameraToGate(GateOption cam) async {
+    final cs = widget.camerasService;
+    if (cs == null) return;
+    if (_o.gates.isEmpty) {
+      AppSnack.show(context, 'Sitede kayıtlı kapı bulunamadı.', kind: AppSnackKind.error);
+      return;
+    }
+
+    int selectedGateId = _o.gates.first.id;
+    String selectedDirection = 'auto';
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialog) => AlertDialog(
+          title: Text('${cam.label} Kapıya Ata'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              DropdownButtonFormField<int>(
+                initialValue: selectedGateId,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Geçiş Noktası (Kapı)'),
+                items: <DropdownMenuItem<int>>[
+                  for (final g in _o.gates)
+                    DropdownMenuItem<int>(
+                      value: g.id,
+                      child: Text(g.name, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: (v) => setDialog(() => selectedGateId = v ?? selectedGateId),
+              ),
+              const SizedBox(height: AppSpace.sm),
+              DropdownButtonFormField<String>(
+                initialValue: selectedDirection,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Kamera Yönü'),
+                items: const <DropdownMenuItem<String>>[
+                  DropdownMenuItem<String>(value: 'auto', child: Text('Otomatik')),
+                  DropdownMenuItem<String>(value: 'giris', child: Text('Giriş')),
+                  DropdownMenuItem<String>(value: 'cikis', child: Text('Çıkış')),
+                ],
+                onChanged: (v) => setDialog(() => selectedDirection = v ?? selectedDirection),
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Vazgeç')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Ata')),
+          ],
+        ),
+      ),
+    );
+
+    if (ok == true) {
+      await _run(() async {
+        await cs.updateCamera(
+          widget.siteCode,
+          cam.id,
+          PlateCameraDraft(gateId: selectedGateId, direction: selectedDirection),
+        );
+      }, 'Kamera kapıya atandı.');
+    }
+  }
 
   Future<void> _editSettings() async {
     final s = _o.settings;
@@ -171,10 +310,293 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
     ),
   );
 
+  /// Kapıya bağlanmış her bir kamera için özel çerçeve ve alt eylem çubuğu.
+  Widget _cameraFrame(PlateGate gate, GateCamera cam) {
+    final theme = Theme.of(context);
+    final p = context.palette;
+    final dirLabel = gateCameraDirectionLabels[cam.direction] ?? cam.direction;
+
+    return Container(
+      margin: const EdgeInsets.only(top: AppSpace.sm),
+      padding: const EdgeInsets.all(AppSpace.sm),
+      decoration: BoxDecoration(
+        color: p.surface,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(
+          color: cam.isActive ? p.border : p.statusCrit.withValues(alpha: 0.4),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          // Üst satır: Kamera İkonu + Ad + Yön Rozeti + Durum Rozeti
+          Row(
+            children: <Widget>[
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: const Icon(Icons.videocam_rounded, size: 18, color: Color(0xFF10B981)),
+              ),
+              const SizedBox(width: AppSpace.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      cam.name,
+                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      'Yön: $dirLabel${cam.isActive ? '' : ' • (Pasif)'}',
+                      style: theme.textTheme.bodySmall?.copyWith(color: p.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpace.xs),
+              GateBadgeView(badge: cam.status),
+            ],
+          ),
+
+          // Bilgi satırı: son kare ve son plaka
+          if (cam.lastFrameAt != null || cam.lastReadAt != null) ...<Widget>[
+            const SizedBox(height: AppSpace.xs),
+            Wrap(
+              spacing: AppSpace.md,
+              runSpacing: 2,
+              children: <Widget>[
+                if (cam.lastFrameAt != null)
+                  Text(
+                    'Son kare: ${_fmt(cam.lastFrameAt!)}',
+                    style: theme.textTheme.bodySmall?.copyWith(fontSize: 11, color: p.textSecondary),
+                  ),
+                if (cam.lastReadAt != null)
+                  Text(
+                    'Son plaka: ${_fmt(cam.lastReadAt!)}',
+                    style: theme.textTheme.bodySmall?.copyWith(fontSize: 11, color: p.textSecondary),
+                  ),
+              ],
+            ),
+          ],
+
+          // Alt Müstakil Eylem Butonları
+          if (widget.canWrite) ...<Widget>[
+            const Divider(height: AppSpace.md, thickness: 0.5),
+            Wrap(
+              spacing: AppSpace.xs,
+              runSpacing: AppSpace.xs,
+              children: <Widget>[
+                OutlinedButton.icon(
+                  onPressed: () => _probeCamera(cam.cameraId),
+                  icon: const Icon(Icons.speed_rounded, size: 14),
+                  label: const Text('Sına', style: TextStyle(fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: 4),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _editCamera(cam.cameraId),
+                  icon: const Icon(Icons.edit_outlined, size: 14),
+                  label: const Text('Düzenle', style: TextStyle(fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: 4),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _unlinkCamera(gate, cam),
+                  icon: const Icon(Icons.link_off_rounded, size: 14),
+                  label: const Text('Kapıdan Ayır', style: TextStyle(fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: 4),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _toggleCamera(cam),
+                  icon: Icon(cam.isActive ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded, size: 14),
+                  label: Text(cam.isActive ? 'Durdur' : 'Başlat', style: const TextStyle(fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: 4),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _deleteCamera(cam.cameraId, cam.name),
+                  icon: const Icon(Icons.delete_outline_rounded, size: 14, color: Colors.red),
+                  label: const Text('Sil', style: TextStyle(fontSize: 12, color: Colors.red)),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: 4),
+                    side: BorderSide(color: Colors.red.withValues(alpha: 0.5)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _gateCard(PlateGate gate) {
     final theme = Theme.of(context);
+    final p = context.palette;
+    final hasCameras = gate.cameras.isNotEmpty;
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.sm),
+      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      child: AppCard(
+        padding: const EdgeInsets.all(AppSpace.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            // Kapı Başlık Satırı
+            Row(
+              children: <Widget>[
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.sensor_door_rounded, size: 20, color: Color(0xFF10B981)),
+                ),
+                const SizedBox(width: AppSpace.sm),
+                Expanded(
+                  child: Text(
+                    gate.name,
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(width: AppSpace.xs),
+                GateBadgeView(badge: gate.status),
+              ],
+            ),
+            const SizedBox(height: 4),
+
+            // Kapı Özellikleri & SmartKeyPass Rozeti
+            Wrap(
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.xs,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: <Widget>[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: p.border.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
+                  child: Text(
+                    '${gate.directionLabel}${gate.isActive ? '' : ' • Pasif'}',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+                if (gate.deviceUid != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3B82F6).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        const Icon(Icons.sensors_rounded, size: 14, color: Color(0xFF3B82F6)),
+                        const SizedBox(width: 4),
+                        Text('SmartKeyPass: ${gate.deviceUid}', style: theme.textTheme.bodySmall?.copyWith(color: const Color(0xFF3B82F6))),
+                        if (gate.deviceStatus != null) ...<Widget>[
+                          const SizedBox(width: 4),
+                          GateBadgeView(badge: gate.deviceStatus!),
+                        ],
+                      ],
+                    ),
+                  )
+                else
+                  Text('SmartKeyPass cihazı bağlı değil.', style: theme.textTheme.bodySmall?.copyWith(color: p.textSecondary)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: hasCameras ? const Color(0xFF10B981).withValues(alpha: 0.15) : p.statusCrit.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
+                  child: Text(
+                    hasCameras ? '${gate.cameras.length} Kamera Bağlı' : 'Kamera Atanmadı',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: hasCameras ? const Color(0xFF10B981) : p.statusCrit,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: AppSpace.sm),
+
+            // Kapıya Bağlı Kameralar Çerçevesi
+            if (!hasCameras)
+              Container(
+                margin: const EdgeInsets.only(top: AppSpace.xs),
+                padding: const EdgeInsets.all(AppSpace.md),
+                decoration: BoxDecoration(
+                  color: p.surface.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(color: p.border.withValues(alpha: 0.6), style: BorderStyle.solid),
+                ),
+                child: Row(
+                  children: <Widget>[
+                    Icon(Icons.info_outline_rounded, size: 20, color: p.textSecondary),
+                    const SizedBox(width: AppSpace.sm),
+                    Expanded(
+                      child: Text(
+                        'Bu geçiş noktasına henüz bir kamera atanmamış. Plaka ile otomatik kapı açılması için bu kapıya kamera ekleyin.',
+                        style: theme.textTheme.bodySmall?.copyWith(color: p.textSecondary),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              for (final cam in gate.cameras)
+                _cameraFrame(gate, cam),
+
+            // Kapı Alt Eylemi: Kamera Ekle
+            if (widget.canWrite && widget.onAddCamera != null) ...<Widget>[
+              const SizedBox(height: AppSpace.sm),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.tonalIcon(
+                  key: ValueKey<String>('gate_add_camera_${gate.id}'),
+                  onPressed: () => widget.onAddCamera!(gate),
+                  icon: const Icon(Icons.add_a_photo_outlined, size: 16),
+                  label: const Text('Bu Kapıya Kamera Ekle / Ata'),
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.xs),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Herhangi bir kapıya henüz atanmamış kameralar listesi.
+  Widget _unassignedCamerasSection() {
+    final unassigned = _o.unassignedCameras;
+    if (unassigned.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpace.md, bottom: AppSpace.md),
       child: AppCard(
         padding: const EdgeInsets.all(AppSpace.md),
         child: Column(
@@ -182,63 +604,52 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
           children: <Widget>[
             Row(
               children: <Widget>[
-                Expanded(child: Text(gate.name, style: theme.textTheme.titleSmall)),
-                GateBadgeView(badge: gate.status),
+                const Icon(Icons.link_off_rounded, color: Colors.orange, size: 20),
+                const SizedBox(width: AppSpace.sm),
+                Expanded(
+                  child: Text(
+                    'Atanmamış Kameralar (${unassigned.length})',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
               ],
             ),
-            Text('${gate.directionLabel}${gate.isActive ? '' : ' - pasif'}', style: theme.textTheme.bodySmall),
-            const SizedBox(height: AppSpace.xs),
-            if (gate.deviceUid != null)
-              Row(
-                children: <Widget>[
-                  const Icon(Icons.sensors_rounded, size: 16),
-                  const SizedBox(width: AppSpace.xs),
-                  Expanded(child: Text('SmartKeyPass: ${gate.deviceUid}')),
-                  if (gate.deviceStatus != null) GateBadgeView(badge: gate.deviceStatus!),
-                ],
-              )
-            else
-              Text('SmartKeyPass cihazı bağlı değil.', style: theme.textTheme.bodySmall),
-            if (gate.cameras.isEmpty)
-              Row(
-                children: <Widget>[
-                  Expanded(child: Text('Kamera bağlı değil.', style: theme.textTheme.bodySmall)),
-                  if (widget.canWrite && widget.onAddCamera != null && gate.cameras.isNotEmpty)
-                    TextButton.icon(
-                      key: ValueKey<String>('gate_add_camera_${gate.id}'),
-                      onPressed: () => widget.onAddCamera!(gate),
-                      icon: const Icon(Icons.add_a_photo_outlined, size: 18),
-                      label: const Text('Kamera ekle'),
-                    ),
-                ],
-              ),
-            for (final cam in gate.cameras)
-              Padding(
-                padding: const EdgeInsets.only(top: AppSpace.xs),
+            const SizedBox(height: 4),
+            _note('Bu kameralar sisteme eklenmiş ancak henüz bir geçiş noktasına atanmamıştır.'),
+            for (final cam in unassigned)
+              Container(
+                margin: const EdgeInsets.only(top: AppSpace.xs),
+                padding: const EdgeInsets.all(AppSpace.sm),
+                decoration: BoxDecoration(
+                  color: context.palette.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(color: context.palette.border),
+                ),
                 child: Row(
                   children: <Widget>[
-                    const Icon(Icons.videocam_outlined, size: 16),
-                    const SizedBox(width: AppSpace.xs),
-                    Expanded(
-                      child: Text(
-                        '${cam.name} (${gateCameraDirectionLabels[cam.direction] ?? cam.direction})${cam.lastFrameAt == null ? '' : '  •  son kare ${_fmt(cam.lastFrameAt!)}'}',
+                    const Icon(Icons.videocam_outlined, size: 18),
+                    const SizedBox(width: AppSpace.sm),
+                    Expanded(child: Text(cam.label, style: const TextStyle(fontWeight: FontWeight.w600))),
+                    if (widget.canWrite) ...<Widget>[
+                      FilledButton.tonal(
+                        onPressed: () => _assignCameraToGate(cam),
+                        style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                        child: const Text('Kapıya Ata'),
                       ),
-                    ),
-                    GateBadgeView(badge: cam.status),
+                      const SizedBox(width: AppSpace.xs),
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        tooltip: 'Düzenle',
+                        onPressed: () => _editCamera(cam.id),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
+                        tooltip: 'Sil',
+                        onPressed: () => _deleteCamera(cam.id, cam.label),
+                      ),
+                    ],
                   ],
                 ),
-              ),
-            if (widget.canWrite && widget.onAddCamera != null)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: <Widget>[
-                  TextButton.icon(
-                    key: ValueKey<String>('gate_add_camera_${gate.id}'),
-                    onPressed: () => widget.onAddCamera!(gate),
-                    icon: const Icon(Icons.add_a_photo_outlined, size: 16),
-                    label: const Text('Kamera ata / ekle'),
-                  ),
-                ],
               ),
           ],
         ),
@@ -246,20 +657,57 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     final o = _o;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
+        // Ağda kamera arama & Hızlı İşlemler Toolbar
+        if (widget.canWrite)
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpace.md),
+            child: Wrap(
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.xs,
+              children: <Widget>[
+                if (widget.onDiscoverCameras != null)
+                  OutlinedButton.icon(
+                    onPressed: widget.onDiscoverCameras,
+                    icon: const Icon(Icons.wifi_find_rounded, size: 18),
+                    label: const Text('Ağda Kamera Ara (Otomatik Keşif)'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.sm),
+                    ),
+                  ),
+                if (widget.onAddCamera != null && o.gates.isNotEmpty)
+                  FilledButton.icon(
+                    onPressed: () => widget.onAddCamera!(o.gates.first),
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: const Text('Yeni Kamera Ekle'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.sm),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
         _note('SmartKeyPass kapılarına bağlı kameralar ve çalışma durumları burada listelenir. Plaka okunduğunda kapı yerel ağdan SmartKeyPass ile otomatik açılır, kapatma emniyeti bariyerin kendi dedektöründedir.'),
+
         _section(
           'Geçiş noktaları',
           actions: const <Widget>[],
         ),
-        if (o.gates.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: AppSpace.md), child: Text('SmartKeyPass üzerinde kayıtlı kapı bulunamadı. Önce Geçiş Kontrol modülünden kapı ekleyiniz.')),
+        if (o.gates.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpace.md),
+            child: Text('SmartKeyPass üzerinde kayıtlı kapı bulunamadı. Önce Geçiş Kontrol modülünden kapı ekleyiniz.'),
+          ),
         for (final gate in o.gates) _gateCard(gate),
+
+        // Atanmamış Kameralar (Varsa)
+        _unassignedCamerasSection(),
 
         _section(
           'Misafir kuralı ve eşikler',
@@ -279,6 +727,7 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
             ],
           ),
         ),
+
         _section('İçeride (${widget.inside.total} araç)'),
         if (widget.inside.apartments.isEmpty) const Text('Park yeri tanımlı ya da içeride aracı olan daire yok.'),
         for (final a in widget.inside.apartments)
@@ -335,7 +784,7 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
   }
 }
 
-/// Kapı ekle / düzenle penceresi. Kamera yönü yalnız çift yönlü kapıda seçilir; tek yönlü kapıda kamera yönü kapıdan gelir.
+/// Kapı ekle / düzenle penceresi.
 @visibleForTesting
 class GateEditDialog extends StatefulWidget {
   const GateEditDialog({super.key, required this.overview, this.gate});
@@ -424,7 +873,7 @@ class _GateEditDialogState extends State<GateEditDialog> {
               ),
               const SizedBox(height: AppSpace.sm),
               Text('Kameralar', style: Theme.of(context).textTheme.titleSmall),
-              if (_availableCameras.isEmpty) const Text('Boşta kamera yok. Kameralar "Kameralar" sekmesinden ya da kapı satırındaki "Kamera ekle" ile eklenir.'),
+              if (_availableCameras.isEmpty) const Text('Boşta kamera yok. Kameralar kapıdaki "Kamera ekle" butonuyla eklenir.'),
               for (final cam in _availableCameras)
                 Row(
                   children: <Widget>[

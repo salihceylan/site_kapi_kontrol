@@ -4601,3 +4601,28 @@ Güvenlik kulübesindeki kenar PC uygulaması artık sunucunun gerçek kenar sö
     1. Ekranda `"Uygulama Güncelleniyor"` modalı açılır, indirilen megabayt ve yüzde canlı ilerleme çubuğuyla gösterilir.
     2. İndirme bittiğinde uygulama kapanır, bağımsız `updater.bat` betiği yeni dosyaları klasöre açar ve güncellenmiş uygulamayı otomatik olarak yeniden başlatır. Kullanıcının manuel kurulum yapmasına gerek kalmaz.
 
+---
+
+## 165. 📷 Plaka Tanıma Ekranı Yeniden Mimarisi (Geçiş Noktaları Odaklı, 4 Renkli Sekme ve Entegre Kamera Yönetimi)
+*Plaka Tanıma ekranının sadeleştirilmesi: "Kameralar" sekmesinin kaldırılarak Geçiş Noktaları içine entegre edilmesi, her kameraya bağımsız çerçeveli ayar menüsü verilmesi, marka seçiminin kaldırılması ve 4 renkli özel sekme yapısı.*
+
+- [ ] **165.1. İlk Açılış Sekmesi ve 4 Renkli Sekme Yapısı:**
+  - **Nasıl Test Edilir:** Site Yöneticisi hesabıyla "Plaka Tanıma ve Kameralar" ekranına girin.
+  - **Beklenen Sonuç:**
+    1. Ekran açıldığında doğrudan en başta yer alan **"Geçiş noktaları"** sekmesi (zümrüt yeşili `#10B981`) aktif gelir.
+    2. Sekme çubuğunda yalnızca 4 renkli sekme bulunur: **Geçiş noktaları** (Yeşil), **Olaylar** (Canlı Mavi `#3B82F6`), **Canlı akış** (Mor `#8B5CF6`) ve **Ayarlar** (İndigo `#6366F1`). Eski bağımsız "Kameralar", "Kara liste" ve "Misafir izinleri" üst sekmeleri kalkmıştır.
+    3. Her sekmenin üstünde o sekmeye özel gradyan zeminli, renkli rozetli ve açıklayıcı illüstratif kahraman (hero) başlık paneli yer alır.
+- [ ] **165.2. Geçiş Noktalarına Entegre Çerçeveli Kamera Kartları ve Müstakil Eylemler:**
+  - **Nasıl Test Edilir:** "Geçiş noktaları" sekmesinde listelenen SmartKeyPass kapı kartlarını inceleyin.
+  - **Beklenen Sonuç:**
+    1. Kapıya bağlı tüm kameralar, kapı kartının içinde belirgin bir çerçeve (`_cameraFrame`), durum rozeti (çevrimiçi/çevrimdışı/sınanmadı) ve yön etiketiyle gösterilir.
+    2. Her kameranın altında müstakil eylem butonları yer alır: **Sına** (canlı bağlantı testi), **Düzenle** (IP/RTSP/port düzenleme), **Kapıdan Ayır** (kamerayı boşa çıkarma), **Durdur/Başlat** (aktiflik durumu değiştirme) ve **Sil** (kamerayı tamamen silme).
+    3. Kapı kartının altında `"+ Bu Kapıya Kamera Ekle / Ata"` butonu ile o kapıya anında yeni kamera eklenebilir veya boştaki bir kamera bağlanabilir.
+- [ ] **165.3. Kamera Ekleme / Düzenleme Formundan Marka Seçiminin Kaldırılması:**
+  - **Nasıl Test Edilir:** Kamera ekleme veya düzenleme penceresini açın.
+  - **Beklenen Sonuç:** Formda kafa karıştırıcı "Marka" dropdown seçimi KESİNLİKLE yer almaz. Kamera adı, IP adresi, RTSP portu/yolu, kullanıcı adı ve şifre girilerek tüm standart ONVIF / RTSP IP kameralar doğrudan kaydedilir.
+- [ ] **165.4. Ayarlar Sekmesi Alt Menüleri (Kara Liste, Misafir İzinleri, Kapı & Eşik Ayarları):**
+  - **Nasıl Test Edilir:** İndigo renkli "Ayarlar" sekmesine tıklayın.
+  - **Beklenen Sonuç:** Ayarlar sekmesi içinde alt kategori çipleri (ChoiceChip) bulunur: **Kara Liste**, **Misafir İzinleri** ve **Kapı & Eşik Ayarları**. Yönetici tüm ayarları ve kuralları bu sekme altından yönetir.
+
+

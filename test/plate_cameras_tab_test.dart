@@ -1,11 +1,11 @@
-// Plaka Tanıma > "Kameralar" sekmesi ve Geçiş noktaları satırındaki "Kamera ekle" (kapı ön seçili). Sahte servislerle (ağ yok).
+// Plaka Tanıma > "Geçiş noktaları" sekmesi ve kapı satırındaki "Kamera ekle / ata" (kapı ön seçili). Sahte servislerle (ağ yok).
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/plate_gates.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/plate_recognition_api.dart';
-import 'package:site_kapi_kontrol/ui/views/device_integrations_view.dart';
 import 'package:site_kapi_kontrol/ui/views/plate_recognition_view.dart';
+import 'package:site_kapi_kontrol/ui/widgets/plate_gates_panel.dart';
 
 import 'plate_cameras_support.dart';
 
@@ -67,31 +67,29 @@ Future<void> _pump(WidgetTester tester, FakeCamerasService cameras) async {
 }
 
 void main() {
-  testWidgets('Kameralar sekmesi var; kamera paneli açılır, kenar istemci yoksa tek satır yönlendirme çıkar, canlı akış tekrarlanmaz', (tester) async {
+  testWidgets('Geçiş noktaları sekmesi varsayılan gelir; Kameralar sekmesi ayrı bulunmaz', (tester) async {
     final cameras = FakeCamerasService(overview: overviewJson(cameras: const <Map<String, dynamic>>[], clients: const <Map<String, dynamic>>[], edgeOnline: false));
     await _pump(tester, cameras);
-    expect(find.text('Kameralar'), findsOneWidget, reason: 'sekme düğmesi');
-    await tester.tap(find.text('Kameralar'));
-    await tester.pumpAndSettle();
-    expect(find.byType(DeviceIntegrationsView), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('btn_discover')), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('btn_add_camera')), findsOneWidget);
-    expect(find.text('Canlı akış'), findsOneWidget, reason: 'yalnız sekme düğmesi; panelde ikinci başlık yok');
+    // Kameralar sekmesi ana menüden kaldırıldı
+    expect(find.text('Kameralar'), findsNothing);
+    // Geçiş noktaları varsayılan açık
+    expect(find.text('Geçiş noktaları'), findsWidgets);
+    expect(find.byType(PlateGatesPanel), findsOneWidget);
+    expect(find.text('Çıkış Kapısı'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('Geçiş noktaları: kapıdaki "Kamera ekle" formu o kapı ön seçili açar ve kamera o kapıyla kaydedilir', (tester) async {
+  testWidgets('Geçiş noktaları: kapıdaki "Kamera ekle / ata" formu o kapı ön seçili açar ve kamera o kapıyla kaydedilir', (tester) async {
     final cameras = FakeCamerasService();
     await _pump(tester, cameras);
-    await tester.tap(find.text('Geçiş noktaları'));
-    await tester.pumpAndSettle();
-    expect(find.text('Kamera bağlı değil.'), findsOneWidget);
+    // Geçiş noktaları varsayılan açık
+    expect(find.textContaining('Bu geçiş noktasına henüz bir kamera atanmamış'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey<String>('gate_add_camera_8')));
     await tester.pumpAndSettle();
     expect(find.descendant(of: find.byKey(const ValueKey<String>('cam_gate')), matching: find.text('Çıkış Kapısı')), findsOneWidget);
     await tester.enterText(find.byKey(const ValueKey<String>('cam_name')), 'Çıkış kamerası');
     await tester.enterText(find.byKey(const ValueKey<String>('cam_host')), '192.168.1.70');
-    await tester.tap(find.byKey(const ValueKey<String>('cam_save')));
+    await tester.tap(find.text('Kaydet'));
     await tester.pumpAndSettle();
     expect(cameras.created.single.gateId, 8);
     expect(cameras.created.single.name, 'Çıkış kamerası');
