@@ -176,11 +176,6 @@ enum SirketMenuItem {
   /// eklenir. Sakin ve görevli için yoktur.
   odemeKamera,
 
-  /// Kamera (CCTV) (`cctv_link`): kapı olaylarını kamera kayıtlarına bağlar (kayıt sistemi bağlantısı, anlık görüntü). Rol listesinde YOKTUR;
-  /// modül AÇIK sitenin yöneticisine (yazar), kurul üyesine ve görevlisine (salt okunur) [YanMenu.additionalItems] ile eklenir ("Site hizmetleri").
-  /// Sakin için yoktur. Süper kullanıcıda (modül süzgeci yok) menüde görünmez; sunucu uçları süper için açıktır.
-  kameraCctv,
-
   /// Ekipman ve Bakım (`equipment`): envanter, bakım planı / kaydı, yasal kontrol, teklifler. Rol listesinde YOKTUR; modül AÇIK sitenin
   /// yöneticisine (yazar), kurul üyesine ve görevlisine (salt okunur) [YanMenu.additionalItems] ile eklenir. Sakin için yoktur.
   ekipmanBakim,
@@ -279,8 +274,7 @@ SirketMenuGroup menuGroupOf(SirketMenuItem item) => switch (item) {
       SirketMenuItem.plakaTanima ||
       SirketMenuItem.kararlar ||
       SirketMenuItem.odemeKamera ||
-      SirketMenuItem.kameraCctv ||
-      SirketMenuItem.ekipmanBakim =>
+            SirketMenuItem.ekipmanBakim =>
         SirketMenuGroup.siteHizmetleri,
       SirketMenuItem.profilim ||
       SirketMenuItem.ellerSerbest ||
@@ -1356,25 +1350,6 @@ List<SirketMenuItem> _withExtras(
         if (anchor >= 0) break;
       }
     }
-    // "Kamera (CCTV)": "Kamera ve Plaka" / "Karar Defteri" / ... / "Kişiler" sırasıyla ilk bulunanın altına.
-    if (extra == SirketMenuItem.kameraCctv) {
-      for (final above in const <SirketMenuItem>[
-        SirketMenuItem.odemeKamera,
-        SirketMenuItem.kararDefteri,
-        SirketMenuItem.sozlesmeler,
-        SirketMenuItem.ziyaretciKayitlari,
-        SirketMenuItem.anketler,
-        SirketMenuItem.rezervasyonlar,
-        SirketMenuItem.talepler,
-        SirketMenuItem.belgeler,
-        SirketMenuItem.finans,
-        SirketMenuItem.duyurular,
-        SirketMenuItem.kisiler,
-      ]) {
-        anchor = result.indexOf(above);
-        if (anchor >= 0) break;
-      }
-    }
     // "Plaka Tanıma": "Karar Defteri" / "Sözleşmeler" / ... / "Kişiler" sırasıyla ilk bulunanın altına (numaralandırmada önde olduğundan
     // "Kamera ve Plaka" ve "Ekipman ve Bakım" sonradan ekleniyor ve kendi çıpalarının altına giriyor).
     if (extra == SirketMenuItem.plakaTanima) {
@@ -1601,8 +1576,6 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
     case SirketMenuItem.plakaTanima:
     case SirketMenuItem.odemeKamera:
       return 'Plaka Tanıma & Kameralar';
-    case SirketMenuItem.kameraCctv:
-      return 'Kamera (CCTV)';
     case SirketMenuItem.ekipmanBakim:
       return 'Ekipman ve Bakım';
     case SirketMenuItem.kapilar:
@@ -1706,8 +1679,6 @@ IconData _iconForItem(SirketMenuItem item) {
       return PhosphorIconsRegular.car;
     case SirketMenuItem.odemeKamera:
       return PhosphorIconsRegular.videoCamera;
-    case SirketMenuItem.kameraCctv:
-      return PhosphorIconsRegular.securityCamera;
     case SirketMenuItem.ekipmanBakim:
       return PhosphorIconsRegular.wrench;
     case SirketMenuItem.kapilar:

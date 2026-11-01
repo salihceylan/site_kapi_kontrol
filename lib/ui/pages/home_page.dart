@@ -199,8 +199,6 @@ import 'package:site_kapi_kontrol/ui/views/annual_report_view.dart';
 import 'package:site_kapi_kontrol/services/plate_recognition_api.dart' show PlateAccess, PlateSite;
 import 'package:site_kapi_kontrol/ui/views/plate_recognition_view.dart';
 import 'package:site_kapi_kontrol/services/device_integrations_api.dart' show DeviceSite;
-import 'package:site_kapi_kontrol/services/cctv_api.dart' show CctvSite;
-import 'package:site_kapi_kontrol/ui/views/cctv_view.dart';
 import 'package:site_kapi_kontrol/services/equipment_api.dart' show EquipmentSite;
 import 'package:site_kapi_kontrol/ui/views/equipment_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart';
@@ -412,7 +410,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<NeighborBoardViewState> _neighborBoardKey = GlobalKey<NeighborBoardViewState>();
   final GlobalKey<AnnualReportViewState> _annualReportKey = GlobalKey<AnnualReportViewState>();
   final GlobalKey<PlateRecognitionViewState> _plateRecognitionKey = GlobalKey<PlateRecognitionViewState>();
-  final GlobalKey<CctvViewState> _cctvKey = GlobalKey<CctvViewState>();
   final GlobalKey<EquipmentViewState> _equipmentKey = GlobalKey<EquipmentViewState>();
   final GlobalKey<VisitorManagerViewState> _visitorManagerKey = GlobalKey<VisitorManagerViewState>();
   final GlobalKey<VisitorResidentViewState> _visitorResidentKey = GlobalKey<VisitorResidentViewState>();
@@ -1453,9 +1450,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     ];
   }
 
-  /// "Kamera (CCTV)" ekranındaki siteler: `cctv_link` modülü AÇIK siteler; yönetici yazar, kurul üyesi ve görevli salt okur (sakin görmez).
-  /// FAIL-OPEN YOK: modül verisi yoksa ya da süper kullanıcıda (modül süzgeci yok) liste boştur.
-  List<CctvSite> _cctvSites(UserRole role) => const <CctvSite>[];
 
   /// "Ekipman ve Bakım" ekranındaki siteler: `equipment` modülü AÇIK siteler; yönetici yazar, kurul üyesi ve görevli salt okur.
   /// FAIL-OPEN YOK: modül verisi yoksa ya da süper kullanıcıda (modül süzgeci yok) liste boştur.
@@ -2220,9 +2214,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (item == SirketMenuItem.odemeKamera) {
       return false; // Birleşik modül: Plaka Tanıma & Kameralar altında toplandı.
     }
-    if (item == SirketMenuItem.kameraCctv) {
-      return _cctvSites(role).isNotEmpty;
-    }
     if (item == SirketMenuItem.ekipmanBakim) {
       return _equipmentSites(role).isNotEmpty;
     }
@@ -2425,8 +2416,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.odemeKamera:
         // Sakinde ekranın içindeki başlık "Misafir plakası"dır; menü adı herkeste aynıdır.
         return 'Plaka Tanıma & Kameralar';
-      case SirketMenuItem.kameraCctv:
-        return 'Kamera (CCTV)';
       case SirketMenuItem.ekipmanBakim:
         return 'Ekipman ve Bakım';
 
@@ -6221,8 +6210,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.odemeKamera:
         await _plateRecognitionKey.currentState?.reload();
         break;
-      case SirketMenuItem.kameraCctv:
-        await _cctvKey.currentState?.reload();
         break;
       case SirketMenuItem.ekipmanBakim:
         await _equipmentKey.currentState?.reload();
@@ -7604,13 +7591,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           key: _plateRecognitionKey,
           authService: widget.authService,
           sites: _plateRecognitionSites(session.role),
-        );
-
-      case SirketMenuItem.kameraCctv:
-        return CctvView(
-          key: _cctvKey,
-          authService: widget.authService,
-          sites: _cctvSites(session.role),
         );
 
       case SirketMenuItem.ekipmanBakim:

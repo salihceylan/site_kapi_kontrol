@@ -388,6 +388,10 @@ check_restore_test() {
 
 check_offsite() {
   local res ep age_h reason pre
+  if [ "${CHECK_OFFSITE:-1}" = "0" ]; then
+    result offsite OK "dis kopya izlemesi devre disi (kapi-ops.env)" 1
+    return 0
+  fi
   res="$(status_get "$OPS_STATE/offsite.status" result)"
   ep="$(num "$(status_get "$OPS_STATE/offsite.status" epoch)" 0)"
   reason="$(status_get "$OPS_STATE/offsite.status" reason)"

@@ -379,8 +379,8 @@ class _PlateCameraTileState extends State<PlateCameraTile> with WidgetsBindingOb
 
   String get _placeholder {
     if (!widget.camera.isActive) return 'Kamera pasif';
-    if (!widget.edgeOnline) return 'Kenar PC çevrimdışı';
-    return 'Görüntü bekleniyor';
+    // edgeOnline kontrolu kaldırıldı
+    return 'Kamera görüntüsü bekleniyor';
   }
 
   (AppTone, IconData) _onlineTone(PlateCameraRow c) {

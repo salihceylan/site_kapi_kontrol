@@ -4,7 +4,7 @@
 -- anahtar .env MESSAGING_SECRET_KEY (en az 32 karakter; DB'ye YAZILMAZ). Anahtar yoksa baglanti kaydedilmez / sinanamaz (503); SMS gonderiminde site ayari yoksa global .env kullanilir.
 
 CREATE TABLE IF NOT EXISTS site_messaging_connections (
-  site_code INTEGER NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
+  site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
   channel TEXT NOT NULL,
   provider TEXT NOT NULL,
   config JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS site_messaging_connections (
   last_test_at TIMESTAMPTZ,
   last_test_ok BOOLEAN,
   last_test_code TEXT,
-  updated_by INTEGER,
+  updated_by BIGINT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (site_code, channel),

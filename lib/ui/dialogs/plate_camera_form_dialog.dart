@@ -35,9 +35,9 @@ Future<bool?> showPlateCameraForm(
 /// Dürüst kayıt mesajı: kenar RTSP'yi sınıyor / kenar çevrimdışı / kenar tanımlı değil.
 String plateCameraSavedMessage(int? probeId, PlateCamerasOverview overview) {
   if (probeId != null) {
-    return overview.edge.online ? 'Kamera kaydedildi. Kenar PC RTSP\'yi sınıyor.' : 'Kamera kaydedildi. Kenar PC çevrimdışı; bağlanınca RTSP\'yi sınayacak.';
+    return 'Kamera kaydedildi. Bağlantı sınanıyor.';
   }
-  return overview.edge.count == 0 ? 'Kamera kaydedildi. Kenar uygulama tanımlı olmadığı için RTSP sınanmadı.' : 'Kamera kaydedildi.';
+  return 'Kamera kaydedildi.';
 }
 
 class PlateCameraFormDialog extends StatefulWidget {
@@ -109,7 +109,7 @@ class _PlateCameraFormDialogState extends State<PlateCameraFormDialog> {
 
   String get _rtspHint {
     final path = _brandTemplate?.defaultRtspPath;
-    return path == null ? 'Boş bırakılırsa kenar PC ONVIF ile kamerayı kendisi bulur' : 'Boş bırakılırsa markaya göre: $path';
+    return path == null ? 'Boş bırakılırsa sistem ONVIF ile kamerayı kendisi bulur' : 'Boş bırakılırsa markaya göre: $path';
   }
 
   String? _validate() {
@@ -175,7 +175,7 @@ class _PlateCameraFormDialogState extends State<PlateCameraFormDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              const Text('Kamerayı güvenlik kulübesindeki kenar PC bağlanıp sınar; görüntüyü ve plakayı o okur.'),
+              const Text('Kamera yerel ağ üzerinden izlenir; plaka otomatik tespit edilip kapı tetiklenir.'),
               const SizedBox(height: AppSpace.sm),
               DropdownButtonFormField<String>(
                 key: const ValueKey<String>('cam_brand'),

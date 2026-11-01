@@ -205,8 +205,7 @@ class _PlateDiscoveryDialogState extends State<PlateDiscoveryDialog> {
     if (_noEdge) {
       return const InlineNoticeText(
         tone: AppTone.warning,
-        text: 'Bu site için kenar uygulama (güvenlik kulübesindeki PC) tanımlı değil. Plaka Tanıma > Geçiş noktaları bölümünden bir kenar istemci ekleyin, '
-            'PC\'ye anahtarı girin; sonra tekrar arayın. Kamerayı şimdi IP adresiyle de ekleyebilirsiniz ("Elle ekle").',
+        text: 'Ağda kamera aramak için Windows uygulamasını kullanabilir veya kamerayı IP adresiyle doğrudan ekleyebilirsiniz ("Elle ekle").',
       );
     }
     if (_error != null) return InlineNoticeText(tone: AppTone.danger, text: _error!);
@@ -218,7 +217,7 @@ class _PlateDiscoveryDialogState extends State<PlateDiscoveryDialog> {
         children.add(InlineNoticeText(key: const ValueKey<String>('discovery_offline'), tone: AppTone.warning, text: _offlineText(command)));
         children.add(const SizedBox(height: AppSpace.sm));
       }
-      children.add(_Progress(text: command.status == 'running' ? 'Aranıyor…' : (command.waitingOffline ? 'Kenar PC bekleniyor…' : 'Komut kenar PC\'ye iletiliyor…')));
+      children.add(_Progress(text: command.status == 'running' ? 'Aranıyor…' : 'Arama başlatılıyor…'));
     } else if (command.status == 'done') {
       final result = command.discovery;
       final devices = result?.devices ?? const <DiscoveredDevice>[];

@@ -98,9 +98,8 @@ void main() {
       expect(find.textContaining('Yakında'), findsNothing);
       expect(find.text('Plakayla otomatik kapı açma'), findsOneWidget);
       expect(find.text('Etkin'), findsOneWidget);
-      expect(find.textContaining('kapılar plakayla açılabilir'), findsOneWidget);
-      expect(find.textContaining('Kulübe PC: Çevrimiçi'), findsOneWidget);
-      expect(find.textContaining('okuma modeli onaylı'), findsWidgets);
+      expect(find.textContaining('Bu sistem yerel ağdaki kameraları izler'), findsOneWidget);
+      // kenar istemci satırları kaldırıldı
       // Izgara
       expect(find.byType(PlateCameraTile), findsNWidgets(2));
       expect(find.text('Giriş kamerası'), findsOneWidget);
@@ -124,8 +123,7 @@ void main() {
       expect(find.text('Etkin değil'), findsOneWidget);
       expect(find.byKey(const ValueKey<String>('auto_open_message')), findsOneWidget);
       expect(find.text('Kenar PC çevrimdışı: plakayla kapı açma duruyor.'), findsOneWidget);
-      expect(find.textContaining('Kulübe PC: Çevrimdışı'), findsOneWidget);
-      expect(find.text('Kenar PC çevrimdışı'), findsWidgets, reason: 'karoda da görüntü yerine dürüst yer tutucu');
+      // kenar istemci satırları kaldırıldı
       await _close(tester);
     });
 
@@ -140,7 +138,7 @@ void main() {
       );
       await _pump(tester, service);
       expect(find.byKey(const ValueKey<String>('no_cameras')), findsOneWidget);
-      expect(find.textContaining('kenar istemci'), findsWidgets);
+      expect(find.textContaining('Henüz kamera eklenmemiş'), findsOneWidget);
       await _close(tester);
     });
 
@@ -186,7 +184,7 @@ void main() {
       expect(body['username'], 'admin');
       expect(body['password'], 'gizli123');
       expect(body.containsKey('gate_id'), isFalse);
-      expect(find.text('Kamera kaydedildi. Kenar PC RTSP\'yi sınıyor.'), findsOneWidget);
+      expect(find.textContaining('Kamera kaydedildi'), findsOneWidget);
       expect(service.overviewCalls, greaterThanOrEqualTo(2), reason: 'kayıttan sonra ızgara yenilenir');
       await _close(tester);
     });
@@ -202,7 +200,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       await tester.tap(find.text('ONVIF (diğer)').last);
       await tester.pump(const Duration(milliseconds: 400));
-      expect(find.textContaining('kenar PC ONVIF ile kamerayı kendisi bulur'), findsOneWidget);
+      expect(find.textContaining('sistem ONVIF ile kamerayı kendisi bulur'), findsOneWidget);
       // Çıkış kapısı seç: yön listesinde "Giriş" olmaz
       await tester.tap(find.byKey(const ValueKey<String>('cam_gate')));
       await tester.pump(const Duration(milliseconds: 400));

@@ -71,7 +71,6 @@ abstract final class HelpContent {
     'İşletme Projesi',
     'Komşu Panosu',
     'Ekipman ve Bakım',
-    'Kamera (CCTV)',
     'Faaliyet Raporu',
     'Plaka Tanıma',
     'Kapılar',
@@ -635,19 +634,7 @@ abstract final class HelpContent {
         'Daha eski kayıtlar için “Daha fazla yükle”ye dokunun.',
       ],
       note: 'Kayıtlar değiştirilemez. Parola, telefon ve e-posta kayıtta yer almaz; sistem yöneticisinin işlemleri “Sistem yöneticisi”, silinmiş hesapların işlemleri “Silinmiş Kullanıcı” olarak görünür.',
-    ),
-    HelpTopic(
-      id: 'cctv',
-      title: 'Kapı olaylarını kamera kayıtlarıyla nasıl eşleştiririm?',
-      icon: Icons.videocam_rounded,
-      steps: <String>[
-        'Menüden “Kamera (CCTV)” ekranını açın (süper kullanıcı modülü açtıysa görünür). Kameralar sekmesinde Kamera ekle ile kamerayı ya da kayıt cihazını (NVR) tanıtın; ad, konum ve eşleşecek kapıları seçin.',
-        'Kayıt bağlantı şablonuna kayıt sisteminin oynatma adresini https ile yazın; {start}, {end}, {channel} ve {camera} yer tutucuları olay anında doldurulur. Kamera herkese açık bir https adresinden görüntü veriyorsa anlık görüntü adresini de ekleyebilirsiniz.',
-        'Olaylar sekmesinde son kapı olayları görünür. Olayın kapısına eşlenmiş kamerada Kaydı aç, olaydan 30 sn önce ile 30 sn sonrasını kayıt sisteminde açar; kayıt sistemine yalnız site ağından ulaşılabilir.',
-      ],
-      note: 'Kamera görüntüsü kişisel veridir; her anlık görüntü ve kayıt bağlantısı açma denetim kaydına yazılır. Video bu uygulamada saklanmaz.',
-    ),
-    _panelAdmin,
+    ),    _panelAdmin,
     _navigationManager,
     _emergency,
     HelpTopic(

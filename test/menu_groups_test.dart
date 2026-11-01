@@ -39,7 +39,6 @@ const Map<SirketMenuItem, SirketMenuGroup> _expected = <SirketMenuItem, SirketMe
   SirketMenuItem.faaliyetRaporu: SirketMenuGroup.siteHizmetleri,
   SirketMenuItem.plakaTanima: SirketMenuGroup.siteHizmetleri,
   SirketMenuItem.odemeKamera: SirketMenuGroup.siteHizmetleri,
-  SirketMenuItem.kameraCctv: SirketMenuGroup.siteHizmetleri,
   SirketMenuItem.ekipmanBakim: SirketMenuGroup.siteHizmetleri,
   SirketMenuItem.profilim: SirketMenuGroup.ayarlar,
   SirketMenuItem.ellerSerbest: SirketMenuGroup.ayarlar,
@@ -105,7 +104,6 @@ void main() {
         SirketMenuItem.faaliyetRaporu,
         SirketMenuItem.plakaTanima,
         SirketMenuItem.odemeKamera,
-        SirketMenuItem.kameraCctv,
         SirketMenuItem.ekipmanBakim,
         SirketMenuItem.belgeler,
       });

@@ -579,7 +579,7 @@ class PlateCamerasApi {
       case PlateCameraErrors.moduleDisabled:
         return 'Kamera ızgarası ve canlı akış için Plaka Tanıma modülünün bu site için açık olması gerekir.';
       case PlateCameraErrors.noEdgeClient:
-        return 'Bu site için kenar uygulama (güvenlik kulübesindeki PC) tanımlı değil. Plaka Tanıma > Geçiş noktaları bölümünden bir kenar istemci ekleyin.';
+        return 'Ağda kamera aramak için Windows masaüstü uygulamasını kullanabilir veya kamerayı IP adresiyle ekleyebilirsiniz.';
       case PlateCameraErrors.edgeClientRequired:
         return 'Birden çok kenar PC var; komutun hangisine verileceğini seçin.';
       case 'FORBIDDEN_ROLE':

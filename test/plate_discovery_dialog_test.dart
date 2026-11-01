@@ -50,11 +50,11 @@ void main() {
       final result = <DiscoveryChoice?>[];
       await _open(tester, service, result: result);
       expect(service.startCalls, 1);
-      expect(find.text('Komut kenar PC\'ye iletiliyor…'), findsOneWidget);
+      expect(find.text('Arama başlatılıyor…'), findsOneWidget);
 
       await tester.pump(_poll);
       await tester.pump();
-      expect(find.text('Komut kenar PC\'ye iletiliyor…'), findsOneWidget, reason: 'yoklama 1: hâlâ bekliyor');
+      expect(find.text('Arama başlatılıyor…'), findsOneWidget, reason: 'yoklama 1: hâlâ bekliyor');
       await tester.pump(_poll);
       await tester.pump();
       expect(find.text('Aranıyor…'), findsOneWidget);
@@ -89,7 +89,7 @@ void main() {
       expect(find.textContaining('son görülme'), findsOneWidget);
       expect(find.textContaining('Bağlanınca arama çalışır'), findsOneWidget);
       expect(find.textContaining('bağlanmazsa iptal olur'), findsOneWidget);
-      expect(find.text('Kenar PC bekleniyor…'), findsOneWidget);
+      expect(find.text('Arama başlatılıyor…'), findsOneWidget);
       await tester.pump(_poll);
       await tester.pump();
       expect(find.textContaining('10 dk içinde'), findsOneWidget);
@@ -131,8 +131,8 @@ void main() {
       final service = FakeCamerasService()
         ..startResponder = ((_) => throw ApiException('x', statusCode: 409, code: PlateCameraErrors.noEdgeClient));
       await _open(tester, service, edge: _edge(clients: 0));
-      expect(find.textContaining('kenar uygulama'), findsOneWidget);
-      expect(find.textContaining('Geçiş noktaları'), findsOneWidget);
+      expect(find.textContaining('Ağda kamera aramak için'), findsOneWidget);
+      // gecis noktalari kaldirildi
       expect(find.byType(LinearProgressIndicator), findsNothing);
     });
 
@@ -162,7 +162,7 @@ void main() {
       await tester.pump();
       polls = wrapper.polls;
       expect(find.textContaining('Durum alınamadı'), findsOneWidget);
-      expect(find.text('Komut kenar PC\'ye iletiliyor…'), findsOneWidget);
+      expect(find.text('Arama başlatılıyor…'), findsOneWidget);
       await tester.pump(_poll);
       await tester.pump();
       expect(wrapper.polls, greaterThan(polls));

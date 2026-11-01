@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Sanal IP Kamera Yayın Sunucusu (Virtual IP Camera Streaming Server)
+IP Kamera Yayın Sunucusu (Virtual IP Camera Streaming Server)
 ------------------------------------------------------------------
 Aşama 1: HTTP / MJPEG ve Snapshot Canlı Video Yayını
 Aşama 2: Ağda Otomatik Cihaz Keşfi (ONVIF WS-Discovery + mDNS Bonjour + Subnet Tarama)
@@ -332,7 +332,7 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'image/jpeg')
         self.send_header('Content-Length', str(len(jpeg)) if jpeg else '0')
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Server', 'SanalKamera/1.0 (ONVIF/MJPEG)')
+        self.send_header('Server', 'IPKamera/1.0 (ONVIF/MJPEG)')
         self.end_headers()
 
     def do_GET(self):
@@ -345,7 +345,7 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
             self.send_header('Cache-Control', 'no-cache, private')
             self.send_header('Pragma', 'no-cache')
             self.send_header('Access-Control-Allow-Origin', '*')
-            self.send_header('Server', 'SanalKamera/1.0 (ONVIF/MJPEG)')
+            self.send_header('Server', 'IPKamera/1.0 (ONVIF/MJPEG)')
             self.end_headers()
 
             while source and source.running:
@@ -374,7 +374,7 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
                 self.send_header('Content-Length', str(len(jpeg)))
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.send_header('X-Plate', source.last_plate)
-                self.send_header('Server', 'SanalKamera/1.0 (ONVIF/MJPEG)')
+                self.send_header('Server', 'IPKamera/1.0 (ONVIF/MJPEG)')
                 self.end_headers()
                 self.wfile.write(jpeg)
             else:
@@ -389,7 +389,7 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
             self.end_headers()
             data = {
                 "status": "online",
-                "camera_name": "Sanal Plaka Kamerasi (ONVIF)",
+                "camera_name": "IP Kamera (ONVIF)",
                 "fps": round(source.fps_measured, 1) if source else 0,
                 "resolution": "1280x720",
                 "last_plate": source.last_plate if source else None,
@@ -422,7 +422,7 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
         html = f"""<!DOCTYPE html>
 <html>
 <head>
-    <title>Sanal IP Kamera - Canlı İzleme & Kontrol</title>
+    <title>IP Kamera - Canlı İzleme & Kontrol</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; text-align: center; margin: 0; padding: 24px; }}
@@ -439,7 +439,7 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
     </style>
 </head>
 <body>
-    <h1>Sanal IP Kamera Yayın Sunucusu</h1>
+    <h1>IP Kamera Yayın Sunucusu</h1>
     <span class="badge">ONVIF / MJPEG AKTİF (Kaynak: {curr_src})</span>
 
     <div class="video-box">
@@ -536,10 +536,10 @@ class OnvifDiscoveryServer:
     <d:ProbeMatches>
       <d:ProbeMatch>
         <wsa:EndpointReference>
-          <wsa:Address>urn:uuid:sanal-plaka-kamera-{local_ip.replace('.', '-')}</wsa:Address>
+          <wsa:Address>urn:uuid:ip-kamera-{local_ip.replace('.', '-')}</wsa:Address>
         </wsa:EndpointReference>
         <d:Types>dn:NetworkVideoTransmitter</d:Types>
-        <d:Scopes>onvif://www.onvif.org/type/video_transmitter onvif://www.onvif.org/name/SanalPlakaKamerasi onvif://www.onvif.org/hardware/HikvisionCompatible</d:Scopes>
+        <d:Scopes>onvif://www.onvif.org/type/video_transmitter onvif://www.onvif.org/name/IPKamera onvif://www.onvif.org/hardware/HikvisionCompatible</d:Scopes>
         <d:XAddrs>http://{local_ip}:{self.http_port}/onvif/device_service</d:XAddrs>
         <d:MetadataVersion>1</d:MetadataVersion>
       </d:ProbeMatch>
@@ -570,15 +570,15 @@ class MdnsAnnouncer:
             desc = {'path': '/mjpeg', 'camera': 'plate_recognition', 'model': 'SanalKamera'}
             self.service_info = ServiceInfo(
                 "_http._tcp.local.",
-                f"SanalPlakaKamerasi._http._tcp.local.",
+                f"IPKamera._http._tcp.local.",
                 addresses=[socket.inet_aton(local_ip)],
                 port=self.port,
                 properties=desc,
-                server=f"sanal-kamera.local.",
+                server=f"ip-kamera.local.",
             )
             self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
             self.zeroconf.register_service(self.service_info)
-            logger.info(f"mDNS / Bonjour servisi kaydedildi: SanalPlakaKamerasi._http._tcp ({local_ip}:{self.port})")
+            logger.info(f"mDNS / Bonjour servisi kaydedildi: IPKamera._http._tcp ({local_ip}:{self.port})")
         except Exception as e:
             logger.warning(f"mDNS başlatılamadı: {e}")
 
@@ -592,7 +592,7 @@ class MdnsAnnouncer:
 
 # --- ANA ÇALIŞTIRICI ---
 def main():
-    parser = argparse.ArgumentParser(description="Sanal IP Kamera Yayın Sunucusu")
+    parser = argparse.ArgumentParser(description="IP Kamera Yayın Sunucusu")
     parser.add_argument("--port", type=int, default=8080, help="HTTP/MJPEG Portu (varsayılan: 8080)")
     parser.add_argument("--video", type=str, default="1", help="Video kaynağı (1, 2, 3 veya dosya yolu)")
     parser.add_argument("--webcam", type=int, default=None, help="Web kamera aygıt indeksi (örn: 0)")
@@ -603,7 +603,7 @@ def main():
     source_arg = str(args.webcam) if args.webcam is not None else args.video
 
     logger.info("=" * 68)
-    logger.info("  SANAL IP KAMERA YAYIN SUNUCUSU (ANPR & VIRTUAL IP CAM)")
+    logger.info("  IP KAMERA YAYIN SUNUCUSU (ANPR & VIRTUAL IP CAM)")
     logger.info("=" * 68)
     logger.info(f"Yerel IP Adresi : {local_ip}")
     logger.info(f"Yayın Portu     : {args.port}")

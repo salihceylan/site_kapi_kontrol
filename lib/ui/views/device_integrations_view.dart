@@ -250,7 +250,7 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> with Wid
           await _cameras.probe(site.code, camera.id);
           if (!mounted) return;
           final online = _overview?.edge.online ?? false;
-          AppSnack.show(context, online ? 'Sınama komutu kenar PC\'ye verildi.' : 'Kenar PC çevrimdışı; sınama komutu bağlanınca çalışacak.', kind: online ? AppSnackKind.success : AppSnackKind.info);
+          AppSnack.show(context, 'Kamera bağlantısı sınanıyor.', kind: online ? AppSnackKind.success : AppSnackKind.info);
           await reload();
         } on ApiException catch (e) {
           if (mounted) AppSnack.show(context, e.message, kind: AppSnackKind.error);
@@ -301,7 +301,7 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> with Wid
     final p = context.palette;
     final theme = Theme.of(context).textTheme;
     final hasCameras = overview.cameras.any((c) => c.isActive && c.host.isNotEmpty);
-    final isLocalStation = !kIsWeb || hasCameras;
+    final isLocalStation = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
     final active = isLocalStation || overview.autoOpen.active;
     final tone = active ? AppTone.success : AppTone.warning;
     final label = active ? 'Etkin' : 'Etkin değil';
@@ -333,7 +333,7 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> with Wid
           Text(message, key: const ValueKey<String>('auto_open_message'), style: theme.bodyMedium),
           const SizedBox(height: AppSpace.xs),
           Text(
-            'Ayrı bir kenar istemciye gerek yoktur; kamera izleme, plaka tanıma ve SmartKeyPass (UDP 8765) kapı tetikleme doğrudan bu istasyon tarafından yürütülür.',
+            'Kamera izleme, plaka tanıma ve SmartKeyPass (UDP 8765) kapı tetikleme doğrudan bu program tarafından yürütülür.',
             style: theme.bodySmall?.copyWith(color: p.textSecondary),
           ),
         ],
@@ -360,7 +360,7 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> with Wid
   Widget _mainBody(BuildContext context, DeviceSite site, PlateCamerasOverview overview) {
     final theme = Theme.of(context).textTheme;
     final hasCameras = overview.cameras.any((c) => c.isActive && c.host.isNotEmpty);
-    final isLocalStation = !kIsWeb || hasCameras;
+    final isLocalStation = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[

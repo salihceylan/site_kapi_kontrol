@@ -23,8 +23,6 @@ abstract final class PlatformModuleCodes {
   static const String contracts = 'contracts';
   /// Ekipman ve Bakım (envanter, bakım planı / kaydı, teklifler). TEMEL modül (Kural 25): her sitede açık.
   static const String equipment = 'equipment';
-  /// Kamera (CCTV) Bağlantısı (kapı olaylarını kamera kayıtlarına bağlar; video saklanmaz). Varsayılan KAPALI.
-  static const String cctvLink = 'cctv_link';
   /// Karar Defteri (yönetim / genel / denetim kurulu kararları). Varsayılan KAPALI.
   static const String decisionBook = 'decision_book';
   /// Rehber (yönetim kadrosu ve faydalı telefonlar; sakin ekranı). Varsayılan KAPALI.
