@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/plate_recognition_api.dart';
+import 'package:site_kapi_kontrol/services/plate_recognition_engine.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
 import 'package:site_kapi_kontrol/ui/design/license_plate.dart';
@@ -57,10 +58,16 @@ class _PlateLiveFeedPanelState extends State<PlateLiveFeedPanel> {
   bool _busy = false;
   DateTime? _updatedAt;
   Timer? _timer;
+  StreamSubscription<PlateEngineDecision>? _decisionSub;
 
   @override
   void initState() {
     super.initState();
+    _decisionSub = PlateRecognitionEngine.instance.decisionsStream.listen((_) {
+      Future<void>.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) unawaited(_load());
+      });
+    });
     unawaited(_load());
   }
 
@@ -76,6 +83,7 @@ class _PlateLiveFeedPanelState extends State<PlateLiveFeedPanel> {
 
   @override
   void dispose() {
+    _decisionSub?.cancel();
     _timer?.cancel();
     super.dispose();
   }

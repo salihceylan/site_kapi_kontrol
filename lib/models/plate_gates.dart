@@ -38,7 +38,18 @@ class GateBadge {
 
 @immutable
 class GateCamera {
-  const GateCamera({required this.cameraId, required this.name, required this.direction, required this.isActive, required this.status, this.lastFrameAt, this.lastReadAt});
+  const GateCamera({
+    required this.cameraId,
+    required this.name,
+    required this.direction,
+    required this.isActive,
+    required this.status,
+    this.host,
+    this.port,
+    this.rtspUrl,
+    this.lastFrameAt,
+    this.lastReadAt,
+  });
 
   factory GateCamera.fromJson(Map<String, dynamic> m) => GateCamera(
     cameraId: _int(m['camera_id']),
@@ -46,6 +57,9 @@ class GateCamera {
     direction: _str(m['direction']) ?? 'auto',
     isActive: m['is_active'] != false,
     status: GateBadge.fromJson(m['status']),
+    host: _str(m['host']),
+    port: _intOrNull(m['port']),
+    rtspUrl: _str(m['rtsp_url']),
     lastFrameAt: _date(m['last_frame_at']),
     lastReadAt: _date(m['last_read_at']),
   );
@@ -55,6 +69,9 @@ class GateCamera {
   final String direction;
   final bool isActive;
   final GateBadge status;
+  final String? host;
+  final int? port;
+  final String? rtspUrl;
   final DateTime? lastFrameAt;
   final DateTime? lastReadAt;
 }
@@ -71,6 +88,7 @@ class PlateGate {
     required this.directionLabel,
     required this.isActive,
     required this.status,
+    this.doorId,
     this.deviceUid,
     this.deviceStatus,
     this.cameras = const <GateCamera>[],
@@ -85,6 +103,7 @@ class PlateGate {
       directionLabel: _str(m['direction_label']) ?? 'Çift yön',
       isActive: m['is_active'] != false,
       status: GateBadge.fromJson(m['status']),
+      doorId: _intOrNull(m['door_id']),
       deviceUid: _str(m['device_uid']),
       deviceStatus: device.isEmpty ? null : GateBadge.fromJson(device['status']),
       cameras: <GateCamera>[for (final c in _maps(m['cameras'])) GateCamera.fromJson(c)],
@@ -97,6 +116,7 @@ class PlateGate {
   final String directionLabel;
   final bool isActive;
   final GateBadge status;
+  final int? doorId;
   final String? deviceUid;
   final GateBadge? deviceStatus;
   final List<GateCamera> cameras;
@@ -281,11 +301,19 @@ class InsideItem {
 
 @immutable
 class InsideApartment {
-  const InsideApartment({required this.label, required this.parkingSlots, required this.insideCount, required this.guestAllowed, required this.guestReason});
+  const InsideApartment({
+    required this.label,
+    required this.parkingSlots,
+    required this.insideCount,
+    required this.guestAllowed,
+    required this.guestReason,
+    this.id,
+  });
 
   factory InsideApartment.fromJson(Map<String, dynamic> m) {
     final admit = _map(m['guest_admit']);
     return InsideApartment(
+      id: _intOrNull(m['id']),
       label: _str(m['label']) ?? 'Daire',
       parkingSlots: _int(m['parking_slots']),
       insideCount: _int(m['inside_count']),
@@ -294,6 +322,7 @@ class InsideApartment {
     );
   }
 
+  final int? id;
   final String label;
   final int parkingSlots;
   final int insideCount;

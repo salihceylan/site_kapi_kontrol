@@ -4641,5 +4641,12 @@ Güvenlik kulübesindeki kenar PC uygulaması artık sunucunun gerçek kenar sö
     1. Keşif servisi Tailscale (`100.x.x.x`), sanal adaptörler veya geçersiz VPN IP'leri yerine gerçek fiziksel yerel Wi-Fi/Ethernet ağını (`192.168.1.x`) ve bu bilgisayardaki yayını (`127.0.0.1` / `192.168.1.20`) keşfeder.
     2. Kameranın gerçek portu (örn. `8080`) otomatik olarak algılanır, zorla `554` yapılmaz; akış yolu otomatik olarak `/mjpeg` ile eşleşir.
     3. Eklenen kamera anında canlı akış karelerini (`/snapshot.jpg` ve `/mjpeg`) çeker; plaka tanıma motoruyla eşzamanlı çalışır.
+- [ ] **165.8. Canlı Akış Sekmesinde ve Geçiş Noktaları Kamera Kartlarında Gerçek Zamanlı Akan Video Önizleme & Plaka Motoru Düzeltmeleri:**
+  - **Nasıl Test Edilir:** "Plaka Tanıma" ekranında önce **"Geçiş noktaları"** sekmesindeki kapıya bağlı kamera kartının üst monitör kutusunu, ardından **"Canlı akış"** sekmesinin en üstündeki **"CANLI YAYIN"** kamera monitörünü izleyin; ayrıca "Plaka Test Et" veya kameradan geçen araçla kapı tetiklemesini gözlemleyin.
+  - **Beklenen Sonuç:**
+    1. Hem **"Geçiş noktaları"** sekmesindeki kare kamera kartlarında hem de **"Canlı akış"** sekmesinin üst kısmında (`PlateLiveCamerasSection` / `PlateCameraLivePreview`) kameradan gelen gerçek zamanlı video görüntüsü kesintisiz (gapless) akar; üzerine tıklanınca tam ekran canlı izleme penceresi açılır.
+    2. Kamera üzerinden okunan plaka sağ alt köşede canlı plaka rozeti olarak belirir; karar motoru (`PlateRecognitionEngine`) sakin aracını veya otopark yeri müsait misafir aracını (`apt.id` eşleşmesiyle) onaylayıp hem yerel UDP hem de sunucu SmartKeyPass MQTT (`publishDoorPulse`) üzerinden kapıyı tetikler ve olayı sunucuya (`POST /manager/sites/:siteCode/plate-recognition/events`) kaydeder.
+    3. Kamera aktif akış verdiğinde durum rozeti otomatik olarak yeşil **"Çalışıyor"** durumuna güncellenir.
+
 
 

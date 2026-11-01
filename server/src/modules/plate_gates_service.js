@@ -128,7 +128,7 @@ export async function loadGateConfig(db, siteCode) {
       [siteCode],
     ),
     db.query(
-      `SELECT gc.gate_id, gc.camera_id, gc.direction, c.name, c.is_active, s.last_frame_at, s.last_read_at, s.reported_at
+      `SELECT gc.gate_id, gc.camera_id, gc.direction, c.name, c.host, c.port, c.rtsp_url, c.is_active, s.last_frame_at, s.last_read_at, s.reported_at
          FROM plate_gate_cameras gc
          INNER JOIN camera_devices c ON c.id = gc.camera_id
          LEFT JOIN plate_camera_status s ON s.camera_id = gc.camera_id
@@ -180,6 +180,9 @@ export async function getGatesOverview(siteCode) {
         camera_id: Number(b.camera_id),
         name: b.name,
         direction: b.direction,
+        host: b.host ?? null,
+        port: b.port ?? null,
+        rtsp_url: b.rtsp_url ?? null,
         is_active: b.is_active !== false,
         status: cameraBadge(b, thresholds, now),
         last_frame_at: iso(b.last_frame_at),

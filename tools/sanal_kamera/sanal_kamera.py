@@ -226,9 +226,15 @@ class CameraSource:
                 frame = self._generate_synthetic_frame()
 
             # Sahadaki gerçek bir IP kamera gibi SADECE HAM VİDEO YAYINI YAPILIR.
-            # Üzerine yeşil kutular, plaka etiketleri veya HUD çizilmez.
-            # Plaka tespiti, okuma, çerçeveleme ve kapı tetikleme işlemlerinin tamamı
-            # Windows masaüstü uygulamamızın içindeki plaka motoru tarafından gerçekleştirilir.
+            # Üzerine yeşil kutular, plaka etiketleri veya HUD çizilmez; tespit kopyası üzerinde çalışır.
+            if self.cap is not None and (self.frame_count % 5 == 0):
+                _, detected = self.detector.detect_and_draw(frame.copy(), frame_idx=self.frame_count)
+                if detected:
+                    self.last_plate = detected
+                    self.last_plate_time = time.time()
+                elif time.time() - self.last_plate_time > 3.0:
+                    self.last_plate = None
+
             _, jpeg = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
             jpeg_bytes = jpeg.tobytes()
 
@@ -335,13 +341,25 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
+    def _send_cors_headers(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', '*')
+        self.send_header('Access-Control-Allow-Private-Network', 'true')
+        self.send_header('Access-Control-Expose-Headers', 'X-Plate, Content-Length, Content-Type')
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._send_cors_headers()
+        self.end_headers()
+
     def do_HEAD(self):
         source = CameraHTTPHandler.camera_source
         jpeg = source.get_jpeg() if source else None
         self.send_response(200)
         self.send_header('Content-Type', 'image/jpeg')
         self.send_header('Content-Length', str(len(jpeg)) if jpeg else '0')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self._send_cors_headers()
         self.send_header('Server', 'IPKamera/1.0 (ONVIF/MJPEG)')
         self.end_headers()
 
@@ -354,7 +372,7 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
             self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=frame')
             self.send_header('Cache-Control', 'no-cache, private')
             self.send_header('Pragma', 'no-cache')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_headers()
             self.send_header('Server', 'IPKamera/1.0 (ONVIF/MJPEG)')
             self.end_headers()
 
@@ -382,7 +400,8 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header('Content-Type', 'image/jpeg')
                 self.send_header('Content-Length', str(len(jpeg)))
-                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+                self._send_cors_headers()
                 self.send_header('X-Plate', str(source.last_plate) if source.last_plate else '')
                 self.send_header('Server', 'IPKamera/1.0 (ONVIF/MJPEG)')
                 self.end_headers()
@@ -395,7 +414,7 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
         if self.path == '/status':
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_headers()
             self.end_headers()
             data = {
                 "status": "online",
@@ -414,7 +433,7 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
         if self.path == '/api/last_plate':
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_headers()
             self.end_headers()
             data = {
                 "plate": source.last_plate if source else None,

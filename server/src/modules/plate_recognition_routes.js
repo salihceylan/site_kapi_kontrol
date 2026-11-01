@@ -47,8 +47,10 @@ import {
   probeCamera,
   readSnapshot,
   startDiscovery,
+  storeManagerSnapshot,
   updateCamera,
 } from './plate_cameras_service.js';
+import { recordManagerPlateEvent } from './plate_edge_service.js';
 import {
   clearInside,
   createEdgeClient,
@@ -160,6 +162,12 @@ export const eventsLimiter = createRuleLimiter({
 });
 
 plateRecognitionRouter.get(`${BASE}/events`, ...managerHandler({ context: 'plate_events', fallback: 'Plaka kayıtları yüklenemedi.', limiter: eventsLimiter },({ req, access }) => listDecisions(access.siteCode, req.query, { canWrite: access.canWrite })));
+plateRecognitionRouter.post(
+  `${BASE}/events`,
+  ...managerHandler({ context: 'plate_event_record', fallback: 'Plaka olayı kaydedilemedi.', write: true, limiter: eventsLimiter }, ({ req, access }) =>
+    recordManagerPlateEvent({ siteCode: access.siteCode, body: bodyOf(req) }),
+  ),
+);
 
 plateRecognitionRouter.get(`${BASE}/permits`, ...managerHandler({ context: 'plate_permits', fallback: 'Misafir izinleri yüklenemedi.' }, ({ req, access }) => listPermits(access.siteCode, req.query)));
 plateRecognitionRouter.post(
@@ -317,6 +325,22 @@ plateRecognitionRouter.get(`${BASE}/cameras/:id/snapshot`, authRequired, snapsho
     return res.status(200).send(snapshot.jpeg);
   } catch (error) {
     return respondError(res, 'plate_camera_snapshot', error, 'Görüntü alınamadı.');
+  }
+});
+const rawManagerJpeg = express.raw({ type: 'image/jpeg', limit: 512 * 1024 });
+plateRecognitionRouter.put(`${BASE}/cameras/:id/snapshot`, authRequired, snapshotViewLimiter, rawManagerJpeg, async (req, res) => {
+  try {
+    const access = await resolveAccess(req, res, { write: true });
+    if (!access) return undefined;
+    const out = await storeManagerSnapshot({
+      siteCode: access.siteCode,
+      rawId: req.params.id,
+      buffer: Buffer.isBuffer(req.body) ? req.body : null,
+      headers: req.headers,
+    });
+    return res.status(200).json(out);
+  } catch (error) {
+    return respondError(res, 'plate_camera_snapshot_put', error, 'Görüntü kaydedilemedi.');
   }
 });
 plateRecognitionRouter.post(

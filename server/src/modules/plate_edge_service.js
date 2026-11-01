@@ -9,6 +9,7 @@
 // Karar KENARDA verilir (offline-first); sunucu yalnız kaydeder ve "içeride" durumunu tutar.
 
 import { pool } from '../db.js';
+import { publishDoorPulse } from '../mqtt_bridge.js';
 import { recordDoorAccessLog } from '../services/door_service.js';
 import { PlatformError } from './errors.js';
 import { isModuleEnabled } from './module_service.js';
@@ -356,6 +357,53 @@ export async function recordEdgeEvent(client, body, { writeDoorLog = recordDoorA
   } finally {
     db.release();
   }
+}
+
+/** Yönetici / Windows masaüstü uygulaması tarafından gönderilen plaka olayını kaydeder ve kabul edilen araç için kapıyı MQTT ile tetikler. */
+export async function recordManagerPlateEvent({ siteCode, body }) {
+  let cameraId = Number(body?.camera_id);
+  if (!Number.isSafeInteger(cameraId) || cameraId <= 0) {
+    const fallback = (
+      await pool.query(`SELECT id FROM camera_devices WHERE site_code = $1 AND is_active ORDER BY id LIMIT 1`, [siteCode])
+    ).rows[0];
+    if (fallback) cameraId = Number(fallback.id);
+  }
+  const res = await recordEdgeEvent({ id: null, siteCode }, { ...body, camera_id: cameraId });
+  if (Number.isSafeInteger(cameraId) && cameraId > 0) {
+    await pool
+      .query(
+        `INSERT INTO plate_camera_status (camera_id, site_code, last_frame_at, last_read_at, reported_at)
+         VALUES ($1, $2, NOW(), NOW(), NOW())
+         ON CONFLICT (camera_id) DO UPDATE SET last_frame_at = NOW(), last_read_at = NOW(), reported_at = NOW()`,
+        [cameraId, siteCode],
+      )
+      .catch(() => {});
+  }
+  if (body?.decision === 'acildi') {
+    try {
+      const gateRow = (
+        await pool.query(
+          `SELECT g.id, g.door_id, g.device_uid
+             FROM plate_gates g
+             LEFT JOIN plate_gate_cameras gc ON gc.gate_id = g.id
+            WHERE g.site_code = $1 AND (g.id = $2 OR gc.camera_id = $3)
+            ORDER BY g.id LIMIT 1`,
+          [siteCode, body?.gate_id ?? null, cameraId || null],
+        )
+      ).rows[0];
+      if (gateRow?.device_uid) {
+        await publishDoorPulse({
+          deviceUid: gateRow.device_uid,
+          requestedBy: `Plaka: ${String(body?.plate ?? '')}`,
+          doorId: gateRow.door_id ?? gateRow.id,
+          siteCode,
+        });
+      }
+    } catch (_) {
+      // Cihaz çevrimdışıysa olay kaydı etkilenmez (yerel UDP ayrıca gönderilmiştir)
+    }
+  }
+  return res;
 }
 
 // --- heartbeat -------------------------------------------------------------------------------------------------------------------

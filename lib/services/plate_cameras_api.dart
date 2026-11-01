@@ -30,15 +30,21 @@ abstract final class PlateCameraErrors {
 /// Kameranın bağlı olduğu kapı.
 @immutable
 class PlateCameraGate {
-  const PlateCameraGate({required this.id, required this.name, required this.directionMode});
+  const PlateCameraGate({required this.id, required this.name, required this.directionMode, this.doorId});
 
-  factory PlateCameraGate.fromJson(Map<String, dynamic> m) => PlateCameraGate(id: _int(m['id']), name: _str(m['name']) ?? 'Kapı', directionMode: _str(m['direction_mode']) ?? 'cift');
+  factory PlateCameraGate.fromJson(Map<String, dynamic> m) => PlateCameraGate(
+    id: _int(m['id']),
+    name: _str(m['name']) ?? 'Kapı',
+    directionMode: _str(m['direction_mode']) ?? 'cift',
+    doorId: _intOrNull(m['door_id']),
+  );
 
   final int id;
   final String name;
 
   /// `giris` | `cikis` | `cift`.
   final String directionMode;
+  final int? doorId;
 }
 
 /// Kenar PC'nin RTSP sınama sonucu: `none` | `pending` | `ok` | `failed`.
@@ -533,6 +539,21 @@ class PlateCamerasApi {
     throw _error(response, payload);
   }
 
+  /// Kameradan yerelde çekilen anlık kareyi sunucuya yükler ve kamera durumunu günceller.
+  Future<void> uploadSnapshot(String token, int site, int cameraId, Uint8List bytes) async {
+    final uri = Uri.parse('$_baseUrl${_site(site, 'cameras/$cameraId/snapshot')}');
+    final request = http.Request('PUT', uri)
+      ..headers.addAll(<String, String>{
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'image/jpeg',
+        'X-Captured-At': DateTime.now().toUtc().toIso8601String(),
+      })
+      ..bodyBytes = bytes;
+    try {
+      await _client.send(request).then(http.Response.fromStream).timeout(const Duration(seconds: 6));
+    } catch (_) {}
+  }
+
   Map<String, dynamic> _payloadOf(http.Response response) {
     try {
       final raw = jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true));
@@ -632,6 +653,7 @@ class PlateCamerasService {
   Future<DiscoveryStart> startDiscovery(int site, {int? edgeClientId}) => _guard((t) => api.startDiscovery(t, site, edgeClientId: edgeClientId));
   Future<EdgeCommand?> latestDiscovery(int site) => _guard((t) => api.latestDiscovery(t, site));
   Future<SnapshotFetch> snapshot(int site, int cameraId, {String? etag}) => _guard((t) => api.snapshot(t, site, cameraId, etag: etag));
+  Future<void> uploadSnapshot(int site, int cameraId, Uint8List bytes) => _guard((t) => api.uploadSnapshot(t, site, cameraId, bytes));
 }
 
 /// Rozet rengi -> kısa çevrimiçi metni: yeşil Çevrimiçi, sarı Gecikmeli, kırmızı Çevrimdışı, gri Hiç bağlanmadı.

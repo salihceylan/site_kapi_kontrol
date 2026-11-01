@@ -56,7 +56,7 @@ const idOrNull = (value) => (value === null || value === undefined ? null : Numb
 const CAMERA_SELECT = `
   SELECT c.id, c.name, c.brand, c.host, c.port, c.rtsp_url, c.username, (c.password_enc IS NOT NULL) AS has_password, c.is_active, c.last_event_at,
          c.probe_status, c.probe_message, c.probe_width, c.probe_height, c.probe_at,
-         gc.gate_id, gc.direction AS gate_direction, g.name AS gate_name, g.direction_mode AS gate_mode,
+         gc.gate_id, gc.direction AS gate_direction, g.name AS gate_name, g.direction_mode AS gate_mode, g.door_id AS gate_door_id,
          s.last_frame_at, s.last_read_at, s.reported_at, s.edge_client_id AS status_edge_id, sn.captured_at AS snapshot_at
     FROM camera_devices c
     LEFT JOIN plate_gate_cameras gc ON gc.camera_id = c.id
@@ -86,7 +86,7 @@ export function mapCameraRow(row, thresholds, now = Date.now()) {
     has_password: row.has_password === true,
     is_active: row.is_active !== false,
     managed: Boolean(row.rtsp_url) || (row.probe_status ?? 'none') !== 'none',
-    gate: gateId === null ? null : { id: gateId, name: row.gate_name, direction_mode: row.gate_mode },
+    gate: gateId === null ? null : { id: gateId, name: row.gate_name, direction_mode: row.gate_mode, door_id: idOrNull(row.gate_door_id) },
     direction: gateId === null ? null : row.gate_direction,
     status: cameraStatus(row, thresholds, now),
     last_frame_at: iso(row.last_frame_at),
@@ -375,6 +375,35 @@ export async function storeSnapshot(client, rawCameraId, buffer, headers, db = p
     await db.query(`SELECT 1 FROM plate_snapshot_watch WHERE site_code = $1 AND watched_at > NOW() - make_interval(secs => $2)`, [client.siteCode, watchWindowSeconds(settings)])
   ).rows[0];
   return { ok: true, watched: Boolean(watched), next_seconds: watched ? settings.snapshot_interval_seconds : settings.snapshot_idle_interval_seconds };
+}
+
+/** Yönetici uygulamasından doğrudan çekilen son kareyi saklar ve kameranın çalışma durumunu (last_frame_at / probe_status) günceller. */
+export async function storeManagerSnapshot({ siteCode, rawId, buffer, headers }, db = pool) {
+  const cameraId = parsePositive(rawId, 'Kamera', 'CAMERA_NOT_FOUND');
+  const upload = parseSnapshotUpload(buffer, headers);
+  const camera = (await db.query(`SELECT id, is_active FROM camera_devices WHERE id = $1 AND site_code = $2`, [cameraId, siteCode])).rows[0];
+  if (!camera) throw notFound('Kamera', 'CAMERA_NOT_FOUND');
+  if (camera.is_active === false) throw new PlatformError(409, 'CAMERA_INACTIVE', 'Kamera pasif; görüntü kabul edilmez.');
+  await db.query(
+    `INSERT INTO plate_camera_snapshots (camera_id, site_code, edge_client_id, jpeg, byte_size, width, height, captured_at, received_at)
+     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, NOW())
+     ON CONFLICT (camera_id) DO UPDATE SET jpeg = EXCLUDED.jpeg, byte_size = EXCLUDED.byte_size, width = EXCLUDED.width, height = EXCLUDED.height,
+       captured_at = EXCLUDED.captured_at, received_at = NOW()
+     WHERE plate_camera_snapshots.captured_at <= EXCLUDED.captured_at`,
+    [cameraId, siteCode, buffer, upload.byteSize, upload.width, upload.height, upload.capturedAt],
+  );
+  await db.query(
+    `INSERT INTO plate_camera_status (camera_id, site_code, last_frame_at, reported_at)
+     VALUES ($1, $2, NOW(), NOW())
+     ON CONFLICT (camera_id) DO UPDATE SET last_frame_at = NOW(), reported_at = NOW()`,
+    [cameraId, siteCode],
+  );
+  await db.query(
+    `UPDATE camera_devices SET probe_status = 'ok', probe_width = COALESCE($3, probe_width, 1280), probe_height = COALESCE($4, probe_height, 720), probe_at = NOW()
+      WHERE id = $1 AND site_code = $2 AND probe_status <> 'ok'`,
+    [cameraId, siteCode, upload.width, upload.height],
+  );
+  return { ok: true };
 }
 
 /** Yönetici ucu: kameranın son karesi (site kapsamlı, etkin kamera, saklama süresi içinde) ya da 404 NO_SNAPSHOT. */

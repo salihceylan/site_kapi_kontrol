@@ -19,6 +19,7 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/plate_camera_form_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/plate_discovery_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/plate_input.dart';
+import 'package:site_kapi_kontrol/ui/widgets/plate_camera_live_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/plate_gates_panel.dart';
 import 'package:site_kapi_kontrol/ui/widgets/plate_live_feed_panel.dart';
 
@@ -75,15 +76,15 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
   void initState() {
     super.initState();
     _site = widget.sites.isEmpty ? null : widget.sites.first;
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
-      _engineDecisionSub = PlateRecognitionEngine.instance.decisionsStream.listen((decision) {
-        if (!mounted) return;
-        setState(() {});
-        if (_tab == 0 || _tab == 1 || _tab == 2) {
+    _engineDecisionSub = PlateRecognitionEngine.instance.decisionsStream.listen((decision) {
+      if (!mounted) return;
+      setState(() {});
+      Future<void>.delayed(const Duration(milliseconds: 500), () {
+        if (mounted && (_tab == 0 || _tab == 1)) {
           unawaited(reload());
         }
       });
-    }
+    });
     unawaited(reload());
   }
 
@@ -144,7 +145,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
           _error = null;
           _loading = false;
         });
-        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows && !site.isResident) {
+        if (!site.isResident) {
           unawaited(_syncWindowsEngine(site));
         }
       }
@@ -587,6 +588,11 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
       accentColor: const Color(0xFF8B5CF6),
     ),
     const SizedBox(height: AppSpace.md),
+    PlateLiveCamerasSection(
+      key: ValueKey<String>('live_cams_${site.code}'),
+      camerasService: _cameras,
+      siteCode: site.code,
+    ),
     PlateLiveFeedPanel(key: ValueKey<int>(site.code), service: _service, siteCode: site.code),
   ];
 
@@ -648,7 +654,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
   }
 
   Future<void> _syncWindowsEngine(PlateSite site) async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows || site.isResident) return;
+    if (site.isResident) return;
     try {
       final camerasOverview = await _cameras.overview(site.code);
       final blacklist = await _service.blacklist(site.code);
@@ -657,9 +663,15 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
 
       final parkingSlots = <int, int>{};
       final insideCounts = <int, int>{};
+      final slotsByLabel = <String, int>{};
+      final insideByLabel = <String, int>{};
       for (final apt in inside.apartments) {
-        parkingSlots[apt.hashCode] = apt.parkingSlots;
-        insideCounts[apt.hashCode] = apt.insideCount;
+        if (apt.id != null) {
+          parkingSlots[apt.id!] = apt.parkingSlots;
+          insideCounts[apt.id!] = apt.insideCount;
+        }
+        slotsByLabel[apt.label] = apt.parkingSlots;
+        insideByLabel[apt.label] = apt.insideCount;
       }
 
       final vehiclesMap = <String, Map<String, dynamic>>{};
@@ -694,6 +706,8 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
         vehicles: vehiclesMap,
         parkingSlots: parkingSlots,
         insideCounts: insideCounts,
+        parkingSlotsByLabel: slotsByLabel,
+        insideCountsByLabel: insideByLabel,
       );
       if (mounted) setState(() {});
     } catch (_) {}

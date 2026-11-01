@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/models/plate_gates.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
+import 'package:site_kapi_kontrol/services/plate_camera_snapshot.dart';
 import 'package:site_kapi_kontrol/services/plate_cameras_api.dart';
 import 'package:site_kapi_kontrol/services/plate_recognition_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
@@ -10,6 +12,7 @@ import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/status_dot.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/plate_camera_form_dialog.dart';
+import 'package:site_kapi_kontrol/ui/widgets/plate_camera_live_view.dart';
 
 AppTone _tone(GateColor color) => switch (color) {
   GateColor.yesil => AppTone.success,
@@ -98,9 +101,31 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
   Future<void> _probeCamera(int cameraId) async {
     final cs = widget.camerasService;
     if (cs == null) return;
-    await _run(() async {
+    try {
+      final ov = await cs.overview(widget.siteCode);
+      final cam = ov.cameras.where((c) => c.id == cameraId).firstOrNull;
+      if (cam != null) {
+        final client = http.Client();
+        try {
+          final (_, snap) = await PlateCameraSnapshot.discover(client, cam);
+          if (snap.ok && snap.bytes != null) {
+            await cs.uploadSnapshot(widget.siteCode, cameraId, snap.bytes!);
+            if (!mounted) return;
+            AppSnack.show(context, 'Kamera bağlantısı başarılı — canlı görüntü alındı.', kind: AppSnackKind.success);
+            widget.onChanged();
+            return;
+          }
+        } finally {
+          client.close();
+        }
+      }
       await cs.probe(widget.siteCode, cameraId);
-    }, 'Kamera bağlantısı sınanıyor.');
+      if (!mounted) return;
+      AppSnack.show(context, 'Kamera bağlantısı sınanıyor.', kind: AppSnackKind.success);
+      widget.onChanged();
+    } on ApiException catch (e) {
+      if (mounted) AppSnack.show(context, e.message, kind: AppSnackKind.error);
+    }
   }
 
   Future<void> _unlinkCamera(PlateGate gate, GateCamera cam) async {
@@ -316,6 +341,9 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
     required String name,
     required GateBadge status,
     String? direction,
+    String? host,
+    int? port,
+    String? rtspUrl,
     bool isActive = true,
     DateTime? lastFrameAt,
     DateTime? lastReadAt,
@@ -350,9 +378,9 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
         children: <Widget>[
           // 1. Kare / Monitör Önizleme Alanı
           Container(
-            height: 110,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
+            height: 120,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: <Color>[
@@ -360,25 +388,40 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
                   Color(0xFF1E293B),
                 ],
               ),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.md - 1.2)),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.md - 1.2)),
             ),
             child: Stack(
+              fit: StackFit.expand,
               children: <Widget>[
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-                    ),
-                    child: Icon(
-                      Icons.videocam_rounded,
-                      size: 32,
-                      color: isActive ? const Color(0xFF10B981) : Colors.grey,
+                if (widget.camerasService != null && isActive)
+                  PlateCameraLivePreview(
+                    key: ValueKey<String>('gate_cam_preview_$cameraId'),
+                    cameraId: cameraId,
+                    name: name,
+                    host: host,
+                    port: port,
+                    rtspUrl: rtspUrl,
+                    isActive: isActive,
+                    siteCode: widget.siteCode,
+                    camerasService: widget.camerasService,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.md - 1.2)),
+                  )
+                else
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                      ),
+                      child: Icon(
+                        Icons.videocam_rounded,
+                        size: 32,
+                        color: isActive ? const Color(0xFF10B981) : Colors.grey,
+                      ),
                     ),
                   ),
-                ),
                 Positioned(
                   top: 8,
                   left: 8,
@@ -734,6 +777,9 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
                       name: cam.name,
                       status: cam.status,
                       direction: cam.direction,
+                      host: cam.host,
+                      port: cam.port,
+                      rtspUrl: cam.rtspUrl,
                       isActive: cam.isActive,
                       lastFrameAt: cam.lastFrameAt,
                       lastReadAt: cam.lastReadAt,
