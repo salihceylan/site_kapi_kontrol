@@ -4626,3 +4626,9 @@ Güvenlik kulübesindeki kenar PC uygulaması artık sunucunun gerçek kenar sö
   - **Beklenen Sonuç:** Ayarlar sekmesi içinde alt kategori çipleri (ChoiceChip) bulunur: **Kara Liste**, **Misafir İzinleri** ve **Kapı & Eşik Ayarları**. Yönetici tüm ayarları ve kuralları bu sekme altından yönetir.
 
 
+- [ ] **165.5. Kare Şeklinde Kamera Kartları ve Kusursuz Kamera Silme/Düzenleme/Atama:**
+  - **Nasıl Test Edilir:** Geçiş noktaları sekmesinde kapıya bağlı veya atanmamış kameraları inceleyin. Silme (çöp kutusu), düzenleme (kalem) ve kapıya atama butonlarına tıklayın.
+  - **Beklenen Sonuç:**
+    1. Kameralar ince yatay şeritler yerine üstünde koyu monitör önizleme alanı, durum rozetleri, altında kamera bilgisi ve müstakil butonları olan şık **kare kartlar** halinde gösterilir.
+    2. Kamera silme işlemi tıklandığında hata vermeden başarıyla siler (`deleteCamera` uç noktası çalışır).
+    3. Atanmamış kameralar tek tıkla "Kapıya Ata" modalı ile dilediğiniz SmartKeyPass kapısına bağlanır.

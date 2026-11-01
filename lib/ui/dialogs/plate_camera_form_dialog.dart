@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
-import 'package:site_kapi_kontrol/services/device_integrations_api.dart' show cameraBrandLabels;
 import 'package:site_kapi_kontrol/services/plate_cameras_api.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/plate_discovery_dialog.dart' show InlineNoticeText;
@@ -69,17 +68,13 @@ class _PlateCameraFormDialogState extends State<PlateCameraFormDialog> {
   bool _busy = false;
   String? _error;
 
-  List<BrandTemplate> get _brands => widget.overview.brands.isNotEmpty
-      ? widget.overview.brands
-      : <BrandTemplate>[for (final e in cameraBrandLabels.entries) BrandTemplate(code: e.key, label: e.value)];
 
   @override
   void initState() {
     super.initState();
     final c = widget.editing;
     final d = widget.prefill;
-    _brand = c?.brand ?? (_brands.any((b) => b.code == 'hikvision') ? 'hikvision' : _brands.first.code);
-    if (!_brands.any((b) => b.code == _brand)) _brand = _brands.first.code;
+    _brand = c?.brand ?? 'onvif';
     _name = TextEditingController(text: c?.name ?? d?.name ?? '');
     _host = TextEditingController(text: c?.host ?? d?.ip ?? '');
     final port = c?.port ?? d?.rtspPort;
@@ -105,12 +100,8 @@ class _PlateCameraFormDialogState extends State<PlateCameraFormDialog> {
 
   PlateCameraGate? get _gate => _gateId == null ? null : widget.overview.gates.cast<PlateCameraGate?>().firstWhere((g) => g!.id == _gateId, orElse: () => null);
 
-  BrandTemplate? get _brandTemplate => _brands.cast<BrandTemplate?>().firstWhere((b) => b!.code == _brand, orElse: () => null);
 
-  String get _rtspHint {
-    final path = _brandTemplate?.defaultRtspPath;
-    return path == null ? 'Boş bırakılırsa sistem ONVIF ile kamerayı kendisi bulur' : 'Boş bırakılırsa markaya göre: $path';
-  }
+  String get _rtspHint => 'Boş bırakılırsa sistem ONVIF ile kamerayı kendisi bulur (örn. rtsp://kamera-ip:554/h264/ch1/main)';
 
   String? _validate() {
     if (_name.text.trim().isEmpty) return 'Kamera adını yazın.';
@@ -177,14 +168,6 @@ class _PlateCameraFormDialogState extends State<PlateCameraFormDialog> {
             children: <Widget>[
               const Text('Kamera yerel ağ üzerinden izlenir; plaka otomatik tespit edilip kapı tetiklenir.'),
               const SizedBox(height: AppSpace.sm),
-              DropdownButtonFormField<String>(
-                key: const ValueKey<String>('cam_brand'),
-                initialValue: _brand,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Marka'),
-                items: <DropdownMenuItem<String>>[for (final b in _brands) DropdownMenuItem<String>(value: b.code, child: Text(b.label, overflow: TextOverflow.ellipsis))],
-                onChanged: _busy ? null : (v) => setState(() => _brand = v ?? _brand),
-              ),
               TextField(key: const ValueKey<String>('cam_name'), controller: _name, maxLength: 60, enabled: !_busy, decoration: const InputDecoration(labelText: 'Ad (örn. Giriş kapısı)')),
               TextField(key: const ValueKey<String>('cam_host'), controller: _host, enabled: !_busy, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'IP adresi')),
               TextField(

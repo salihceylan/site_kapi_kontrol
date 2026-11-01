@@ -41,6 +41,7 @@ import {
 
 import {
   createCamera,
+  deleteCamera,
   getCamerasOverview,
   getLatestDiscovery,
   probeCamera,

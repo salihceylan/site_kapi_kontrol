@@ -311,135 +311,295 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
   );
 
   /// Kapıya bağlanmış her bir kamera için özel çerçeve ve alt eylem çubuğu.
-  Widget _cameraFrame(PlateGate gate, GateCamera cam) {
+    Widget _cameraSquareCard({
+    required int cameraId,
+    required String name,
+    required GateBadge status,
+    String? direction,
+    bool isActive = true,
+    DateTime? lastFrameAt,
+    DateTime? lastReadAt,
+    PlateGate? gate,
+    GateOption? unassignedOption,
+  }) {
     final theme = Theme.of(context);
     final p = context.palette;
-    final dirLabel = gateCameraDirectionLabels[cam.direction] ?? cam.direction;
+    final dirLabel = direction == null ? null : (gateCameraDirectionLabels[direction] ?? direction);
 
     return Container(
-      margin: const EdgeInsets.only(top: AppSpace.sm),
-      padding: const EdgeInsets.all(AppSpace.sm),
+      width: 250,
+      margin: const EdgeInsets.only(top: AppSpace.xs),
       decoration: BoxDecoration(
         color: p.surface,
         borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(
-          color: cam.isActive ? p.border : p.statusCrit.withValues(alpha: 0.4),
+          color: isActive ? p.border : p.statusCrit.withValues(alpha: 0.4),
           width: 1.2,
         ),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          // Üst satır: Kamera İkonu + Ad + Yön Rozeti + Durum Rozeti
-          Row(
-            children: <Widget>[
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                ),
-                child: const Icon(Icons.videocam_rounded, size: 18, color: Color(0xFF10B981)),
+          // 1. Kare / Monitör Önizleme Alanı
+          Container(
+            height: 110,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: <Color>[
+                  Color(0xFF0F172A),
+                  Color(0xFF1E293B),
+                ],
               ),
-              const SizedBox(width: AppSpace.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      cam.name,
-                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-                      overflow: TextOverflow.ellipsis,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.md - 1.2)),
+            ),
+            child: Stack(
+              children: <Widget>[
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
                     ),
-                    Text(
-                      'Yön: $dirLabel${cam.isActive ? '' : ' • (Pasif)'}',
-                      style: theme.textTheme.bodySmall?.copyWith(color: p.textSecondary),
+                    child: Icon(
+                      Icons.videocam_rounded,
+                      size: 32,
+                      color: isActive ? const Color(0xFF10B981) : Colors.grey,
                     ),
-                  ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: AppSpace.xs),
-              GateBadgeView(badge: cam.status),
-            ],
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  right: 8,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: <Widget>[
+                      if (unassignedOption != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                            border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
+                          ),
+                          child: const Text(
+                            'Atanmadı',
+                            style: TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        )
+                      else
+                        GateBadgeView(badge: status),
+                      if (dirLabel != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                          ),
+                          child: Text(
+                            dirLabel,
+                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  bottom: 6,
+                  left: 8,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isActive ? const Color(0xFF10B981) : Colors.red,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        isActive ? 'RTSP CANLI' : 'PASİF',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
+                          color: Colors.white.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
 
-          // Bilgi satırı: son kare ve son plaka
-          if (cam.lastFrameAt != null || cam.lastReadAt != null) ...<Widget>[
-            const SizedBox(height: AppSpace.xs),
-            Wrap(
-              spacing: AppSpace.md,
-              runSpacing: 2,
+          // 2. Kamera Bilgileri
+          Padding(
+            padding: const EdgeInsets.fromLTRB(AppSpace.sm, AppSpace.sm, AppSpace.sm, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                if (cam.lastFrameAt != null)
-                  Text(
-                    'Son kare: ${_fmt(cam.lastFrameAt!)}',
-                    style: theme.textTheme.bodySmall?.copyWith(fontSize: 11, color: p.textSecondary),
-                  ),
-                if (cam.lastReadAt != null)
-                  Text(
-                    'Son plaka: ${_fmt(cam.lastReadAt!)}',
-                    style: theme.textTheme.bodySmall?.copyWith(fontSize: 11, color: p.textSecondary),
-                  ),
+                Text(
+                  name,
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  lastFrameAt != null
+                      ? 'Son kare: ${_fmt(lastFrameAt)}'
+                      : (lastReadAt != null ? 'Son plaka: ${_fmt(lastReadAt)}' : (isActive ? 'Kamera aktif' : 'Kamera pasif')),
+                  style: theme.textTheme.bodySmall?.copyWith(fontSize: 11, color: p.textSecondary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
-          ],
+          ),
 
-          // Alt Müstakil Eylem Butonları
-          if (widget.canWrite) ...<Widget>[
-            const Divider(height: AppSpace.md, thickness: 0.5),
-            Wrap(
-              spacing: AppSpace.xs,
-              runSpacing: AppSpace.xs,
-              children: <Widget>[
-                OutlinedButton.icon(
-                  onPressed: () => _probeCamera(cam.cameraId),
-                  icon: const Icon(Icons.speed_rounded, size: 14),
-                  label: const Text('Sına', style: TextStyle(fontSize: 12)),
-                  style: OutlinedButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: 4),
-                  ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => _editCamera(cam.cameraId),
-                  icon: const Icon(Icons.edit_outlined, size: 14),
-                  label: const Text('Düzenle', style: TextStyle(fontSize: 12)),
-                  style: OutlinedButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: 4),
-                  ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => _unlinkCamera(gate, cam),
-                  icon: const Icon(Icons.link_off_rounded, size: 14),
-                  label: const Text('Kapıdan Ayır', style: TextStyle(fontSize: 12)),
-                  style: OutlinedButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: 4),
-                  ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => _toggleCamera(cam),
-                  icon: Icon(cam.isActive ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded, size: 14),
-                  label: Text(cam.isActive ? 'Durdur' : 'Başlat', style: const TextStyle(fontSize: 12)),
-                  style: OutlinedButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: 4),
-                  ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => _deleteCamera(cam.cameraId, cam.name),
-                  icon: const Icon(Icons.delete_outline_rounded, size: 14, color: Colors.red),
-                  label: const Text('Sil', style: TextStyle(fontSize: 12, color: Colors.red)),
-                  style: OutlinedButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: 4),
-                    side: BorderSide(color: Colors.red.withValues(alpha: 0.5)),
-                  ),
-                ),
-              ],
+          const Divider(height: 1, thickness: 0.5),
+
+          // 3. Eylemler
+          if (widget.canWrite)
+            Padding(
+              padding: const EdgeInsets.all(AppSpace.xs),
+              child: unassignedOption != null
+                  ? Column(
+                      children: <Widget>[
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.tonalIcon(
+                            onPressed: () => _assignCameraToGate(unassignedOption),
+                            icon: const Icon(Icons.link_rounded, size: 14),
+                            label: const Text('Kapıya Ata', style: TextStyle(fontSize: 12)),
+                            style: FilledButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => _editCamera(cameraId),
+                                icon: const Icon(Icons.edit_outlined, size: 14),
+                                label: const Text('Düzenle', style: TextStyle(fontSize: 11)),
+                                style: OutlinedButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
+                              tooltip: 'Sil',
+                              onPressed: () => _deleteCamera(cameraId, name),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ],
+                        ),
+                      ],
+                    )
+                  : Column(
+                      children: <Widget>[
+                        Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => _probeCamera(cameraId),
+                                icon: const Icon(Icons.speed_rounded, size: 14),
+                                label: const Text('Sına', style: TextStyle(fontSize: 11)),
+                                style: OutlinedButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => _editCamera(cameraId),
+                                icon: const Icon(Icons.edit_outlined, size: 14),
+                                label: const Text('Düzenle', style: TextStyle(fontSize: 11)),
+                                style: OutlinedButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: <Widget>[
+                            if (gate != null)
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () => _unlinkCamera(
+                                    gate,
+                                    GateCamera(
+                                      cameraId: cameraId,
+                                      name: name,
+                                      direction: direction ?? 'auto',
+                                      isActive: isActive,
+                                      status: status,
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.link_off_rounded, size: 14),
+                                  label: const Text('Kapıdan Ayır', style: TextStyle(fontSize: 11)),
+                                  style: OutlinedButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: Icon(
+                                isActive ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
+                                size: 18,
+                                color: p.textSecondary,
+                              ),
+                              tooltip: isActive ? 'Durdur' : 'Başlat',
+                              onPressed: () => _toggleCamera(GateCamera(
+                                cameraId: cameraId,
+                                name: name,
+                                direction: direction ?? 'auto',
+                                isActive: isActive,
+                                status: status,
+                              )),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
+                              tooltip: 'Sil',
+                              onPressed: () => _deleteCamera(cameraId, name),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
             ),
-          ],
         ],
       ),
     );
@@ -564,8 +724,23 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
                 ),
               )
             else
-              for (final cam in gate.cameras)
-                _cameraFrame(gate, cam),
+              Wrap(
+                spacing: AppSpace.sm,
+                runSpacing: AppSpace.sm,
+                children: <Widget>[
+                  for (final cam in gate.cameras)
+                    _cameraSquareCard(
+                      cameraId: cam.cameraId,
+                      name: cam.name,
+                      status: cam.status,
+                      direction: cam.direction,
+                      isActive: cam.isActive,
+                      lastFrameAt: cam.lastFrameAt,
+                      lastReadAt: cam.lastReadAt,
+                      gate: gate,
+                    ),
+                ],
+              ),
 
             // Kapı Alt Eylemi: Kamera Ekle
             if (widget.canWrite && widget.onAddCamera != null) ...<Widget>[
@@ -616,41 +791,20 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
             ),
             const SizedBox(height: 4),
             _note('Bu kameralar sisteme eklenmiş ancak henüz bir geçiş noktasına atanmamıştır.'),
-            for (final cam in unassigned)
-              Container(
-                margin: const EdgeInsets.only(top: AppSpace.xs),
-                padding: const EdgeInsets.all(AppSpace.sm),
-                decoration: BoxDecoration(
-                  color: context.palette.surface,
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                  border: Border.all(color: context.palette.border),
-                ),
-                child: Row(
-                  children: <Widget>[
-                    const Icon(Icons.videocam_outlined, size: 18),
-                    const SizedBox(width: AppSpace.sm),
-                    Expanded(child: Text(cam.label, style: const TextStyle(fontWeight: FontWeight.w600))),
-                    if (widget.canWrite) ...<Widget>[
-                      FilledButton.tonal(
-                        onPressed: () => _assignCameraToGate(cam),
-                        style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
-                        child: const Text('Kapıya Ata'),
-                      ),
-                      const SizedBox(width: AppSpace.xs),
-                      IconButton(
-                        icon: const Icon(Icons.edit_outlined, size: 18),
-                        tooltip: 'Düzenle',
-                        onPressed: () => _editCamera(cam.id),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
-                        tooltip: 'Sil',
-                        onPressed: () => _deleteCamera(cam.id, cam.label),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+            Wrap(
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.sm,
+              children: <Widget>[
+                for (final cam in unassigned)
+                  _cameraSquareCard(
+                    cameraId: cam.id,
+                    name: cam.label,
+                    status: const GateBadge(state: 'hic_baglanmadi', color: GateColor.sari),
+                    isActive: true,
+                    unassignedOption: cam,
+                  ),
+              ],
+            ),
           ],
         ),
       ),
