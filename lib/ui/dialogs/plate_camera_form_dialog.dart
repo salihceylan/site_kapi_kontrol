@@ -79,7 +79,7 @@ class _PlateCameraFormDialogState extends State<PlateCameraFormDialog> {
     _host = TextEditingController(text: c?.host ?? d?.ip ?? '');
     final port = c?.port ?? d?.rtspPort;
     _port = TextEditingController(text: port?.toString() ?? '');
-    _rtsp = TextEditingController(text: c?.rtspUrl ?? '');
+    _rtsp = TextEditingController(text: c?.rtspUrl ?? (port == 8080 ? '/mjpeg' : ''));
     _user = TextEditingController(text: c?.username ?? '');
     final gate = c?.gate;
     if (gate != null && widget.overview.gates.any((g) => g.id == gate.id)) {

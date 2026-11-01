@@ -222,14 +222,19 @@ class PlateRecognitionEngine {
 
     final port = camera.port ?? 80;
     final user = camera.username ?? 'admin';
+    final customUrl = (camera.rtspUrl ?? '').trim();
 
-    // Hikvision / Dahua / Genel snapshot URL'leri
+    // Port 8080 veya MJPEG/HTTP ise snapshot.jpg ilk sırada
     final urls = <Uri>[
-      Uri.parse('http://$host:$port/ISAPI/Streaming/channels/101/picture'),
-      Uri.parse('http://$host:$port/onvif/snapshot'),
-      Uri.parse('http://$host:$port/cgi-bin/snapshot.cgi'),
+      if (customUrl.isNotEmpty && (customUrl.startsWith('http://') || customUrl.startsWith('https://')))
+        Uri.tryParse(customUrl)!,
+      if (customUrl.isNotEmpty && customUrl.startsWith('/'))
+        Uri.parse('http://$host:$port$customUrl'),
       Uri.parse('http://$host:$port/snapshot.jpg'),
-    ];
+      Uri.parse('http://$host:$port/onvif/snapshot'),
+      Uri.parse('http://$host:$port/ISAPI/Streaming/channels/101/picture'),
+      Uri.parse('http://$host:$port/cgi-bin/snapshot.cgi'),
+    ].whereType<Uri>().toList();
 
     for (final uri in urls) {
       try {

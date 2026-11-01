@@ -4635,4 +4635,11 @@ Güvenlik kulübesindeki kenar PC uygulaması artık sunucunun gerçek kenar sö
 - [ ] **165.6. Geçiş Noktaları Mükerrer Buton Temizliği (Yalnızca Üst Yeşil Banner Korunur):**
   - **Nasıl Test Edilir:** Geçiş noktaları sekmesine girin ve yeşil kahraman banner'ın hemen altını inceleyin.
   - **Beklenen Sonuç:** Yeşil banner'ın altında mükerrer olarak yer alan `[Ağda Kamera Ara (Otomatik Keşif)]` ve `[+ Yeni Kamera Ekle]` buton çubuğu kaldırılmıştır. Yalnızca üstteki zümrüt yeşili başlık içindeki butonlar (`[Ağda Kamera Ara]` ve `[Kamera Ekle]`) ve kapı kartlarının altındaki `[+ Bu Kapıya Kamera Ekle / Ata]` butonları yer alır; mükerrerlik ve kafa karışıklığı oluşmaz.
+- [ ] **165.7. Ağ Keşfi (Discovery), VPN/Tailscale Filtresi ve Yerel Kamera Akış Entegrasyonu:**
+  - **Nasıl Test Edilir:** Yerel kamera yayın sunucusunu başlatın ve ardından "Ağda Kamera Ara" butonuna dokunun.
+  - **Beklenen Sonuç:**
+    1. Keşif servisi Tailscale (`100.x.x.x`), sanal adaptörler veya geçersiz VPN IP'leri yerine gerçek fiziksel yerel Wi-Fi/Ethernet ağını (`192.168.1.x`) ve bu bilgisayardaki yayını (`127.0.0.1` / `192.168.1.20`) keşfeder.
+    2. Kameranın gerçek portu (örn. `8080`) otomatik olarak algılanır, zorla `554` yapılmaz; akış yolu otomatik olarak `/mjpeg` ile eşleşir.
+    3. Eklenen kamera anında canlı akış karelerini (`/snapshot.jpg` ve `/mjpeg`) çeker; plaka tanıma motoruyla eşzamanlı çalışır.
+
 

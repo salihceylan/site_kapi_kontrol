@@ -38,14 +38,24 @@ logger = logging.getLogger("SanalKamera")
 VIDEOS_DIR = r"G:\site\site_kapi_kontrol\plaka_vidolar"
 
 def get_local_ip():
+    # Tailscale (100.x.x.x) ve sanal VPN adaptörlerini atla, gerçek fiziksel LAN IP'sini (192.168.x.x / 10.x.x.x) döndür
+    try:
+        hostname = socket.gethostname()
+        for ip in socket.gethostbyname_ex(hostname)[2]:
+            if ip.startswith("192.168.") or ip.startswith("10.") or (ip.startswith("172.") and not ip.startswith("172.30.")):
+                return ip
+    except Exception:
+        pass
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
+        s.connect(("192.168.1.1", 80))
         ip = s.getsockname()[0]
         s.close()
-        return ip
+        if not ip.startswith("100."):
+            return ip
     except Exception:
-        return "127.0.0.1"
+        pass
+    return "127.0.0.1"
 
 # --- PLAKA TESPİT VE OCR MOTORU ---
 class SimplePlateDetector:
@@ -373,7 +383,7 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
                 self.send_header('Content-Type', 'image/jpeg')
                 self.send_header('Content-Length', str(len(jpeg)))
                 self.send_header('Access-Control-Allow-Origin', '*')
-                self.send_header('X-Plate', source.last_plate)
+                self.send_header('X-Plate', str(source.last_plate) if source.last_plate else '')
                 self.send_header('Server', 'IPKamera/1.0 (ONVIF/MJPEG)')
                 self.end_headers()
                 self.wfile.write(jpeg)
@@ -539,7 +549,7 @@ class OnvifDiscoveryServer:
           <wsa:Address>urn:uuid:ip-kamera-{local_ip.replace('.', '-')}</wsa:Address>
         </wsa:EndpointReference>
         <d:Types>dn:NetworkVideoTransmitter</d:Types>
-        <d:Scopes>onvif://www.onvif.org/type/video_transmitter onvif://www.onvif.org/name/IPKamera onvif://www.onvif.org/hardware/HikvisionCompatible</d:Scopes>
+        <d:Scopes>onvif://www.onvif.org/type/video_transmitter onvif://www.onvif.org/name/IPKamera onvif://www.onvif.org/hardware/IPKamera</d:Scopes>
         <d:XAddrs>http://{local_ip}:{self.http_port}/onvif/device_service</d:XAddrs>
         <d:MetadataVersion>1</d:MetadataVersion>
       </d:ProbeMatch>

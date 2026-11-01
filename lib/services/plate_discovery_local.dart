@@ -35,6 +35,14 @@ class LocalCameraDiscoveryService {
   }) async {
     final results = <String, DiscoveredDevice>{};
 
+    // 0. Bu bilgisayarda yerel çalışan kamera/yayın var mı (127.0.0.1)
+    try {
+      final localDev = await _checkLocalCamera('127.0.0.1');
+      if (localDev != null) {
+        results[localDev.ip] = localDev;
+      }
+    } catch (_) {}
+
     // 1. ONVIF WS-Discovery Taraması (UDP 3702)
     try {
       final onvifDevices = await _discoverOnvif(timeout: timeout);
@@ -108,7 +116,7 @@ class LocalCameraDiscoveryService {
     }
     String name = 'IP Kamera (ONVIF)';
     String model = 'ONVIF Uyumlu';
-    int? port = 80;
+    int port = 80;
 
     // XAddrs içinden portu çekmeye çalış
     final xAddrsMatch = RegExp(r'<[^>]*XAddrs[^>]*>([^<]+)<\/').firstMatch(xml);
@@ -122,29 +130,34 @@ class LocalCameraDiscoveryService {
       }
     }
 
-    if (xml.toLowerCase().contains('hikvision')) {
-      name = 'Hikvision Kamera';
-      model = 'Hikvision';
-    } else if (xml.toLowerCase().contains('dahua')) {
+    if (xml.toLowerCase().contains('dahua')) {
       name = 'Dahua Kamera';
       model = 'Dahua';
     } else if (xml.toLowerCase().contains('tiandy')) {
       name = 'Tiandy Kamera';
       model = 'Tiandy';
+    } else if (xml.toLowerCase().contains('hikvision') && !xml.contains('HikvisionCompatible')) {
+      name = 'Hikvision Kamera';
+      model = 'Hikvision';
+    } else {
+      name = 'IP Kamera (Port $port)';
+      model = 'ONVIF / RTSP';
     }
+
+    final targetPort = (port != 80 && port != 554) ? port : 554;
 
     return DiscoveredDevice(
       ip: ip,
-      ports: <int>[port, 554],
+      ports: <int>[port, targetPort],
       name: name,
       model: model,
       source: 'onvif',
-      label: '$name ($ip)',
-      rtspPort: 554,
+      label: '$name ($ip:$port)',
+      rtspPort: targetPort,
     );
   }
 
-  /// Aktif yerel ağın /24 IP bloğunu bulur
+  /// Aktif yerel ağın /24 IP bloğunu bulur (Tailscale 100.x ve sanal bağdaştırıcıları atlar)
   Future<List<String>> _getLocalSubnetIps() async {
     final ips = <String>[];
     try {
@@ -152,16 +165,36 @@ class LocalCameraDiscoveryService {
         type: InternetAddressType.IPv4,
         includeLoopback: false,
       );
+
+      // Öncelik: Gerçek fiziksel LAN (192.168.x.x, 10.x.x.x)
+      // Tailscale (100.x.x.x), vEthernet (172.30.x.x), VirtualBox vb. atla
+      NetworkInterface? preferredIface;
       for (final iface in interfaces) {
+        final ifaceName = iface.name.toLowerCase();
+        if (ifaceName.contains('tailscale') || ifaceName.contains('vethernet') || ifaceName.contains('virtual') || ifaceName.contains('host-only')) {
+          continue;
+        }
         for (final addr in iface.addresses) {
+          final ip = addr.address;
+          if (ip.startsWith('100.') || ip.startsWith('172.30.')) continue;
+          if (ip.startsWith('192.168.') || ip.startsWith('10.')) {
+            preferredIface = iface;
+            break;
+          }
+        }
+        if (preferredIface != null) break;
+      }
+
+      final ifaceToScan = preferredIface ?? interfaces.firstOrNull;
+      if (ifaceToScan != null) {
+        for (final addr in ifaceToScan.addresses) {
           final parts = addr.address.split('.');
           if (parts.length == 4) {
             final subnetPrefix = '${parts[0]}.${parts[1]}.${parts[2]}';
-            // .1 - .254 aralığı
             for (var i = 1; i < 255; i++) {
               ips.add('$subnetPrefix.$i');
             }
-            return ips; // İlk geçerli yerel ağı tara
+            return ips;
           }
         }
       }
@@ -218,6 +251,28 @@ class LocalCameraDiscoveryService {
     }
 
     return found;
+  }
+
+  Future<DiscoveredDevice?> _checkLocalCamera(String host) async {
+    final openPorts = <int>[];
+    for (final port in _cameraPorts) {
+      if (await _isPortOpen(host, port, timeout: const Duration(milliseconds: 150))) {
+        openPorts.add(port);
+      }
+    }
+    if (openPorts.isEmpty) return null;
+    final primaryPort = openPorts.contains(8080)
+        ? 8080
+        : (openPorts.contains(554) ? 554 : openPorts.first);
+    return DiscoveredDevice(
+      ip: host,
+      ports: openPorts,
+      name: 'Yerel Kamera / Yayın (Port $primaryPort)',
+      model: 'Yerel Akış',
+      source: 'yerel',
+      label: 'Yerel Kamera ($host:$primaryPort)',
+      rtspPort: primaryPort,
+    );
   }
 
   Future<bool> _isPortOpen(String host, int port, {required Duration timeout}) async {
