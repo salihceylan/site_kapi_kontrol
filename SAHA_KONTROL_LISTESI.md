@@ -4632,3 +4632,7 @@ Güvenlik kulübesindeki kenar PC uygulaması artık sunucunun gerçek kenar sö
     1. Kameralar ince yatay şeritler yerine üstünde koyu monitör önizleme alanı, durum rozetleri, altında kamera bilgisi ve müstakil butonları olan şık **kare kartlar** halinde gösterilir.
     2. Kamera silme işlemi tıklandığında hata vermeden başarıyla siler (`deleteCamera` uç noktası çalışır).
     3. Atanmamış kameralar tek tıkla "Kapıya Ata" modalı ile dilediğiniz SmartKeyPass kapısına bağlanır.
+- [ ] **165.6. Geçiş Noktaları Mükerrer Buton Temizliği (Yalnızca Üst Yeşil Banner Korunur):**
+  - **Nasıl Test Edilir:** Geçiş noktaları sekmesine girin ve yeşil kahraman banner'ın hemen altını inceleyin.
+  - **Beklenen Sonuç:** Yeşil banner'ın altında mükerrer olarak yer alan `[Ağda Kamera Ara (Otomatik Keşif)]` ve `[+ Yeni Kamera Ekle]` buton çubuğu kaldırılmıştır. Yalnızca üstteki zümrüt yeşili başlık içindeki butonlar (`[Ağda Kamera Ara]` ve `[Kamera Ekle]`) ve kapı kartlarının altındaki `[+ Bu Kapıya Kamera Ekle / Ata]` butonları yer alır; mükerrerlik ve kafa karışıklığı oluşmaz.
+

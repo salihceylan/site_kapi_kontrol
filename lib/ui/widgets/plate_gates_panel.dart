@@ -817,36 +817,6 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        // Ağda kamera arama & Hızlı İşlemler Toolbar
-        if (widget.canWrite)
-          Padding(
-            padding: const EdgeInsets.only(bottom: AppSpace.md),
-            child: Wrap(
-              spacing: AppSpace.sm,
-              runSpacing: AppSpace.xs,
-              children: <Widget>[
-                if (widget.onDiscoverCameras != null)
-                  OutlinedButton.icon(
-                    onPressed: widget.onDiscoverCameras,
-                    icon: const Icon(Icons.wifi_find_rounded, size: 18),
-                    label: const Text('Ağda Kamera Ara (Otomatik Keşif)'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.sm),
-                    ),
-                  ),
-                if (widget.onAddCamera != null && o.gates.isNotEmpty)
-                  FilledButton.icon(
-                    onPressed: () => widget.onAddCamera!(o.gates.first),
-                    icon: const Icon(Icons.add_rounded, size: 18),
-                    label: const Text('Yeni Kamera Ekle'),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.sm),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
         _note('SmartKeyPass kapılarına bağlı kameralar ve çalışma durumları burada listelenir. Plaka okunduğunda kapı yerel ağdan SmartKeyPass ile otomatik açılır, kapatma emniyeti bariyerin kendi dedektöründedir.'),
 
         _section(
