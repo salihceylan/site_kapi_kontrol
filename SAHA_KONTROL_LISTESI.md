@@ -4571,3 +4571,33 @@ Güvenlik kulübesindeki kenar PC uygulaması artık sunucunun gerçek kenar sö
 - [ ] **163.4. Kamera (CCTV) Modülünün Kaldırılması:**
   - **Nasıl Test Edilir:** Yan menüyü, modül vitrinini (Panel) ve modül kataloğunu inceleyin.
   - **Beklenen Sonuç:** "Kamera (CCTV) - Kapı olaylarını kamera kayıtlarıyla eşleştirin" modülü vitrinden, menüden ve modül listesinden tamamen kalkmıştır. Kafa karışıklığı yaratacak ikinci bir kamera modülü bulunmaz.
+
+---
+
+## 164. 💻 Windows Masaüstü Uygulaması İndirme ve Otomatik Güncelleme (Auto-Update) Mimarisi
+*Windows bilgisayarda webden sistemi açan kullanıcılara tek tıkla masaüstü uygulamasını indirme imkanı sağlanması ve masaüstü uygulamasının sistem güncellendiğinde kendini otomatik güncellemesi.*
+
+- [ ] **164.1. Windows Tarayıcısında Açılışta İndirme Bannerı ve Rozeti:**
+  - **Nasıl Test Edilir:** Windows bir bilgisayarda Google Chrome veya Microsoft Edge tarayıcısını açıp `https://api.gudeteknoloji.com.tr` (veya web arayüzü) adresine gidin. Giriş sayfasını (`LoginPage`) ve açılış bannerını inceleyin.
+  - **Beklenen Sonuç:** 
+    1. Tarayıcıda açılışta `"Site Yönetim (Windows) - Kamera ve Plaka Tanıma destekli resmi Windows uygulamasını indirin."` bannerı ve `"Windows Uygulamasını İndir"` butonu belirir.
+    2. Giriş ekranında (Login) `"Windows Uygulamasını İndir (.ZIP)"` butonu yer alır.
+    3. Sağ altta kapatıldığında dahi tıklanabilir `"Windows İndir"` rozeti hazır bekler.
+- [ ] **164.2. Panel (Dashboard) ve Plaka Tanıma Ekranlarında İndirme Düğmeleri:**
+  - **Nasıl Test Edilir:** Web tarayıcısında oturum açıp ana paneli ve Plaka Tanıma ekranını ziyaret edin; ayrıca sağ üstteki Ayarlar çekmecesini (dişli) açın.
+  - **Beklenen Sonuç:** 
+    1. Üst çubukta (AppBar) Windows kullanıcıları için mavi simgeli `"Windows Uygulamasını İndir (.ZIP)"` butonu yer alır.
+    2. Ayarlar menüsünde `"Windows Uygulamasını İndir (.ZIP)"` eylemi listelenir.
+    3. Plaka Tanıma ekranında izleme modu kartının altında doğrudan `"Windows Saha Uygulamasını İndir (.ZIP)"` butonu sunulur. Tıklandığında `site_yonetim_windows.zip` paketi anında inmeye başlar.
+- [ ] **164.3. Windows Masaüstü Uygulaması Başlangıçta Otomatik Güncelleme Denetimi:**
+  - **Nasıl Test Edilir:** İndirilen Windows masaüstü uygulamasını (`site_kapi_kontrol.exe`) çalıştırın.
+  - **Beklenen Sonuç:** Uygulama açılışta arka planda sessizce `GET /api/windows/version` uç noktasını sorgular. Yeni bir sürüm yayınlandığında ekrana `"Yeni Sürüm Mevcut! (vX.X.X)"` başlıklı güncelleme diyaloğu gelir ve yenilikleri listeler.
+- [ ] **164.4. Ayarlar Panelinden Manuel "Güncellemeleri Denetle" İşlemi:**
+  - **Nasıl Test Edilir:** Windows masaüstü uygulamasında sağ üstteki Ayarlar (dişli) çekmecesini açın ve `"Güncellemeleri Denetle"` butonuna tıklayın.
+  - **Beklenen Sonuç:** Uygulama güncelse `"Uygulamanız güncel (v1.0.0). Yeni bir güncelleme bulunmuyor."` bildirimi gösterilir; yeni sürüm varsa güncelleme diyaloğu açılır.
+- [ ] **164.5. Tek Tıkla Güncelleme, İlerleme Çubuğu ve Otomatik Yeniden Başlatma:**
+  - **Nasıl Test Edilir:** Güncelleme diyaloğunda `"Şimdi Güncelle"` butonuna dokunun.
+  - **Beklenen Sonuç:**
+    1. Ekranda `"Uygulama Güncelleniyor"` modalı açılır, indirilen megabayt ve yüzde canlı ilerleme çubuğuyla gösterilir.
+    2. İndirme bittiğinde uygulama kapanır, bağımsız `updater.bat` betiği yeni dosyaları klasöre açar ve güncellenmiş uygulamayı otomatik olarak yeniden başlatır. Kullanıcının manuel kurulum yapmasına gerek kalmaz.
+

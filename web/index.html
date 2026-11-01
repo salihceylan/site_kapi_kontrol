@@ -252,6 +252,7 @@
 
       var isAndroid = /Android/i.test(navigator.userAgent);
       var isIos = /iPhone|iPad|iPod/i.test(navigator.userAgent) && !window.MSStream;
+      var isWindows = /Windows|Win32|Win64|WOW64/i.test(navigator.userAgent);
       var IOS_APP_STORE_URL = ""; // Resmi App Store linki yayına girince buraya eklenecektir
 
       function showBanner() {
@@ -266,7 +267,7 @@
         banner.classList.remove('show');
         setTimeout(function () {
           banner.style.display = 'none';
-          if (toPill && pill && (isAndroid || isIos)) {
+          if (toPill && pill && (isAndroid || isIos || isWindows)) {
             pill.style.display = 'flex';
           }
         }, 350);
@@ -301,7 +302,39 @@
         document.body.removeChild(link);
       }
 
-      if (isAndroid) {
+      function triggerWindowsDownload() {
+        if (descEl) {
+          descEl.textContent = 'İndirme başladı! İndirilen ZIP dosyasını klasöre çıkarıp uygulamayı çalıştırabilirsiniz.';
+        }
+        if (installBtn) {
+          installBtn.textContent = 'Tekrar İndir';
+        }
+        var link = document.createElement('a');
+        link.href = '/download/windows';
+        link.download = 'site_yonetim_windows.zip';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
+      if (isWindows) {
+        if (titleEl) titleEl.textContent = 'Site Yönetim (Windows)';
+        if (descEl) descEl.textContent = 'Kamera ve Plaka Tanıma destekli resmi Windows uygulamasını indirin.';
+        if (installBtn) {
+          installBtn.textContent = 'Windows Uygulamasını İndir';
+          installBtn.onclick = triggerWindowsDownload;
+        }
+        if (pill) {
+          pill.querySelector('span').textContent = 'Windows İndir';
+        }
+        setTimeout(function () {
+          if (!sessionStorage.getItem('banner_dismissed_session')) {
+            showBanner();
+          } else if (pill) {
+            pill.style.display = 'flex';
+          }
+        }, 1000);
+      } else if (isAndroid) {
         if (titleEl) titleEl.textContent = 'Site Yönetim (Android)';
         if (descEl) descEl.textContent = 'Resmi Android uygulamasını (.APK) doğrudan telefonunuza indirin.';
         if (installBtn) {

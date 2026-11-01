@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:url_launcher/url_launcher.dart';
 import 'package:site_kapi_kontrol/services/locale_service.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -541,6 +543,32 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       const SizedBox(height: AppSpace.xs),
                       // Yasal belgeler: oturum açmadan da okunabilir (mağaza ve KVKK gereği).
+                      if (kIsWeb) ...[
+                        OutlinedButton.icon(
+                          onPressed: () => launchUrl(
+                            Uri.parse(defaultTargetPlatform == TargetPlatform.windows
+                                ? '/download/windows'
+                                : '/site_yonetim.apk'),
+                            mode: LaunchMode.externalApplication,
+                          ),
+                          icon: Icon(
+                            defaultTargetPlatform == TargetPlatform.windows
+                                ? Icons.desktop_windows_rounded
+                                : Icons.download_rounded,
+                            size: 18,
+                          ),
+                          label: Text(
+                            defaultTargetPlatform == TargetPlatform.windows
+                                ? 'Windows Uygulamasını İndir (.ZIP)'
+                                : 'Android Uygulamasını İndir (.APK)',
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.sm),
+                          ),
+                        ),
+                        const SizedBox(height: AppSpace.sm),
+                      ],
                       LegalFooterLinks(api: widget.legalApi),
                       const SizedBox(height: AppSpace.xs),
                       Text(

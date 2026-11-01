@@ -141,7 +141,9 @@ import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 import 'package:site_kapi_kontrol/models/platform_module.dart';
 import 'package:site_kapi_kontrol/models/work_tracking_models.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:site_kapi_kontrol/services/windows_update_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:site_kapi_kontrol/config/app_config.dart';
 import 'package:site_kapi_kontrol/models/feedback_models.dart';
 import 'package:site_kapi_kontrol/services/feedback_api.dart';
@@ -668,6 +670,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_openSharedReceipt());
       _checkForceChangePassword();
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+        WindowsUpdateService.instance.checkForUpdates(context, silent: true);
+      }
     });
 
     final session = widget.authService.session;
@@ -6439,6 +6444,29 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// Ayarlar panelindeki sayfa seçmeyen eylemler: "Masaüstüne Widget Ekle" (yalnız mobilde ve süper kullanıcı dışında;
   /// masaüstünde "gönderildi" mesajı yanıltıcı olurdu). Panel kapanır, sonra istek gönderilir.
   List<YanMenuAction> _settingsExtraActions(UserSession session) => <YanMenuAction>[
+        if (kIsWeb)
+          YanMenuAction(
+            icon: Icons.desktop_windows_rounded,
+            title: defaultTargetPlatform == TargetPlatform.windows
+                ? 'Windows Uygulamasını İndir (.ZIP)'
+                : 'Masaüstü / Mobil İndir',
+            onTap: () {
+              Navigator.of(context).pop();
+              launchUrl(
+                Uri.parse(defaultTargetPlatform == TargetPlatform.windows ? '/download/windows' : '/site_yonetim.apk'),
+                mode: LaunchMode.externalApplication,
+              );
+            },
+          ),
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows)
+          YanMenuAction(
+            icon: Icons.system_update_rounded,
+            title: 'Güncellemeleri Denetle',
+            onTap: () {
+              Navigator.of(context).pop();
+              WindowsUpdateService.instance.checkForUpdates(context, silent: false);
+            },
+          ),
         // P1-14 (K11): her ekrandan erişilebilir geri bildirim; ekran adı ve rota formda otomatik eklenir.
         YanMenuAction(
           icon: Icons.rate_review_outlined,
@@ -6628,6 +6656,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ),
         actions: [
+          if (kIsWeb && defaultTargetPlatform == TargetPlatform.windows)
+            Tooltip(
+              message: 'Windows Uygulamasını İndir (.ZIP)',
+              child: IconButton(
+                icon: const Icon(Icons.download_for_offline_outlined, color: Colors.blueAccent),
+                onPressed: () => launchUrl(
+                  Uri.parse('/download/windows'),
+                  mode: LaunchMode.externalApplication,
+                ),
+              ),
+            ),
           if (_canToggleDualMode)
             _buildModeToggle(
               context,

@@ -261,6 +261,42 @@ app.use(platformServicesRouter);
 if (fs.existsSync(webBuildPath)) {
   console.log(`[WEB] Serving Flutter Web from: ${webBuildPath}`);
 
+  // Windows Desktop doğrudan indirme uç noktası (.zip)
+  app.get(['/download/windows', '/download/site_yonetim_windows.zip', '/site_yonetim_windows.zip', '/site_kapi_kontrol_windows.zip'], (req, res, next) => {
+    const zipPath = path.join(webBuildPath, 'site_yonetim_windows.zip');
+    if (fs.existsSync(zipPath)) {
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', 'attachment; filename="site_yonetim_windows.zip"');
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.sendFile(zipPath);
+    }
+    return res.status(404).json({
+      error: 'WINDOWS_BUILD_NOT_FOUND',
+      message: 'Windows masaustu surumu henuz hazir degil veya yukleniyor.'
+    });
+  });
+
+  // Windows Desktop sürüm manifesti (Auto-update ve sürüm kontrolü için)
+  app.get(['/api/windows/version', '/download/windows/version.json', '/download/windows/manifest.json'], (req, res) => {
+    const manifestPath = path.join(webBuildPath, 'windows_version.json');
+    if (fs.existsSync(manifestPath)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        res.setHeader('Cache-Control', 'no-cache');
+        return res.json(data);
+      } catch (e) {}
+    }
+    res.setHeader('Cache-Control', 'no-cache');
+    return res.json({
+      version: '1.0.0',
+      build_number: 1,
+      download_url: '/download/windows',
+      mandatory: false,
+      release_date: new Date().toISOString(),
+      notes: 'Windows Saha & Plaka Tanima Yonetim Uygulamasi'
+    });
+  });
+
   // Android APK dogrudan indirme uc noktasi (resmi native uygulamayi dogrudan indirir)
   app.get(['/download/app', '/download/site_yonetim.apk', '/site_yonetim.apk'], (req, res, next) => {
     const apkPath = path.join(webBuildPath, 'site_yonetim.apk');

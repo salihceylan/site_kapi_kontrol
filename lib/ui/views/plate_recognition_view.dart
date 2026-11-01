@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/plate_gates.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
@@ -613,6 +614,21 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
                   'Kamera ile otomatik plaka tespiti ve SmartKeyPass kapı tetikleme işlemi kameralarla aynı yerel ağda (LAN) çalışan Windows masaüstü güvenlik / yönetim bilgisayarında yürütülür. Web ve mobil cihazlardan canlı akış ve olay kayıtları izlenebilir.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.palette.textSecondary),
                 ),
+                if (kIsWeb) ...<Widget>[
+                  const SizedBox(height: AppSpace.sm),
+                  FilledButton.icon(
+                    onPressed: () => launchUrl(
+                      Uri.parse('/download/windows'),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                    icon: const Icon(Icons.download_rounded, size: 18),
+                    label: const Text('Windows Saha Uygulamasını İndir (.ZIP)'),
+                    style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.xs),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
