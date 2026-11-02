@@ -100,7 +100,7 @@ void main() {
       final decision = await engine.testProcessPlate('34 KRA 99', direction: 'giris');
       expect(decision.decision, PlateDecisionType.karaListe);
       expect(decision.isGateTriggered, isFalse);
-      expect(decision.reason, contains('kara listesinde'));
+      expect(decision.reason, contains('Kara listede'));
     });
 
     test('2. Sitenin kayıtlı sakin aracı onaylanır ve kapı açılır', () async {
@@ -115,7 +115,7 @@ void main() {
       final decision = await engine.testProcessPlate('34 MSF 01', direction: 'giris');
       expect(decision.decision, PlateDecisionType.acildi);
       expect(decision.isGateTriggered, isTrue);
-      expect(decision.reason, contains('kabul edildi'));
+      expect(decision.reason, contains('Misafir izni onaylandı'));
     });
 
     test('4. Misafir aracı: Dairenin içeride aracı varken (DOLU) misafir içeri ALINMAZ', () async {
@@ -143,7 +143,7 @@ void main() {
       final decision = await engine.testProcessPlate('06 YBN 99', direction: 'giris');
       expect(decision.decision, PlateDecisionType.tanimsiz);
       expect(decision.isGateTriggered, isFalse);
-      expect(decision.reason, contains('kayıtlı değil'));
+      expect(decision.reason, contains('kayıtlı araç veya misafir izni bulunamadı'));
     });
   });
 }

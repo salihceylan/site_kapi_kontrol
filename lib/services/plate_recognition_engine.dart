@@ -511,9 +511,9 @@ class PlateRecognitionEngine {
     final direction = (rawDir == 'auto' || rawDir.isEmpty) ? 'giris' : rawDir;
 
     // 1. KARA LİSTE KONTROLÜ
-    final isBlacklisted = _blacklist.contains(plate) || _demoBlacklist.containsKey(plate);
+    final isBlacklisted = _blacklist.contains(plate) || (_siteCode == null && _demoBlacklist.containsKey(plate));
     if (isBlacklisted) {
-      final customReason = _blacklistReasons[plate] ?? _demoBlacklist[plate];
+      final customReason = _blacklistReasons[plate] ?? (_siteCode == null ? _demoBlacklist[plate] : null);
       // customReason resolved above
       if (!silentLog) {
         debugPrint('[PlateRecognitionEngine] Plaka KARA LİSTEDE: $plate (Giriş Reddedildi)');
@@ -530,8 +530,8 @@ class PlateRecognitionEngine {
       );
     }
 
-    // 2. SAKİN ARACI KONTROLÜ
-    final residentInfo = _registeredVehicles[plate] ?? _demoVehicles[plate];
+    // 2. SAKİN ARACI KONTROLÜ (Gerçek siteye bağlıyken sadece veritabanındaki kayıtlı araçlar geçerlidir)
+    final residentInfo = _registeredVehicles[plate] ?? (_siteCode == null ? _demoVehicles[plate] : null);
     if (residentInfo != null) {
       final aptLabel = residentInfo['apartment_label'] as String?;
       final personLabel = residentInfo['person_label'] as String?;
@@ -551,8 +551,8 @@ class PlateRecognitionEngine {
       );
     }
 
-    // 3. MİSAFİR ARACI VE OTOPARK DOLULUK KONTROLÜ
-    final guestInfo = _guestPermits[plate] ?? _demoGuestPermits[plate];
+    // 3. MİSAFİR ARACI VE OTOPARK DOLULUK KONTROLÜ (Gerçek sitede sadece veritabanındaki misafir izinleri geçerlidir)
+    final guestInfo = _guestPermits[plate] ?? (_siteCode == null ? _demoGuestPermits[plate] : null);
     if (guestInfo != null) {
       final aptId = guestInfo['apartment_id'] as int?;
       final aptLabel = guestInfo['apartment_label'] as String?;
