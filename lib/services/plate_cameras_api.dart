@@ -30,13 +30,24 @@ abstract final class PlateCameraErrors {
 /// Kameranın bağlı olduğu kapı.
 @immutable
 class PlateCameraGate {
-  const PlateCameraGate({required this.id, required this.name, required this.directionMode, this.doorId});
+  const PlateCameraGate({
+    required this.id,
+    required this.name,
+    required this.directionMode,
+    this.doorId,
+    this.consecutiveVehicleDelaySeconds = 10,
+    this.entryRearSuppressSeconds = 60,
+    this.exitRearSuppressSeconds = 60,
+  });
 
   factory PlateCameraGate.fromJson(Map<String, dynamic> m) => PlateCameraGate(
     id: _int(m['id']),
     name: _str(m['name']) ?? 'Kapı',
     directionMode: _str(m['direction_mode']) ?? 'cift',
     doorId: _intOrNull(m['door_id']),
+    consecutiveVehicleDelaySeconds: _int(m['consecutive_vehicle_delay_seconds'], 10),
+    entryRearSuppressSeconds: _int(m['entry_rear_suppress_seconds'], 60),
+    exitRearSuppressSeconds: _int(m['exit_rear_suppress_seconds'], 60),
   );
 
   final int id;
@@ -45,6 +56,9 @@ class PlateCameraGate {
   /// `giris` | `cikis` | `cift`.
   final String directionMode;
   final int? doorId;
+  final int consecutiveVehicleDelaySeconds;
+  final int entryRearSuppressSeconds;
+  final int exitRearSuppressSeconds;
 }
 
 /// Kenar PC'nin RTSP sınama sonucu: `none` | `pending` | `ok` | `failed`.

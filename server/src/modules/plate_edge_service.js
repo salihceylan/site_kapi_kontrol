@@ -94,6 +94,11 @@ const PERMITS_SQL = `
   LEFT JOIN site_blocks b ON b.id = a.block_id
   WHERE p.site_code = $1 AND p.revoked_at IS NULL AND p.valid_until > NOW() ORDER BY p.id`;
 
+// Plaka bazlı arka plaka engelleme (Örn: Giriş yapan aracın çıkış kamerası tarafından xx sn okunmaması)
+const plateSuppressions = new Map();
+// Kapı bazlı bir sonraki araç bekleme süresi
+const gateNextVehicleLocks = new Map();
+
 const APARTMENTS_SQL = `
   SELECT a.id, a.parking_slots, COALESCE(p.n, 0)::INT AS inside_count FROM apartments a
   LEFT JOIN (SELECT apartment_id, COUNT(*) AS n FROM plate_presence WHERE site_code = $1 AND inside GROUP BY apartment_id) p ON p.apartment_id = a.id
@@ -144,6 +149,9 @@ export async function syncEdge(client, query) {
         direction_mode: gate.direction_mode,
         device_uid: gate.device_uid ?? null,
         is_active: gate.is_active !== false,
+        consecutive_vehicle_delay_seconds: Number(gate.consecutive_vehicle_delay_seconds ?? 10),
+        entry_rear_suppress_seconds: Number(gate.entry_rear_suppress_seconds ?? 60),
+        exit_rear_suppress_seconds: Number(gate.exit_rear_suppress_seconds ?? 60),
         cameras: config.bindings
           .filter((b) => Number(b.gate_id) === Number(gate.id))
           .map((b) => ({ camera_id: Number(b.camera_id), name: b.name, direction: b.direction, is_active: b.is_active !== false })),
@@ -265,7 +273,7 @@ export async function recordEdgeEvent(client, body, { writeDoorLog = recordDoorA
     const gateId = event.gateId ?? (camera.gate_id === null || camera.gate_id === undefined ? null : Number(camera.gate_id));
     let gate = null;
     if (gateId !== null) {
-      gate = (await db.query(`SELECT id, name, direction_mode, door_id FROM plate_gates WHERE id = $1 AND site_code = $2`, [gateId, siteCode])).rows[0] ?? null;
+      gate = (await db.query(`SELECT id, name, direction_mode, door_id, consecutive_vehicle_delay_seconds, entry_rear_suppress_seconds, exit_rear_suppress_seconds FROM plate_gates WHERE id = $1 AND site_code = $2`, [gateId, siteCode])).rows[0] ?? null;
       if (!gate) throw notFound('Kapı', 'GATE_NOT_FOUND');
     }
     const existing = (await db.query(`SELECT inside FROM plate_presence WHERE site_code = $1 AND plate = $2 FOR UPDATE`, [siteCode, event.plate])).rows[0] ?? null;
@@ -275,6 +283,43 @@ export async function recordEdgeEvent(client, body, { writeDoorLog = recordDoorA
       declared: event.direction,
       inside: existing?.inside === true,
     });
+
+    const nowMs = Date.now();
+    // 1. Arka plaka engelleme kontrolü (Giren aracın çıkış kamerası, çıkan aracın giriş kamerası tarafından okunmasını engelleme)
+    const suppKey = `${siteCode}:${event.plate}`;
+    const suppression = plateSuppressions.get(suppKey);
+    if (suppression && nowMs < suppression.until) {
+      if (suppression.suppressDirection === direction || suppression.suppressDirection === 'both') {
+        const remSec = Math.ceil((suppression.until - nowMs) / 1000);
+        await db.query('ROLLBACK').catch(() => {});
+        return {
+          ...envelope(),
+          ok: true,
+          duplicate: true,
+          suppressed: true,
+          reason: 'rear_plate_suppressed',
+          remaining_seconds: remSec,
+        };
+      }
+    }
+
+    // 2. Bir sonraki araç bekleme süresi kontrolü
+    if (gateId !== null) {
+      const lockKey = `${siteCode}:${gateId}`;
+      const lockUntil = gateNextVehicleLocks.get(lockKey);
+      if (lockUntil && nowMs < lockUntil) {
+        const remSec = Math.ceil((lockUntil - nowMs) / 1000);
+        await db.query('ROLLBACK').catch(() => {});
+        return {
+          ...envelope(),
+          ok: true,
+          duplicate: true,
+          suppressed: true,
+          reason: 'consecutive_vehicle_wait',
+          remaining_seconds: remSec,
+        };
+      }
+    }
     const vehicle = (await db.query(`SELECT id, apartment_id, person_id FROM vehicles WHERE site_code = $1 AND plate = $2 AND is_active LIMIT 1`, [siteCode, event.plate])).rows[0] ?? null;
     const permit = vehicle
       ? null
@@ -368,6 +413,29 @@ export async function recordEdgeEvent(client, body, { writeDoorLog = recordDoorA
     await db.query('COMMIT');
     // SmartKeyPass kapı günlüğü (sürüm 3): kenarın kapı komutu KABUL EDİLEN açılışları "Plaka ile" olarak düşer (komut reddedildiyse kapı açılmadı: yazılmaz).
     if (event.decision === 'acildi' && event.gateCommand !== 'failed') {
+      const consecutiveDelay = Number(gate?.consecutive_vehicle_delay_seconds ?? 10);
+      const entrySuppress = Number(gate?.entry_rear_suppress_seconds ?? 60);
+      const exitSuppress = Number(gate?.exit_rear_suppress_seconds ?? 60);
+
+      if (gateId !== null) {
+        gateNextVehicleLocks.set(`${siteCode}:${gateId}`, Date.now() + consecutiveDelay * 1000);
+      }
+
+      const suppKey = `${siteCode}:${event.plate}`;
+      if (direction === 'giris') {
+        plateSuppressions.set(suppKey, {
+          suppressDirection: 'cikis',
+          until: Date.now() + entrySuppress * 1000,
+          gateId,
+        });
+      } else if (direction === 'cikis') {
+        plateSuppressions.set(suppKey, {
+          suppressDirection: 'giris',
+          until: Date.now() + exitSuppress * 1000,
+          gateId,
+        });
+      }
+
       await writePlateDoorLog({ writeDoorLog, siteCode, gate, plate: event.plate, identityKind, apartmentId, personId, seenAt: event.seenAt });
     }
     // Sakin bildirimi (A3): yalnız KAYITLI aracın içeride durumu gerçekten değiştiyse; en iyi çaba, yanıtı geciktirmez, hata olayı bozmaz.

@@ -145,5 +145,27 @@ void main() {
       expect(decision.isGateTriggered, isFalse);
       expect(decision.reason, contains('kayıtlı araç veya misafir izni bulunamadı'));
     });
+
+    test('8. Giriş yapan aracın arka plakası çıkış kamerası tarafından engellenir (entry_rear_suppress)', () async {
+      final decision = await engine.testProcessPlate('34 SKN 01', direction: 'giris');
+      expect(decision.decision, PlateDecisionType.acildi);
+      expect(engine.isPlateSuppressed('34 SKN 01', 'cikis'), isTrue);
+      expect(engine.plateSuppressionRemainingSeconds('34 SKN 01'), greaterThan(50));
+      // Başka bir araç engelli DEĞİLDİR
+      expect(engine.isPlateSuppressed('34 MSF 01', 'cikis'), isFalse);
+    });
+
+    test('9. Çıkış yapan aracın arka plakası giriş kamerası tarafından engellenir (exit_rear_suppress)', () async {
+      final decision = await engine.testProcessPlate('34 MSF 01', direction: 'cikis');
+      expect(decision.decision, PlateDecisionType.acildi);
+      expect(engine.isPlateSuppressed('34 MSF 01', 'giris'), isTrue);
+      expect(engine.plateSuppressionRemainingSeconds('34 MSF 01'), greaterThan(50));
+    });
+
+    test('10. Kapı açıldıktan sonra kapı bir sonraki araç için beklemede olur (consecutive_vehicle_delay)', () async {
+      await engine.testProcessPlate('34 SKN 01', direction: 'giris');
+      expect(engine.isGateWaitingForNextVehicle(1), isTrue);
+      expect(engine.gateNextVehicleRemainingSeconds(1), greaterThan(0));
+    });
   });
 }

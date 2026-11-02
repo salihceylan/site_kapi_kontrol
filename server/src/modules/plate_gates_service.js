@@ -105,8 +105,8 @@ export async function saveSiteSettings({ siteCode, body, authUser }) {
 export async function syncDoorsFromSmartKeyPass(db, siteCode) {
   try {
     await db.query(
-      `INSERT INTO plate_gates (site_code, name, direction_mode, device_uid, door_id, sort_order, is_active)
-       SELECT d.site_code, d.door_name, 'cift', dev.device_uid, d.id, d.door_index, d.is_active
+      `INSERT INTO plate_gates (site_code, name, direction_mode, device_uid, door_id, sort_order, is_active, consecutive_vehicle_delay_seconds, entry_rear_suppress_seconds, exit_rear_suppress_seconds)
+       SELECT d.site_code, d.door_name, 'cift', dev.device_uid, d.id, d.door_index, d.is_active, 10, 60, 60
        FROM site_doors d
        LEFT JOIN devices dev ON dev.id = d.assigned_device_id
        WHERE d.site_code = $1
@@ -124,7 +124,7 @@ export async function loadGateConfig(db, siteCode) {
   await syncDoorsFromSmartKeyPass(db, siteCode);
   const [gates, bindings] = await Promise.all([
     db.query(
-      `SELECT id, name, direction_mode, device_uid, door_id, sort_order, is_active FROM plate_gates WHERE site_code = $1 ORDER BY sort_order, id`,
+      `SELECT id, name, direction_mode, device_uid, door_id, sort_order, is_active, consecutive_vehicle_delay_seconds, entry_rear_suppress_seconds, exit_rear_suppress_seconds FROM plate_gates WHERE site_code = $1 ORDER BY sort_order, id`,
       [siteCode],
     ),
     db.query(
@@ -198,6 +198,9 @@ export async function getGatesOverview(siteCode) {
       door_id: gate.door_id === null || gate.door_id === undefined ? null : Number(gate.door_id),
       sort_order: gate.sort_order,
       is_active: gate.is_active !== false,
+      consecutive_vehicle_delay_seconds: Number(gate.consecutive_vehicle_delay_seconds ?? 10),
+      entry_rear_suppress_seconds: Number(gate.entry_rear_suppress_seconds ?? 60),
+      exit_rear_suppress_seconds: Number(gate.exit_rear_suppress_seconds ?? 60),
       device,
       cameras,
       status: worstBadge([...(device ? [device.status] : []), ...cameras.map((c) => c.status)]),
@@ -286,7 +289,17 @@ export async function createGate({ siteCode, body, authUser }) {
   );
 }
 
-const UPDATABLE = Object.freeze(['name', 'direction_mode', 'device_uid', 'door_id', 'sort_order', 'is_active']);
+const UPDATABLE = Object.freeze([
+  'name',
+  'direction_mode',
+  'device_uid',
+  'door_id',
+  'sort_order',
+  'is_active',
+  'consecutive_vehicle_delay_seconds',
+  'entry_rear_suppress_seconds',
+  'exit_rear_suppress_seconds',
+]);
 
 export async function updateGate({ siteCode, rawId, body, authUser }) {
   const gateId = parsePositive(rawId, 'Kapı', 'GATE_NOT_FOUND');

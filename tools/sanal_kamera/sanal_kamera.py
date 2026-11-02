@@ -145,7 +145,10 @@ class SimplePlateDetector:
         self.recent_reads = []
         self.confirmed_gates = set()
         self.last_gate_trigger_at = 0
-        self.cooldown_until = 0.0  # 10 sn kapı geçiş molası (araba geçerken tekrar okuma yapmaz)
+        self.next_vehicle_cooldown_until = 0.0  # Bir sonraki araç için bekleme süresi (10s)
+        self.plate_suppressions = {}  # Giren/çıkan aracın arka plakasının okunmasını engelleme (60s)
+        self.consecutive_delay_sec = 10.0
+        self.rear_suppress_sec = 60.0
         self.last_opened_plate = None
 
         self.detector = None
@@ -207,9 +210,12 @@ class SimplePlateDetector:
 
     def _trigger_instant_gate(self, plate):
         now = time.time()
-        if now < self.cooldown_until:
+        if now < self.next_vehicle_cooldown_until:
             return
-        self.cooldown_until = now + 10.0  # 10 sn kesin mola kuralı
+        # 1) Bir sonraki araç için bekleme süresini başlat (10 sn)
+        self.next_vehicle_cooldown_until = now + self.consecutive_delay_sec
+        # 2 & 3) Arka plaka engellemesini başlat (60 sn)
+        self.plate_suppressions[plate] = now + self.rear_suppress_sec
         self.last_gate_trigger_at = now
         self.last_opened_plate = plate
         try:
@@ -235,8 +241,8 @@ class SimplePlateDetector:
                 continue
 
             now = time.time()
-            if now < self.cooldown_until:
-                # 10 saniye kapı açılış bekleme süresindeyiz, yeni okuma yapma
+            if now < self.next_vehicle_cooldown_until:
+                # Bir sonraki araç bekleme süresindeyiz
                 with self.lock:
                     self.smoothed_box = None
                     self.active_plate = None
@@ -287,9 +293,14 @@ class SimplePlateDetector:
                         if preds and preds[0].plate:
                             fp = self.format_tr_plate(preds[0].plate)
                             if fp:
-                                det_box = [bx1, by1, bw, bh]
-                                det_plate = fp
-                                det_conf = float(best[6])
+                                # Arka plaka engellemesi kontrolü (Giren/çıkan aracın 60 sn okunmaması)
+                                supp_until = self.plate_suppressions.get(fp, 0.0)
+                                if now < supp_until:
+                                    pass  # Arka plaka engellendi
+                                else:
+                                    det_box = [bx1, by1, bw, bh]
+                                    det_plate = fp
+                                    det_conf = float(best[6])
                     except Exception:
                         pass
 
@@ -326,8 +337,8 @@ class SimplePlateDetector:
 
     def update_and_draw(self, frame, fallback_plate=None, frame_idx=0, active_video="1"):
         now = time.time()
-        if now < self.cooldown_until:
-            rem = int(math.ceil(self.cooldown_until - now))
+        if now < self.next_vehicle_cooldown_until:
+            rem = int(math.ceil(self.next_vehicle_cooldown_until - now))
             self._draw_cooldown_banner(frame, rem, self.last_opened_plate)
             return frame, self.last_opened_plate
 

@@ -55,6 +55,23 @@ class PlateEngineDecision {
 ///    - Tanımsız -> ALMA (red)
 /// 4. Şartlar sağlandığında kapıya yerel ağdan ve sunucu (SmartKeyPass MQTT) üzerinden "aç" komutu gönderir.
 /// 5. Kararı sunucuya bildirerek web ve mobil uygulamalara anında canlı akış sağlar.
+/// Araç bazlı arka plaka engellemesi
+class PlateSuppression {
+  const PlateSuppression({
+    required this.plate,
+    required this.suppressDirection, // 'cikis' | 'giris' | 'both'
+    required this.suppressUntil,
+    this.gateId,
+    this.reason,
+  });
+
+  final String plate;
+  final String suppressDirection;
+  final DateTime suppressUntil;
+  final int? gateId;
+  final String? reason;
+}
+
 class PlateRecognitionEngine {
   static final Map<String, Map<String, dynamic>> _demoVehicles = <String, Map<String, dynamic>>{
     '35JU988': {'apartment_label': 'A Blok D:12', 'person_label': 'Ahmet Yılmaz'},
@@ -215,10 +232,46 @@ class PlateRecognitionEngine {
   final Map<String, DateTime> _recentReads = <String, DateTime>{};
   final Map<int, DateTime> _lastCameraEventAt = <int, DateTime>{};
 
-  // Kapı açıldıktan sonra 10 saniye boyunca tekrar okuma yapmayı engelleyen mola (cooldown) zamanları
+  // 1) Kapı bazlı bir sonraki aracın okunabilmesi için bekleme süreleri (gateId -> bitiş zamanı)
+  final Map<int, DateTime> _gateNextVehicleCooldownUntil = <int, DateTime>{};
+
+  // 2 & 3) Araç bazlı arka plaka engellemeleri (Giriş yapanın çıkış kamerasında, çıkanın giriş kamerasında okunmaması)
+  final Map<String, PlateSuppression> _plateSuppressions = <String, PlateSuppression>{};
+
+  // Geriye dönük uyumluluk için kamera bazlı sorgu desteği
   final Map<int, DateTime> _cameraCooldownUntil = <int, DateTime>{};
 
-  /// Kameranın kapı açılışı sonrası 10 saniyelik bekleme molasında olup olmadığını döndürür.
+  /// Kapının bir sonraki araç için beklemede olup olmadığını döndürür
+  bool isGateWaitingForNextVehicle(int gateId) {
+    final until = _gateNextVehicleCooldownUntil[gateId];
+    return until != null && DateTime.now().isBefore(until);
+  }
+
+  /// Kapının bir sonraki araç için kalan bekleme süresini (sn) döndürür
+  int gateNextVehicleRemainingSeconds(int gateId) {
+    final until = _gateNextVehicleCooldownUntil[gateId];
+    if (until == null) return 0;
+    final diff = until.difference(DateTime.now()).inSeconds;
+    return diff > 0 ? diff : 0;
+  }
+
+  /// Plakanın bu yönde arka plaka engellemesinde olup olmadığını döndürür
+  bool isPlateSuppressed(String plate, String direction) {
+    final supp = _plateSuppressions[_normalizePlate(plate)];
+    if (supp == null) return false;
+    if (DateTime.now().isAfter(supp.suppressUntil)) return false;
+    return supp.suppressDirection == direction || supp.suppressDirection == 'both';
+  }
+
+  /// Plakanın kalan arka plaka engelleme süresini (sn) döndürür
+  int plateSuppressionRemainingSeconds(String plate) {
+    final supp = _plateSuppressions[_normalizePlate(plate)];
+    if (supp == null) return 0;
+    final diff = supp.suppressUntil.difference(DateTime.now()).inSeconds;
+    return diff > 0 ? diff : 0;
+  }
+
+  /// Kameranın kapı açılışı sonrası bekleme molasında olup olmadığını döndürür.
   bool isCameraCoolingDown(int cameraId) {
     final cd = _cameraCooldownUntil[cameraId];
     return cd != null && DateTime.now().isBefore(cd);
@@ -291,6 +344,11 @@ class PlateRecognitionEngine {
     _isRunning = false;
     _loopTimer?.cancel();
     _loopTimer = null;
+    _recentReads.clear();
+    _lastCameraEventAt.clear();
+    _gateNextVehicleCooldownUntil.clear();
+    _plateSuppressions.clear();
+    _cameraCooldownUntil.clear();
     debugPrint('[PlateRecognitionEngine] Motor durduruldu');
   }
 
@@ -339,9 +397,10 @@ class PlateRecognitionEngine {
     try {
       for (final camera in _activeCameras) {
         try {
-          final cd = _cameraCooldownUntil[camera.id];
-          if (cd != null && DateTime.now().isBefore(cd)) {
-            continue; // Kapı açıldıktan sonra 10 sn geçmeden tekrar okuma yapmaya çalışma
+          final gateId = camera.gate?.id ?? 0;
+          final gateLock = _gateNextVehicleCooldownUntil[gateId];
+          if (gateLock != null && DateTime.now().isBefore(gateLock)) {
+            continue; // Kapı henüz bir sonraki araç için beklemede
           }
           final lastRx = _lastFrameReceivedAt[camera.id];
           if (lastRx != null && DateTime.now().difference(lastRx).inMilliseconds < 1500) {
@@ -363,14 +422,18 @@ class PlateRecognitionEngine {
   /// Canlı önizleme bileşeninin aldığı son kareyi önbelleğe yazar (motorun aynı kamerayı paralel sorgulamasını önler).
   void recordPreviewFrame(int cameraId, Uint8List bytes, {String? plate}) {
     final now = DateTime.now();
-    final cd = _cameraCooldownUntil[cameraId];
-    final isCoolingDown = cd != null && now.isBefore(cd);
-
     _lastFrames[cameraId] = bytes;
     _lastFrameReceivedAt[cameraId] = now;
-    if (!isCoolingDown && plate != null && plate.isNotEmpty && plate.toLowerCase() != 'none') {
-      _lastCameraPlates[cameraId] = plate;
-    } else if (!isCoolingDown) {
+    if (plate != null && plate.isNotEmpty && plate.toLowerCase() != 'none') {
+      final norm = _normalizePlate(plate);
+      final supp = _plateSuppressions[norm];
+      final isSupp = supp != null && now.isBefore(supp.suppressUntil);
+      if (!isSupp) {
+        _lastCameraPlates[cameraId] = plate;
+      } else {
+        _lastCameraPlates.remove(cameraId);
+      }
+    } else {
       _lastCameraPlates.remove(cameraId);
     }
   }
@@ -433,11 +496,13 @@ class PlateRecognitionEngine {
   /// Kareyi işler, plaka arar ve karar verir
   Future<void> _processFrame(PlateCameraRow camera, Uint8List frameBytes, {String? directPlate}) async {
     final now = DateTime.now();
+    final gate = camera.gate;
+    final gateId = gate?.id ?? 0;
 
-    // 10 Saniye Kuralı: Kapı açıldıktan sonra 10 sn geçmeden tekrar okuma yapma
-    final camCd = _cameraCooldownUntil[camera.id];
-    if (camCd != null && now.isBefore(camCd)) {
-      return;
+    // KURAL 1: Kapı henüz bir sonraki araç için bekleme süresinde mi?
+    final gateLockUntil = _gateNextVehicleCooldownUntil[gateId];
+    if (gateLockUntil != null && now.isBefore(gateLockUntil)) {
+      return; // Bir önceki araç geçişi sonrası bekleme süresi dolmadı
     }
 
     final detectedPlate = directPlate ?? await _extractPlateFromImage(frameBytes);
@@ -446,13 +511,27 @@ class PlateRecognitionEngine {
     final plate = _normalizePlate(detectedPlate);
     if (!_isValidPlateFormat(plate)) return;
 
-    // Cooldown: Son 15 saniye içinde aynı plakayı tekrar işleme
+    // KURAL 2 & 3: Arka plaka engellemesi kontrolü
+    final camDirection = camera.direction == 'cikis' ? 'cikis' : 'giris';
+    final supp = _plateSuppressions[plate];
+    if (supp != null) {
+      if (now.isBefore(supp.suppressUntil)) {
+        if (supp.suppressDirection == camDirection || supp.suppressDirection == 'both') {
+          debugPrint('[PlateRecognitionEngine] ARKA PLAKA ENGELLENDİ: $plate ($camDirection kamerasında engellendi, kalan süre: ${supp.suppressUntil.difference(now).inSeconds}s)');
+          return;
+        }
+      } else {
+        _plateSuppressions.remove(plate);
+      }
+    }
+
+    // Kısa mükerrer okuma koruması (Aynı plaka aynı kamerada 5 saniyeden sık tetiklenmesin)
     final lastSeen = _recentReads[plate];
-    if (lastSeen != null && now.difference(lastSeen).inSeconds < 15) {
+    if (lastSeen != null && now.difference(lastSeen).inSeconds < 5) {
       return;
     }
     final lastCamEvent = _lastCameraEventAt[camera.id];
-    if (lastCamEvent != null && now.difference(lastCamEvent).inMilliseconds < 3500) {
+    if (lastCamEvent != null && now.difference(lastCamEvent).inMilliseconds < 1500) {
       return;
     }
     _recentReads[plate] = now;
@@ -463,10 +542,45 @@ class PlateRecognitionEngine {
     _lastDecision = decision;
     _decisionsController.add(decision);
 
-    // Eğer kapı açma kararı verildiyse kapıyı tetikle ve 10 saniyelik okuma molasını başlat
+    // Eğer kapı açma kararı verildiyse:
     if (decision.decision == PlateDecisionType.acildi) {
-      _cameraCooldownUntil[camera.id] = now.add(const Duration(seconds: 10));
-      debugPrint('[PlateRecognitionEngine] KAPI AÇILDI: Kamera ${camera.id} için 10 sn mola başlatıldı (Araç: $plate)');
+      // 1) Bir sonraki araç için bekleme süresini başlat (Varsayılan 10 sn veya kapı ayarı)
+      final consecutiveDelay = gate != null && gate.consecutiveVehicleDelaySeconds > 0
+          ? gate.consecutiveVehicleDelaySeconds
+          : 10;
+      _gateNextVehicleCooldownUntil[gateId] = now.add(Duration(seconds: consecutiveDelay));
+      _cameraCooldownUntil[camera.id] = now.add(Duration(seconds: consecutiveDelay));
+
+      // 2 & 3) Arka plaka engelleme süresini başlat:
+      // Giriş yapıldıysa -> çıkış kamerası arka plakayı okumasın (entryRearSuppressSeconds, varsayılan 60 sn)
+      // Çıkış yapıldıysa -> giriş kamerası arka plakayı okumasın (exitRearSuppressSeconds, varsayılan 60 sn)
+      final isEntry = decision.direction != 'cikis';
+      if (isEntry) {
+        final entrySuppressSec = gate != null && gate.entryRearSuppressSeconds > 0
+            ? gate.entryRearSuppressSeconds
+            : 60;
+        _plateSuppressions[plate] = PlateSuppression(
+          plate: plate,
+          suppressDirection: 'cikis',
+          suppressUntil: now.add(Duration(seconds: entrySuppressSec)),
+          gateId: gateId,
+          reason: 'Giriş yapan aracın çıkış kamerası tarafından arka plakasının okunması engellendi ($entrySuppressSec sn)',
+        );
+        debugPrint('[PlateRecognitionEngine] KAPI AÇILDI (GİRİŞ): $plate geçiş yaptı. Çıkış kamerası $entrySuppressSec sn boyunca bu aracın arka plakasını okumayacak. Bir sonraki araç için kapı $consecutiveDelay sn bekleyecek.');
+      } else {
+        final exitSuppressSec = gate != null && gate.exitRearSuppressSeconds > 0
+            ? gate.exitRearSuppressSeconds
+            : 60;
+        _plateSuppressions[plate] = PlateSuppression(
+          plate: plate,
+          suppressDirection: 'giris',
+          suppressUntil: now.add(Duration(seconds: exitSuppressSec)),
+          gateId: gateId,
+          reason: 'Çıkış yapan aracın giriş kamerası tarafından arka plakasının okunması engellendi ($exitSuppressSec sn)',
+        );
+        debugPrint('[PlateRecognitionEngine] KAPI AÇILDI (ÇIKIŞ): $plate geçiş yaptı. Giriş kamerası $exitSuppressSec sn boyunca bu aracın arka plakasını okumayacak. Bir sonraki araç için kapı $consecutiveDelay sn bekleyecek.');
+      }
+
       await _triggerGate(camera, decision);
     }
 
@@ -498,6 +612,29 @@ class PlateRecognitionEngine {
     _decisionsController.add(decision);
 
     if (decision.decision == PlateDecisionType.acildi) {
+      final consecutiveDelay = effectiveCamera?.gate?.consecutiveVehicleDelaySeconds ?? 10;
+      _gateNextVehicleCooldownUntil[effectiveDoorId] = DateTime.now().add(Duration(seconds: consecutiveDelay));
+
+      final isEntry = direction != 'cikis';
+      if (isEntry) {
+        final entrySuppressSec = effectiveCamera?.gate?.entryRearSuppressSeconds ?? 60;
+        _plateSuppressions[plate] = PlateSuppression(
+          plate: plate,
+          suppressDirection: 'cikis',
+          suppressUntil: DateTime.now().add(Duration(seconds: entrySuppressSec)),
+          gateId: effectiveDoorId,
+          reason: 'Giriş yapan aracın çıkış kamerası tarafından arka plakasının okunması engellendi ($entrySuppressSec sn)',
+        );
+      } else {
+        final exitSuppressSec = effectiveCamera?.gate?.exitRearSuppressSeconds ?? 60;
+        _plateSuppressions[plate] = PlateSuppression(
+          plate: plate,
+          suppressDirection: 'giris',
+          suppressUntil: DateTime.now().add(Duration(seconds: exitSuppressSec)),
+          gateId: effectiveDoorId,
+          reason: 'Çıkış yapan aracın giriş kamerası tarafından arka plakasının okunması engellendi ($exitSuppressSec sn)',
+        );
+      }
       await _triggerGate(effectiveCamera, decision);
     }
 

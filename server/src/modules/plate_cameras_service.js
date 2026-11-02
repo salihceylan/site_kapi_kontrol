@@ -58,6 +58,7 @@ const CAMERA_SELECT = `
   SELECT c.id, c.name, c.brand, c.host, c.port, c.rtsp_url, c.username, (c.password_enc IS NOT NULL) AS has_password, c.is_active, c.last_event_at,
          c.probe_status, c.probe_message, c.probe_width, c.probe_height, c.probe_at,
          gc.gate_id, gc.direction AS gate_direction, g.name AS gate_name, g.direction_mode AS gate_mode, g.door_id AS gate_door_id,
+         g.consecutive_vehicle_delay_seconds AS gate_consecutive_delay, g.entry_rear_suppress_seconds AS gate_entry_rear, g.exit_rear_suppress_seconds AS gate_exit_rear,
          s.last_frame_at, s.last_read_at, s.reported_at, s.edge_client_id AS status_edge_id, sn.captured_at AS snapshot_at
     FROM camera_devices c
     LEFT JOIN plate_gate_cameras gc ON gc.camera_id = c.id
@@ -87,7 +88,15 @@ export function mapCameraRow(row, thresholds, now = Date.now()) {
     has_password: row.has_password === true,
     is_active: row.is_active !== false,
     managed: Boolean(row.rtsp_url) || (row.probe_status ?? 'none') !== 'none',
-    gate: gateId === null ? null : { id: gateId, name: row.gate_name, direction_mode: row.gate_mode, door_id: idOrNull(row.gate_door_id) },
+    gate: gateId === null ? null : {
+      id: gateId,
+      name: row.gate_name,
+      direction_mode: row.gate_mode,
+      door_id: idOrNull(row.gate_door_id),
+      consecutive_vehicle_delay_seconds: Number(row.gate_consecutive_delay ?? 10),
+      entry_rear_suppress_seconds: Number(row.gate_entry_rear ?? 60),
+      exit_rear_suppress_seconds: Number(row.gate_exit_rear ?? 60),
+    },
     direction: gateId === null ? null : row.gate_direction,
     status: cameraStatus(row, thresholds, now),
     last_frame_at: iso(row.last_frame_at),

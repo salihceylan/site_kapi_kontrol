@@ -741,6 +741,17 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
                     ),
                   ),
                 ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: p.border.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
+                  child: Text(
+                    'Süreler: Sonraki: ${gate.consecutiveVehicleDelaySeconds}s • Giriş Arka: ${gate.entryRearSuppressSeconds}s • Çıkış Arka: ${gate.exitRearSuppressSeconds}s',
+                    style: theme.textTheme.bodySmall?.copyWith(color: p.textSecondary),
+                  ),
+                ),
               ],
             ),
 
@@ -973,12 +984,24 @@ class _GateEditDialogState extends State<GateEditDialog> {
   late final TextEditingController _name = TextEditingController(text: widget.gate?.name ?? '');
   late String _mode = widget.gate?.directionMode ?? 'cift';
   late String? _device = widget.gate?.deviceUid;
+  late final TextEditingController _consecutiveDelay = TextEditingController(
+    text: '${widget.gate?.consecutiveVehicleDelaySeconds ?? 10}',
+  );
+  late final TextEditingController _entryRearSuppress = TextEditingController(
+    text: '${widget.gate?.entryRearSuppressSeconds ?? 60}',
+  );
+  late final TextEditingController _exitRearSuppress = TextEditingController(
+    text: '${widget.gate?.exitRearSuppressSeconds ?? 60}',
+  );
   late final Map<int, String> _selected = <int, String>{for (final c in widget.gate?.cameras ?? const <GateCamera>[]) c.cameraId: c.direction};
   String? _error;
 
   @override
   void dispose() {
     _name.dispose();
+    _consecutiveDelay.dispose();
+    _entryRearSuppress.dispose();
+    _exitRearSuppress.dispose();
     super.dispose();
   }
 
@@ -1003,12 +1026,32 @@ class _GateEditDialogState extends State<GateEditDialog> {
         return;
       }
     }
+    final nextSec = int.tryParse(_consecutiveDelay.text.trim()) ?? 10;
+    final entrySec = int.tryParse(_entryRearSuppress.text.trim()) ?? 60;
+    final exitSec = int.tryParse(_exitRearSuppress.text.trim()) ?? 60;
+
+    if (nextSec < 1 || nextSec > 120) {
+      setState(() => _error = 'Bir sonraki araç bekleme süresi 1 - 120 saniye arasında olmalıdır.');
+      return;
+    }
+    if (entrySec < 5 || entrySec > 600) {
+      setState(() => _error = 'Giriş arka plaka engelleme süresi 5 - 600 saniye arasında olmalıdır.');
+      return;
+    }
+    if (exitSec < 5 || exitSec > 600) {
+      setState(() => _error = 'Çıkış arka plaka engelleme süresi 5 - 600 saniye arasında olmalıdır.');
+      return;
+    }
+
     Navigator.pop(
       context,
       GateDraft(
         name: _name.text,
         directionMode: _mode,
         deviceUid: _device,
+        consecutiveVehicleDelaySeconds: nextSec,
+        entryRearSuppressSeconds: entrySec,
+        exitRearSuppressSeconds: exitSec,
         cameras: <GateCameraDraft>[for (final e in _selected.entries) GateCameraDraft(cameraId: e.key, direction: _mode == 'cift' ? e.value : 'auto')],
       ),
     );
@@ -1043,6 +1086,38 @@ class _GateEditDialogState extends State<GateEditDialog> {
                   for (final d in _availableDevices) DropdownMenuItem<String?>(value: d.deviceUid, child: Text(d.label, overflow: TextOverflow.ellipsis)),
                 ],
                 onChanged: (v) => setState(() => _device = v),
+              ),
+              const SizedBox(height: AppSpace.md),
+              Text(
+                'Geçiş ve Güvenlik Süreleri (Saniye)',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: AppSpace.xs),
+              TextField(
+                controller: _consecutiveDelay,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Bir sonraki araç için bekleme süresi (sn)',
+                  helperText: 'Bir araç geçtikten sonra bir sonraki aracın okunabilmesi için bekleme süresi (Varsayılan: 10 sn)',
+                ),
+              ),
+              const SizedBox(height: AppSpace.sm),
+              TextField(
+                controller: _entryRearSuppress,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Giriş yapan aracın arka plakasını engelleme süresi (sn)',
+                  helperText: 'Giriş yapan aracın çıkış kamerası tarafından arka plakasının okunmasını engeller (Varsayılan: 60 sn)',
+                ),
+              ),
+              const SizedBox(height: AppSpace.sm),
+              TextField(
+                controller: _exitRearSuppress,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Çıkış yapan aracın arka plakasını engelleme süresi (sn)',
+                  helperText: 'Çıkış yapan aracın giriş kamerası tarafından arka plakasının okunmasını engeller (Varsayılan: 60 sn)',
+                ),
               ),
               const SizedBox(height: AppSpace.sm),
               Text('Kameralar', style: Theme.of(context).textTheme.titleSmall),

@@ -47,9 +47,15 @@ export const PLATE_GATES_DDL = Object.freeze({
       created_by INTEGER,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      consecutive_vehicle_delay_seconds INTEGER NOT NULL DEFAULT 10,
+      entry_rear_suppress_seconds INTEGER NOT NULL DEFAULT 60,
+      exit_rear_suppress_seconds INTEGER NOT NULL DEFAULT 60,
       CONSTRAINT chk_plate_gates_name CHECK (char_length(name) BETWEEN 1 AND 60),
       CONSTRAINT chk_plate_gates_direction_mode CHECK (direction_mode IN ('giris', 'cikis', 'cift')),
-      CONSTRAINT chk_plate_gates_device_uid CHECK (device_uid IS NULL OR char_length(device_uid) BETWEEN 1 AND 64)
+      CONSTRAINT chk_plate_gates_device_uid CHECK (device_uid IS NULL OR char_length(device_uid) BETWEEN 1 AND 64),
+      CONSTRAINT chk_plate_gates_consecutive_cd CHECK (consecutive_vehicle_delay_seconds BETWEEN 1 AND 120),
+      CONSTRAINT chk_plate_gates_entry_rear CHECK (entry_rear_suppress_seconds BETWEEN 5 AND 600),
+      CONSTRAINT chk_plate_gates_exit_rear CHECK (exit_rear_suppress_seconds BETWEEN 5 AND 600)
     )
   `,
   gatesSiteFk: siteFk('plate_gates'),
@@ -154,6 +160,12 @@ export const PLATE_GATES_DDL = Object.freeze({
   eventClientIdIndex: `CREATE UNIQUE INDEX IF NOT EXISTS uq_plate_events_client_event ON plate_events (site_code, client_event_id) WHERE client_event_id IS NOT NULL`,
   apartmentParkingColumn: `ALTER TABLE apartments ADD COLUMN IF NOT EXISTS parking_slots INTEGER NOT NULL DEFAULT 0`,
   apartmentParkingCheck: addCheck('apartments', 'chk_apartments_parking_slots', `parking_slots BETWEEN 0 AND 50`),
+  gatesCooldownColumns: `
+    ALTER TABLE plate_gates
+      ADD COLUMN IF NOT EXISTS consecutive_vehicle_delay_seconds INTEGER NOT NULL DEFAULT 10,
+      ADD COLUMN IF NOT EXISTS entry_rear_suppress_seconds INTEGER NOT NULL DEFAULT 60,
+      ADD COLUMN IF NOT EXISTS exit_rear_suppress_seconds INTEGER NOT NULL DEFAULT 60
+  `,
 });
 
 export const PLATE_GATES_DDL_ORDER = Object.freeze(Object.keys(PLATE_GATES_DDL));
@@ -181,6 +193,9 @@ const COLUMNS = Object.freeze([
   'plate_events.confidence',
   'plate_events.reason',
   'apartments.parking_slots',
+  'plate_gates.consecutive_vehicle_delay_seconds',
+  'plate_gates.entry_rear_suppress_seconds',
+  'plate_gates.exit_rear_suppress_seconds',
 ]);
 
 export const plateGatesTuning = { retryDelayMs: 300 };
@@ -215,7 +230,7 @@ export async function ensurePlateGatesSchema(client) {
         ARRAY(
           SELECT c.relname::TEXT || '.' || a.attname::TEXT
           FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
-          WHERE c.relname = ANY(ARRAY['plate_events', 'apartments']) AND c.relnamespace = 'public'::regnamespace AND a.attnum > 0 AND NOT a.attisdropped
+          WHERE c.relname = ANY(ARRAY['plate_events', 'apartments', 'plate_gates']) AND c.relnamespace = 'public'::regnamespace AND a.attnum > 0 AND NOT a.attisdropped
         ) AS columns
     `,
     [TABLES, INDEXES],

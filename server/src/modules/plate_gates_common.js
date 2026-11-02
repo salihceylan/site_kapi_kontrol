@@ -255,6 +255,33 @@ export function parseGateInput(body, { partial = false } = {}) {
     if (typeof body.is_active !== 'boolean') throw invalidField('Etkinlik değeri doğru/yanlış olmalı.', 'is_active');
     out.is_active = body.is_active;
   }
+  if (body.consecutive_vehicle_delay_seconds !== undefined) {
+    out.consecutive_vehicle_delay_seconds = intField(
+      body.consecutive_vehicle_delay_seconds,
+      'consecutive_vehicle_delay_seconds',
+      'Bir sonraki araç bekleme süresi',
+      1,
+      120,
+    );
+  }
+  if (body.entry_rear_suppress_seconds !== undefined) {
+    out.entry_rear_suppress_seconds = intField(
+      body.entry_rear_suppress_seconds,
+      'entry_rear_suppress_seconds',
+      'Giriş arka plaka engelleme süresi',
+      5,
+      600,
+    );
+  }
+  if (body.exit_rear_suppress_seconds !== undefined) {
+    out.exit_rear_suppress_seconds = intField(
+      body.exit_rear_suppress_seconds,
+      'exit_rear_suppress_seconds',
+      'Çıkış arka plaka engelleme süresi',
+      5,
+      600,
+    );
+  }
   if (body.cameras !== undefined) out.cameras = parseCameras(body.cameras);
   return out;
 }

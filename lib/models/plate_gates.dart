@@ -88,6 +88,9 @@ class PlateGate {
     required this.directionLabel,
     required this.isActive,
     required this.status,
+    this.consecutiveVehicleDelaySeconds = 10,
+    this.entryRearSuppressSeconds = 60,
+    this.exitRearSuppressSeconds = 60,
     this.doorId,
     this.deviceUid,
     this.deviceStatus,
@@ -103,6 +106,9 @@ class PlateGate {
       directionLabel: _str(m['direction_label']) ?? 'Çift yön',
       isActive: m['is_active'] != false,
       status: GateBadge.fromJson(m['status']),
+      consecutiveVehicleDelaySeconds: _int(m['consecutive_vehicle_delay_seconds'], 10),
+      entryRearSuppressSeconds: _int(m['entry_rear_suppress_seconds'], 60),
+      exitRearSuppressSeconds: _int(m['exit_rear_suppress_seconds'], 60),
       doorId: _intOrNull(m['door_id']),
       deviceUid: _str(m['device_uid']),
       deviceStatus: device.isEmpty ? null : GateBadge.fromJson(device['status']),
@@ -116,6 +122,9 @@ class PlateGate {
   final String directionLabel;
   final bool isActive;
   final GateBadge status;
+  final int consecutiveVehicleDelaySeconds;
+  final int entryRearSuppressSeconds;
+  final int exitRearSuppressSeconds;
   final int? doorId;
   final String? deviceUid;
   final GateBadge? deviceStatus;
@@ -242,17 +251,31 @@ class PlateGatesOverview {
 /// Kapı oluştur / güncelle gövdesi.
 @immutable
 class GateDraft {
-  const GateDraft({required this.name, required this.directionMode, this.deviceUid, this.cameras = const <GateCameraDraft>[]});
+  const GateDraft({
+    required this.name,
+    required this.directionMode,
+    this.deviceUid,
+    this.consecutiveVehicleDelaySeconds = 10,
+    this.entryRearSuppressSeconds = 60,
+    this.exitRearSuppressSeconds = 60,
+    this.cameras = const <GateCameraDraft>[],
+  });
 
   final String name;
   final String directionMode;
   final String? deviceUid;
+  final int consecutiveVehicleDelaySeconds;
+  final int entryRearSuppressSeconds;
+  final int exitRearSuppressSeconds;
   final List<GateCameraDraft> cameras;
 
   Map<String, Object?> toBody() => <String, Object?>{
     'name': name.trim(),
     'direction_mode': directionMode,
     'device_uid': deviceUid,
+    'consecutive_vehicle_delay_seconds': consecutiveVehicleDelaySeconds,
+    'entry_rear_suppress_seconds': entryRearSuppressSeconds,
+    'exit_rear_suppress_seconds': exitRearSuppressSeconds,
     'cameras': <Map<String, Object?>>[for (final c in cameras) <String, Object?>{'camera_id': c.cameraId, 'direction': c.direction}],
   };
 }
