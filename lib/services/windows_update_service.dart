@@ -136,7 +136,14 @@ class WindowsUpdateService {
       }
 
       if (info.hasUpdate) {
-        await _showUpdatePromptDialog(context, info);
+        // Sessiz başlangıç denetiminde kullanıcıyı modal popup ile bloke etme (zorunlu güncelleme değilse);
+        // yalnızca kullanıcı menüden elle "Güncellemeleri Denetle" dediğinde veya zorunluysa diyaloğu aç.
+        if (!silent || info.mandatory) {
+          await _showUpdatePromptDialog(context, info);
+        } else {
+          // Arka plan bildirim rozeti
+          debugPrint('[WindowsUpdater] Yeni sürüm mevcut (v${info.latestVersion}). Kullanıcı arayüzü engellenmedi.');
+        }
       } else if (!silent) {
         AppSnack.show(
           context,
@@ -171,7 +178,11 @@ class WindowsUpdateService {
             FilledButton.icon(
               onPressed: () {
                 Navigator.of(dialogCtx).pop(true);
-                downloadAndApplyUpdate(context, info);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (context.mounted) {
+                    unawaited(downloadAndApplyUpdate(context, info));
+                  }
+                });
               },
               icon: const Icon(Icons.system_update_rounded, size: 18),
               label: const Text('Şimdi Güncelle'),
@@ -280,10 +291,16 @@ class WindowsUpdateService {
       final sink = updateZipFile.openWrite();
 
       int downloaded = 0;
+      int lastUpdateMs = 0;
+      final sw = Stopwatch()..start();
+
       await for (final chunk in response.stream) {
         sink.add(chunk);
         downloaded += chunk.length;
-        if (contentLength > 0) {
+        final elapsed = sw.elapsedMilliseconds;
+        // UI thread kilitlenmesini (ANR) önlemek için ilerleme güncellemelerini 100ms ile sınırla
+        if (contentLength > 0 && (elapsed - lastUpdateMs >= 100 || downloaded >= contentLength)) {
+          lastUpdateMs = elapsed;
           progressNotifier.value = downloaded / contentLength;
           final mbDone = (downloaded / (1024 * 1024)).toStringAsFixed(1);
           final mbTotal = (contentLength / (1024 * 1024)).toStringAsFixed(1);

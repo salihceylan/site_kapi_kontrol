@@ -323,11 +323,12 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
     final hasLiveFrame = bytes != null && bytes.isNotEmpty;
     final plate = _detectedPlate;
 
-    final content = Stack(
-      children: <Widget>[
-        // Arka plan
-        Positioned.fill(
-          child: Container(
+    final content = SizedBox.expand(
+      child: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          // Arka plan
+          Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
@@ -336,21 +337,17 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
               ),
             ),
           ),
-        ),
 
-        // Canlı video karesi
-        if (hasLiveFrame)
-          Positioned.fill(
-            child: Image.memory(
+          // Canlı video karesi
+          if (hasLiveFrame)
+            Image.memory(
               bytes,
               fit: BoxFit.cover,
               gaplessPlayback: true,
               filterQuality: FilterQuality.low,
-            ),
-          )
-        else
-          Positioned.fill(
-            child: Center(
+            )
+          else
+            Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
@@ -377,41 +374,41 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
                 ],
               ),
             ),
-          ),
 
-        // Okunan plaka ve karar HUD çubuğu (alt bant)
-        if (plate != null && plate.isNotEmpty)
-          Positioned(
-            left: 8,
-            right: 8,
-            bottom: 6,
-            child: _buildCameraDetectionHud(
-              PlateRecognitionEngine.instance.evaluatePlatePreview(
-                plate,
-                camera: _resolvedCamera ?? widget.camera,
-              ),
-            ),
-          ),
-
-        // Büyütme ikonu (sağ üst / kontrol açıksa)
-        if (widget.showControls && hasLiveFrame)
-          Positioned(
-            top: 8,
-            right: 8,
-            child: Material(
-              color: Colors.black54,
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-                onTap: _openFullscreen,
-                child: const Padding(
-                  padding: EdgeInsets.all(6),
-                  child: Icon(Icons.fullscreen_rounded, size: 18, color: Colors.white),
+          // Okunan plaka ve karar HUD çubuğu (alt bant)
+          if (plate != null && plate.isNotEmpty)
+            Positioned(
+              left: 8,
+              right: 8,
+              bottom: 6,
+              child: _buildCameraDetectionHud(
+                PlateRecognitionEngine.instance.evaluatePlatePreview(
+                  plate,
+                  camera: _resolvedCamera ?? widget.camera,
                 ),
               ),
             ),
-          ),
-      ],
+
+          // Büyütme ikonu (sağ üst / kontrol açıksa)
+          if (widget.showControls && hasLiveFrame)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Material(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  onTap: _openFullscreen,
+                  child: const Padding(
+                    padding: EdgeInsets.all(6),
+                    child: Icon(Icons.fullscreen_rounded, size: 18, color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
 
     final clipped = widget.borderRadius != null
@@ -425,14 +422,17 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double? h = constraints.hasBoundedHeight ? null : 180.0;
-        final double? w = constraints.hasBoundedWidth ? null : 320.0;
-        if (h != null || w != null) {
-          return SizedBox(
-            width: w,
-            height: h,
-            child: interactive,
-          );
+        final hasH = constraints.hasBoundedHeight;
+        final hasW = constraints.hasBoundedWidth;
+
+        if (!hasH && !hasW) {
+          return SizedBox(width: 320, height: 180, child: interactive);
+        }
+        if (!hasH) {
+          return AspectRatio(aspectRatio: 16 / 9, child: interactive);
+        }
+        if (!hasW) {
+          return AspectRatio(aspectRatio: 16 / 9, child: interactive);
         }
         return interactive;
       },

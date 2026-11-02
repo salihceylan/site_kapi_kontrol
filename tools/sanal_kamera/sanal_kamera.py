@@ -19,6 +19,7 @@ import socket
 import sys
 import threading
 import time
+import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 
@@ -761,6 +762,25 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     camera_source = None
 
+    def setup(self):
+        super().setup()
+        try:
+            self.request.settimeout(2.5)
+        except Exception:
+            pass
+
+    def handle(self):
+        try:
+            super().handle()
+        except (socket.timeout, ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError):
+            pass
+
+    def handle_one_request(self):
+        try:
+            super().handle_one_request()
+        except (socket.timeout, ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError):
+            self.close_connection = True
+
     def log_message(self, format, *args):
         pass
 
@@ -829,7 +849,10 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
                 self.send_header('X-Plate', str(source.last_plate) if source.last_plate else '')
                 self.send_header('Server', 'IPKamera/1.0 (ONVIF/MJPEG)')
                 self.end_headers()
-                self.wfile.write(jpeg)
+                try:
+                    self.wfile.write(jpeg)
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+                    self.close_connection = True
             else:
                 self.send_error(503, "Kamera karesi hazir degil")
             return
@@ -1043,6 +1066,39 @@ class MdnsAnnouncer:
                 pass
 
 
+# --- VPS CANLI KARE EŞİTLEYİCİ (WEB MIXED CONTENT KÖPRÜSÜ) ---
+def start_vps_snapshot_pusher(source, site_code="6070832089", camera_id="9", interval=1.8):
+    def _pusher_loop():
+        url = f"https://api.gudeteknoloji.com.tr/manager/sites/{site_code}/plate-recognition/cameras/{camera_id}/snapshot"
+        last_sent_plate = None
+        while source and source.running:
+            try:
+                jpeg = source.get_jpeg()
+                if jpeg and len(jpeg) > 500:
+                    plate_str = str(source.last_plate or "")
+                    req = urllib.request.Request(
+                        url,
+                        data=jpeg,
+                        headers={
+                            "Content-Type": "image/jpeg",
+                            "X-Camera-Sync-Token": "gude_sanal_kamera_sync_secret",
+                            "X-Plate": plate_str,
+                            "X-Frame-Width": "1280",
+                            "X-Frame-Height": "720",
+                        },
+                        method="PUT"
+                    )
+                    with urllib.request.urlopen(req, timeout=2.5) as resp:
+                        pass
+            except Exception:
+                pass
+            time.sleep(interval)
+
+    t = threading.Thread(target=_pusher_loop, daemon=True)
+    t.start()
+    logger.info(f"Canlı VPS anlık kare eşitleyici aktif -> Kamera {camera_id} @ Site {site_code}")
+
+
 # --- ANA ÇALIŞTIRICI ---
 def main():
     parser = argparse.ArgumentParser(description="IP Kamera Yayın Sunucusu")
@@ -1068,6 +1124,7 @@ def main():
 
     camera_source = CameraSource(source_path=source_arg, target_fps=args.fps)
     CameraHTTPHandler.camera_source = camera_source
+    start_vps_snapshot_pusher(camera_source, site_code="6070832089", camera_id="9")
 
     onvif_server = OnvifDiscoveryServer(http_port=args.port)
     mdns = MdnsAnnouncer(port=args.port)

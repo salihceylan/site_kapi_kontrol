@@ -176,12 +176,17 @@ class PlateCameraSnapshot {
     }
 
     SnapshotResult last = SnapshotResult.failure('Kamera adresi yok');
+    final failedAuthorities = <String>{};
     for (final uri in candidates(camera)) {
       if (uri == cached) continue;
+      if (failedAuthorities.contains(uri.authority)) continue;
       final r = await fetch(client, camera, uri, fetchPlateFallback: fetchPlateFallback);
       if (r.ok) return (uri, r);
       last = r;
       if (r.error != null && r.error!.startsWith('Kamera kimlik')) break;
+      if (r.error == 'Zaman aşımı' || r.error == 'Bağlanılamadı') {
+        failedAuthorities.add(uri.authority);
+      }
     }
     return (null, last);
   }

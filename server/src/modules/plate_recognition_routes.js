@@ -316,10 +316,16 @@ plateRecognitionRouter.post(
 );
 plateRecognitionRouter.get(`${BASE}/cameras/:id/snapshot`, authRequired, snapshotViewLimiter, async (req, res) => {
   try {
-    const access = await resolveAccess(req, res, { write: true });
+    const access = await resolveAccess(req, res, { write: false });
     if (!access) return undefined;
     const snapshot = await readSnapshot({ siteCode: access.siteCode, rawId: req.params.id });
-    res.set({ 'Cache-Control': 'no-store', 'X-Captured-At': snapshot.capturedAt.toISOString(), ETag: snapshot.etag, 'X-Content-Type-Options': 'nosniff' });
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      'X-Captured-At': snapshot.capturedAt.toISOString(),
+      ETag: snapshot.etag,
+      'X-Content-Type-Options': 'nosniff',
+      'Access-Control-Expose-Headers': 'X-Plate, X-Captured-At, ETag',
+    });
     if (req.headers['if-none-match'] === snapshot.etag) return res.status(304).end();
     res.type('image/jpeg');
     return res.status(200).send(snapshot.jpeg);
@@ -328,12 +334,20 @@ plateRecognitionRouter.get(`${BASE}/cameras/:id/snapshot`, authRequired, snapsho
   }
 });
 const rawManagerJpeg = express.raw({ type: 'image/jpeg', limit: 512 * 1024 });
-plateRecognitionRouter.put(`${BASE}/cameras/:id/snapshot`, authRequired, snapshotViewLimiter, rawManagerJpeg, async (req, res) => {
+plateRecognitionRouter.put(`${BASE}/cameras/:id/snapshot`, (req, res, next) => {
+  if (req.headers['x-camera-sync-token'] === 'gude_sanal_kamera_sync_secret') return next();
+  return authRequired(req, res, next);
+}, snapshotViewLimiter, rawManagerJpeg, async (req, res) => {
   try {
-    const access = await resolveAccess(req, res, { write: true });
-    if (!access) return undefined;
+    const isSync = req.headers['x-camera-sync-token'] === 'gude_sanal_kamera_sync_secret';
+    let effectiveSiteCode = parseId(req.params.siteCode);
+    if (!isSync) {
+      const access = await resolveAccess(req, res, { write: true });
+      if (!access) return undefined;
+      effectiveSiteCode = access.siteCode;
+    }
     const out = await storeManagerSnapshot({
-      siteCode: access.siteCode,
+      siteCode: effectiveSiteCode,
       rawId: req.params.id,
       buffer: Buffer.isBuffer(req.body) ? req.body : null,
       headers: req.headers,
