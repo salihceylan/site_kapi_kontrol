@@ -391,34 +391,37 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
               borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.md - 1.2)),
             ),
             child: Stack(
-              fit: StackFit.expand,
               children: <Widget>[
                 if (widget.camerasService != null && isActive)
-                  PlateCameraLivePreview(
-                    key: ValueKey<String>('gate_cam_preview_$cameraId'),
-                    cameraId: cameraId,
-                    name: name,
-                    host: host,
-                    port: port,
-                    rtspUrl: rtspUrl,
-                    isActive: isActive,
-                    siteCode: widget.siteCode,
-                    camerasService: widget.camerasService,
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.md - 1.2)),
+                  Positioned.fill(
+                    child: PlateCameraLivePreview(
+                      key: ValueKey<String>('gate_cam_preview_$cameraId'),
+                      cameraId: cameraId,
+                      name: name,
+                      host: host,
+                      port: port,
+                      rtspUrl: rtspUrl,
+                      isActive: isActive,
+                      siteCode: widget.siteCode,
+                      camerasService: widget.camerasService,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.md - 1.2)),
+                    ),
                   )
                 else
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.08),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-                      ),
-                      child: Icon(
-                        Icons.videocam_rounded,
-                        size: 32,
-                        color: isActive ? const Color(0xFF10B981) : Colors.grey,
+                  Positioned.fill(
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.08),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                        ),
+                        child: Icon(
+                          Icons.videocam_rounded,
+                          size: 32,
+                          color: isActive ? const Color(0xFF10B981) : Colors.grey,
+                        ),
                       ),
                     ),
                   ),

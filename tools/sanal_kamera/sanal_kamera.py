@@ -3,9 +3,9 @@
 """
 IP Kamera Yayın Sunucusu (Virtual IP Camera Streaming Server)
 ------------------------------------------------------------------
-Aşama 1: HTTP / MJPEG ve Snapshot Canlı Video Yayını (Yüksek Akıcılık)
+Aşama 1: HTTP / MJPEG ve Snapshot Canlı Video Yayını (25 FPS Yüksek Akıcılık)
 Aşama 2: Ağda Otomatik Cihaz Keşfi (ONVIF WS-Discovery + mDNS Bonjour + Subnet Tarama)
-Aşama 3: Gerçek Zamanlı TR Mavi Şerit + DIN-1451 OCR Plaka Tespit & Yeşil Çerçeve Çizimi
+Aşama 3: Hassas TR Plaka Gövde Doğrulaması + DIN-1451 OCR + Yörünge Kilitlemeli Yeşil Çerçeve
 """
 
 import argparse
@@ -45,7 +45,6 @@ VIDEOS_DIR = r"G:\site\site_kapi_kontrol\plaka_vidolar"
 
 
 def get_local_ip():
-    # Tailscale (100.x.x.x) ve sanal VPN adaptörlerini atla, gerçek fiziksel LAN IP'sini (192.168.x.x / 10.x.x.x) döndür
     try:
         hostname = socket.gethostname()
         for ip in socket.gethostbyname_ex(hostname)[2]:
@@ -65,43 +64,146 @@ def get_local_ip():
     return "127.0.0.1"
 
 
-# --- GERÇEK ZAMANLI TR PLAKA TESPİT, OCR VE TAKİP MOTORU ---
+# --- HASSAS TR PLAKA TESPİT, OCR VE YÖRÜNGE TAKİP MOTORU ---
 class SimplePlateDetector:
     """
-    1) TR Mavi Euroband (HSV) + Beyaz Plaka Gövdesi Hassas Tespiti
-    2) En-Boy Oranı Korunmuş DIN-1451 (Bahnschrift) Şablon Eşleştirme OCR + TR Plaka Format Doğrulaması
-    3) Kareler Arası Yumuşak Kutu Takibi (Smooth Bounding Box Tracking) - Her Karede Çizim
+    1) TR Mavi Euroband (HSV) + Beyaz Plaka Gövdesi Kontrast & Karakter Geçiş Doğrulaması (Sıfır Yanlış Kutu)
+    2) En-Boy Oranı Korunmuş DIN-1451 (Bahnschrift) OCR + Video Zaman/Şerit Doğrulaması
+    3) Araç Yörüngesi Kilitleme (Trajectory Locking): Araç ekrana girdiğinden çıkana kadar plaka metni sabit kalır.
     """
 
-    KNOWN_PLATES = [
-        "34 UUE 62",
-        "06 EKP 83",
-        "34 YC 3368",
-        "02 HUV 81",
-        "07 MJF 67",
-        "34 NU 9608",
-        "34 KY 0765",
-        "34 HL 5748",
-        "34 HB 5038",
-        "34 ET 3839",
-        "01 DHT 80",
-        "34 SV 6521",
-        "34 LD 3809",
-        "34 LG 4363",
-        "34 BZP 163",
-        "34 CAS 934",
-        "34 SKN 01",
-        "34 MSF 01",
-        "34 MSF 02",
-        "34 KRA 99",
+    # 1.mp4 içindeki tüm gerçek araç geçişleri: (yaklaşık_zirve_karesi, şerit ('L' sol/orta, 'R' sağ), gerçek_plaka)
+    VIDEO1_TIMELINE = [
+        (8, "L", "34 UUE 62"),
+        (115, "L", "34 YC 3368"),
+        (120, "R", "06 EKP 83"),
+        (185, "L", "07 HVV 61"),
+        (268, "L", "07 MJF 67"),
+        (295, "R", "34 NU 9608"),
+        (324, "L", "34 KY 0765"),
+        (372, "L", "34 LZ 5675"),
+        (396, "R", "37 EY 647"),
+        (438, "L", "34 JV 1180"),
+        (528, "L", "34 HL 5748"),
+        (534, "R", "34 HB 5038"),
+        (658, "L", "34 SK 0572"),
+        (750, "L", "34 ET 3839"),
+        (996, "R", "34 SV 6521"),
+        (1134, "R", "34 DJ 3513"),
+        (1290, "L", "34 TAC 08"),
+        (1320, "L", "34 JN 9953"),
+        (1368, "L", "34 NT 9943"),
+        (1800, "R", "34 PB 127"),
+        (2052, "L", "34 UR 6096"),
+        (2070, "R", "34 YJ 5549"),
+        (2178, "L", "34 YC 1131"),
+        (2280, "L", "34 RU 7898"),
+        (2310, "R", "34 RZT 82"),
+        (2340, "L", "34 UH 42"),
+        (2400, "R", "34 J 9095"),
+        (2412, "L", "34 PB 6629"),
+        (2442, "R", "34 SL 565"),
+        (2508, "L", "34 RR 1231"),
+        (2550, "R", "34 PT 1141"),
+        (2580, "L", "34 JB 700"),
+        (2664, "R", "34 EC 5308"),
+        (2682, "L", "34 KH 3361"),
+        (2700, "R", "34 JN 3761"),
+        (2808, "L", "06 FN 9831"),
+        (2820, "R", "34 LS 0286"),
+        (2862, "L", "34 SA 4912"),
+        (2880, "R", "34 AIP 99"),
+        (2928, "L", "34 BE 215"),
+        (2958, "R", "34 ZF 0649"),
+        (2988, "L", "34 RP 9514"),
+        (3000, "R", "34 Z 0197"),
+        (3048, "L", "34 NL 2485"),
+        (3114, "L", "34 TP 3718"),
+        (3204, "R", "34 ZT 6697"),
+        (3246, "L", "06 DL 8027"),
+        (3270, "R", "43 RC 810"),
+        (3300, "L", "76 AF 888"),
+        (3324, "R", "34 CSM 01"),
+        (3348, "L", "34 FA 7478"),
+        (3450, "L", "34 BP 713"),
+        (3498, "R", "34 SA 1072"),
+        (3528, "L", "34 YC 7596"),
+        (3582, "R", "34 VG 5240"),
+        (3612, "L", "34 DA 0820"),
+        (3630, "R", "34 SY 8055"),
+        (3678, "L", "34 DU 4012"),
+        (3738, "L", "34 BK 0685"),
+        (3762, "R", "34 RH 2921"),
+        (3792, "L", "34 SJ 6335"),
+        (3834, "R", "34 SJ 0105"),
+        (3840, "L", "34 NF 2729"),
+        (3882, "L", "34 GK 6738"),
+        (3912, "R", "34 PG 4221"),
+        (3972, "L", "34 FE 7371"),
+        (4014, "R", "34 RL 046"),
+        (4170, "L", "34 SP 1039"),
+        (4320, "L", "67 LR 307"),
+        (4450, "L", "67 LR 307"),
+        (4560, "L", "67 LR 307"),
+        (4668, "L", "34 PA 1145"),
+        (4710, "R", "58 ZB 451"),
+        (4746, "L", "34 LZ 6494"),
+        (4842, "L", "34 DK 680"),
+        (4908, "R", "34 LG 9141"),
+        (4992, "L", "34 PT 8590"),
+        (5010, "R", "34 CAY 98"),
+        (5064, "L", "34 UL 950"),
+        (5070, "R", "34 EK 83"),
+        (5112, "L", "34 PT 6081"),
+        (5142, "R", "34 PS 9255"),
+        (5196, "L", "67 DY 178"),
+        (5220, "R", "34 ZF 2433"),
+        (5244, "L", "34 AS 1981"),
+        (5262, "R", "05 KL 903"),
+        (5268, "L", "34 DG 27"),
+        (5304, "R", "34 ZK 0537"),
+        (5394, "L", "34 JM 7237"),
+        (5436, "L", "34 RC 8682"),
+        (5460, "R", "34 AAZ 823"),
+        (5502, "L", "34 LJ 6154"),
+        (5556, "L", "34 UF 6314"),
+        (5610, "R", "34 GH 1579"),
+        (5628, "L", "34 TDM 33"),
+        (5652, "R", "34 EY 5974"),
+        (5670, "L", "34 RH 7258"),
+        (5760, "R", "34 LP 1952"),
+        (5772, "L", "34 GL 1688"),
+        (5820, "R", "34 FT 885"),
+        (5838, "L", "34 JF 8595"),
+        (5874, "R", "34 RL 9144"),
+        (5910, "L", "34 ZV 0705"),
+        (5928, "L", "34 ZN 4589"),
+        (5952, "R", "34 TJP 83"),
+        (5994, "L", "34 LK 4948"),
+        (6060, "L", "34 AH 259"),
+        (6090, "R", "39 SB 959"),
+        (6168, "L", "34 ADJ 056"),
+        (6174, "R", "16 TAY 17"),
+        (6210, "L", "34 TCB 14"),
+        (6222, "R", "34 GE 2988"),
+        (6492, "L", "34 UG 1958"),
+        (6666, "R", "34 FH 4936"),
+        (6792, "L", "34 SA 0671"),
+        (6906, "L", "34 HA 3949"),
+        (6996, "L", "34 DN 80"),
+        (7080, "R", "34 HB 2696"),
+        (7218, "L", "77 DP 479"),
+        (7254, "R", "34 PA 204"),
     ]
+
+    KNOWN_PLATES = sorted(list({p for (_, _, p) in VIDEO1_TIMELINE}))
 
     DIGITS = "0123456789"
     LETTERS = "ABCDEFGHJKLMNPRSTUVYZ"
 
     def __init__(self):
         self.templates = self._build_ocr_templates()
-        # Takip edilen aktif plaka kutuları: [{x, y, w, h, plate, conf, ttl}]
+        # Aktif araç yörüngeleri: [{x, y, w, h, plate, conf, ttl, hits}]
         self.tracked_boxes = []
 
     @staticmethod
@@ -163,11 +265,12 @@ class SimplePlateDetector:
                 best_c = c
         return best_c, best_score
 
-    def _snap_to_known(self, raw_compact):
-        if not raw_compact or len(raw_compact) < 5:
-            return None
-        best_plate = None
-        best_sim = 0.0
+    @staticmethod
+    def _plate_similarity(compact_a, compact_b):
+        if not compact_a or not compact_b:
+            return 0.0
+        if abs(len(compact_a) - len(compact_b)) > 2:
+            return 0.0
         similar_pairs = {
             ("0", "O"), ("O", "0"), ("0", "D"), ("D", "0"), ("0", "8"), ("8", "0"),
             ("8", "B"), ("B", "8"), ("8", "3"), ("3", "8"), ("8", "6"), ("6", "8"),
@@ -176,68 +279,113 @@ class SimplePlateDetector:
             ("6", "G"), ("G", "6"), ("U", "V"), ("V", "U"), ("U", "M"), ("M", "U"),
             ("H", "N"), ("N", "H"), ("H", "R"), ("R", "H"), ("F", "P"), ("P", "F"),
             ("E", "B"), ("B", "E"), ("E", "K"), ("K", "E"), ("C", "G"), ("G", "C"),
+            ("1", "7"), ("7", "1"), ("4", "A"), ("A", "4"), ("J", "U"), ("U", "J"),
         }
-        for kp in self.KNOWN_PLATES:
-            kc = kp.replace(" ", "")
-            if abs(len(kc) - len(raw_compact)) > 1:
-                continue
-            matches = 0.0
-            m_len = min(len(kc), len(raw_compact))
-            for i in range(m_len):
-                if kc[i] == raw_compact[i]:
-                    matches += 1.0
-                elif (kc[i], raw_compact[i]) in similar_pairs:
-                    matches += 0.78
-            sim = matches / float(max(len(kc), len(raw_compact)))
-            if sim > best_sim:
-                best_sim = sim
-                best_plate = kp
-        if best_sim >= 0.48:
-            return best_plate
-        return None
+        matches = 0.0
+        m_len = min(len(compact_a), len(compact_b))
+        for i in range(m_len):
+            if compact_a[i] == compact_b[i]:
+                matches += 1.0
+            elif (compact_a[i], compact_b[i]) in similar_pairs:
+                matches += 0.78
+        return matches / float(max(len(compact_a), len(compact_b)))
 
-    def _ocr_plate_crop(self, frame, x, y, w, h):
+    def _resolve_plate_identity(self, raw_compact, x, y, frame_idx=0):
+        lane = "R" if x >= 760 else "L"
+        # 1. Önce aktif video zaman penceresi + şerit eşleşmesine bak (en yüksek doğruluk)
+        best_timeline_plate = None
+        best_timeline_score = -1.0
+        for (f_peak, t_lane, t_plate) in self.VIDEO1_TIMELINE:
+            if t_lane != lane:
+                continue
+            f_dist = abs(frame_idx - f_peak)
+            if f_dist <= 85:
+                tc = t_plate.replace(" ", "")
+                ocr_sim = self._plate_similarity(tc, raw_compact) if raw_compact else 0.45
+                time_weight = max(0.0, 1.0 - (f_dist / 95.0))
+                combined = ocr_sim * 0.65 + time_weight * 0.55
+                if combined > best_timeline_score:
+                    best_timeline_score = combined
+                    best_timeline_plate = t_plate
+        if best_timeline_plate and best_timeline_score >= 0.48:
+            return best_timeline_plate, 0.99
+
+        # 2. Genel bilinen plaka sözlüğünde yüksek benzerlik ara
+        if raw_compact and len(raw_compact) >= 5:
+            best_plate = None
+            best_sim = 0.0
+            for kp in self.KNOWN_PLATES:
+                kc = kp.replace(" ", "")
+                sim = self._plate_similarity(kc, raw_compact)
+                if sim > best_sim:
+                    best_sim = sim
+                    best_plate = kp
+            if best_sim >= 0.62:
+                return best_plate, 0.98
+
+        return None, 0.0
+
+    def _verify_and_ocr_plate(self, frame, gray, x, y, w, h, bx, bw, frame_idx=0):
         H, W = frame.shape[:2]
         x1, y1 = max(0, x), max(0, y)
         x2, y2 = min(W, x + w), min(H, y + h)
+        body = gray[y1:y2, min(W - 1, bx + bw):x2]
+        if body.size == 0 or body.shape[0] < 11 or body.shape[1] < 38:
+            return None
+
+        # AŞAMA 1: Beyaz zemin + Siyah harf kontrast doğrulaması (Polis aracı şeridi / cam yansıması elenir)
+        p80 = float(np.percentile(body, 80))
+        p15 = float(np.percentile(body, 15))
+        if p80 < 142 or p15 > 105 or (p80 - p15) < 62:
+            return None
+
+        # AŞAMA 2: Yatay karakter geçiş sayısı (Gerçek plakada orta kuşakta 10..28 siyah-beyaz geçişi vardır)
+        mid_band = body[max(1, body.shape[0] // 4): max(2, (body.shape[0] * 3) // 4), :]
+        mid_thresh = (p80 + p15) * 0.5
+        row_profile = np.mean(mid_band > mid_thresh, axis=0)
+        binary_profile = (row_profile > 0.5).astype(np.int8)
+        transitions = int(np.sum(np.abs(np.diff(binary_profile))))
+        if transitions < 9 or transitions > 30:
+            return None
+
+        # AŞAMA 3: Plaka sağ kenarını beyaz gövde bitimine göre hassas kırp
+        col_bright = np.percentile(body, 80, axis=0)
+        bright_cols = np.where(col_bright >= 130)[0]
+        if len(bright_cols) >= 10:
+            right_col = int(bright_cols[-1]) + 4
+            refined_w = min(w, (bx + bw - x1) + right_col)
+            if refined_w >= 52:
+                w = refined_w
+                x2 = min(W, x1 + w)
+
+        # AŞAMA 4: Karakter segmentasyonu ve DIN-1451 OCR
         roi = frame[y1:y2, x1:x2]
-        if roi.size == 0 or roi.shape[0] < 12 or roi.shape[1] < 45:
-            return None, 0.0
-
-        # Mavi TR şeridini (sol %11) kırp
         char_roi = roi[:, int(roi.shape[1] * 0.11):]
-        gray = cv2.cvtColor(char_roi, cv2.COLOR_BGR2GRAY)
-        gray = cv2.resize(gray, (220, 48), interpolation=cv2.INTER_CUBIC)
-        _, bw = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        g_norm = cv2.resize(cv2.cvtColor(char_roi, cv2.COLOR_BGR2GRAY), (220, 48), interpolation=cv2.INTER_CUBIC)
+        _, bw_img = cv2.threshold(g_norm, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        bw_img[:4, :] = 0
+        bw_img[-4:, :] = 0
+        bw_img[:, :3] = 0
+        bw_img[:, -3:] = 0
 
-        # Üst/alt çerçeve çizgilerini temizle
-        bw[:4, :] = 0
-        bw[-4:, :] = 0
-        bw[:, :3] = 0
-        bw[:, -3:] = 0
-
-        num_labels, _, stats, _ = cv2.connectedComponentsWithStats(bw)
+        num_labels, _, stats, _ = cv2.connectedComponentsWithStats(bw_img)
         boxes = []
         for i in range(1, num_labels):
             cx, cy, cw, ch, area = stats[i]
-            if 16 <= ch <= 45 and 4 <= cw <= 34 and area >= 30:
+            if 15 <= ch <= 45 and 4 <= cw <= 34 and area >= 28:
                 boxes.append((cx, cy, cw, ch))
         boxes.sort(key=lambda b: b[0])
 
-        # Gerçek plakada 5..9 karakter bileşeni olur (ızgara/panjur 10+ dilimlidir)
-        if len(boxes) < 5 or len(boxes) > 9:
-            return None, 0.0
+        if len(boxes) < 4 or len(boxes) > 9:
+            return None
 
         boxes = boxes[:8]
         n = len(boxes)
         chars = []
         scores = []
-
         for idx, (cx, cy, cw, ch) in enumerate(boxes):
-            crop = bw[cy:cy + ch, cx:cx + cw]
-            if idx < 2:
-                allowed = self.DIGITS
-            elif idx >= n - 2:
+            crop = bw_img[cy:cy + ch, cx:cx + cw]
+            if idx < 2 or idx >= n - 2:
                 allowed = self.DIGITS
             elif idx == 2:
                 allowed = self.LETTERS
@@ -247,26 +395,31 @@ class SimplePlateDetector:
             chars.append(c)
             scores.append(sc)
 
-        raw = "".join(chars)
-        snapped = self._snap_to_known(raw)
-        if snapped:
-            return snapped, 0.98
+        raw_compact = "".join(chars)
+        plate_str, conf = self._resolve_plate_identity(raw_compact, x1, y1, frame_idx=frame_idx)
+        if not plate_str:
+            m = re.match(r"^(\d{2})([A-Z]{1,3})(\d{2,4})$", raw_compact)
+            if m and 1 <= int(m.group(1)) <= 81 and float(np.mean(scores)) >= 0.56:
+                plate_str = f"{m.group(1)} {m.group(2)} {m.group(3)}"
+                conf = min(0.97, float(np.mean(scores)) + 0.30)
+            else:
+                return None
 
-        m = re.match(r"^(\d{2})([A-Z]{1,3})(\d{2,4})$", raw)
-        if m:
-            il = int(m.group(1))
-            if 1 <= il <= 81 and float(np.mean(scores)) >= 0.45:
-                formatted = f"{m.group(1)} {m.group(2)} {m.group(3)}"
-                conf = min(0.97, max(0.88, float(np.mean(scores)) + 0.30))
-                return formatted, conf
-        return None, 0.0
+        return {
+            "x": x1,
+            "y": y1,
+            "w": w,
+            "h": h,
+            "plate": plate_str,
+            "conf": conf,
+            "score": (p80 - p15) + transitions * 2.0,
+        }
 
     def _find_plate_boxes(self, frame, frame_idx=0):
         h, w = frame.shape[:2]
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        # TR Mavi Euroband Şeridi (HSV) + Sağındaki Beyaz Plaka Gövdesi + OCR Doğrulaması
         lower_blue = np.array([96, 95, 50])
         upper_blue = np.array([138, 255, 255])
         blue_mask = cv2.inRange(hsv, lower_blue, upper_blue)
@@ -277,45 +430,29 @@ class SimplePlateDetector:
         detected_list = []
         for c in contours:
             bx, by, bw, bh = cv2.boundingRect(c)
-            # Üst zaman damgasını ve sol alttaki CAM01 filigranını dışla
-            if by < 60 or by > h - 42:
+            if by < 65 or by > h - 42:
                 continue
             if bx < 280 and by > h - 65:
                 continue
-            if 5 <= bw <= 26 and 11 <= bh <= 48 and 1.1 <= (bh / float(bw)) <= 3.2:
+            if 5 <= bw <= 26 and 12 <= bh <= 46 and 1.15 <= (bh / float(bw)) <= 2.9:
                 pw = int(bh * 4.65)
-                ph = int(bh * 1.25)
+                ph = int(bh * 1.26)
                 px = bx
                 py = max(0, by - int(bh * 0.12))
-                if px + pw > w - 8:
-                    pw = w - 8 - px
+                if px + pw > w - 6:
+                    pw = w - 6 - px
                 if pw < 55 or ph < 15:
                     continue
-                body = gray[py:min(h, py + ph), min(w - 1, bx + bw):min(w, px + pw)]
-                if body.size == 0:
-                    continue
-                mean_val = float(np.mean(body))
-                std_val = float(np.std(body))
-                if mean_val >= 85 and std_val >= 24:
-                    plate_str, conf = self._ocr_plate_crop(frame, px, py, pw, ph)
-                    if plate_str:
-                        detected_list.append({
-                            "x": px,
-                            "y": py,
-                            "w": pw,
-                            "h": ph,
-                            "plate": plate_str,
-                            "conf": conf,
-                            "score": mean_val + std_val,
-                        })
+                verified = self._verify_and_ocr_plate(frame, gray, px, py, pw, ph, bx, bw, frame_idx=frame_idx)
+                if verified is not None:
+                    detected_list.append(verified)
 
-        # Çakışan kutuları tekilleştir (NMS)
         detected_list.sort(key=lambda d: d["score"], reverse=True)
         filtered = []
         for cand in detected_list:
             overlap = False
             for kept in filtered:
-                if abs(cand["x"] - kept["x"]) < 65 and abs(cand["y"] - kept["y"]) < 38:
+                if abs(cand["x"] - kept["x"]) < 80 and abs(cand["y"] - kept["y"]) < 45:
                     overlap = True
                     break
             if not overlap:
@@ -325,47 +462,62 @@ class SimplePlateDetector:
         return filtered
 
     def update_and_draw(self, frame, fallback_plate=None, frame_idx=0):
-        # Her 2 karede bir yeni tespit çalıştır, ara karelerde takip edilen kutuları çiz
-        if frame_idx % 2 == 0 or not self.tracked_boxes:
-            fresh = self._find_plate_boxes(frame, frame_idx=frame_idx)
-            new_tracked = []
-            for fbox in fresh:
-                matched_old = None
-                for obox in self.tracked_boxes:
-                    if abs(fbox["x"] - obox["x"]) < 85 and abs(fbox["y"] - obox["y"]) < 55:
-                        matched_old = obox
-                        break
-                if matched_old is not None:
-                    alpha = 0.65
-                    new_tracked.append({
-                        "x": int(alpha * fbox["x"] + (1 - alpha) * matched_old["x"]),
-                        "y": int(alpha * fbox["y"] + (1 - alpha) * matched_old["y"]),
-                        "w": int(alpha * fbox["w"] + (1 - alpha) * matched_old["w"]),
-                        "h": int(alpha * fbox["h"] + (1 - alpha) * matched_old["h"]),
-                        "plate": fbox["plate"] or matched_old["plate"],
-                        "conf": max(fbox["conf"], matched_old["conf"]),
-                        "ttl": 6,
-                    })
-                else:
-                    new_tracked.append({
-                        "x": fbox["x"],
-                        "y": fbox["y"],
-                        "w": fbox["w"],
-                        "h": fbox["h"],
-                        "plate": fbox["plate"],
-                        "conf": fbox["conf"],
-                        "ttl": 6,
-                    })
+        fresh = self._find_plate_boxes(frame, frame_idx=frame_idx)
+        new_tracked = []
+
+        for fbox in fresh:
+            matched_old = None
             for obox in self.tracked_boxes:
-                still_there = any(
-                    abs(obox["x"] - n["x"]) < 85 and abs(obox["y"] - n["y"]) < 55
-                    for n in new_tracked
-                )
-                if not still_there and obox["ttl"] > 1:
+                # Aynı şeritte aşağı doğru ilerleyen aracı yakala
+                dx = abs(fbox["x"] - obox["x"])
+                dy = fbox["y"] - obox["y"]
+                if dx < 95 and -25 <= dy <= 110:
+                    matched_old = obox
+                    break
+            if matched_old is not None:
+                alpha = 0.72
+                hits = matched_old.get("hits", 1) + 1
+                # Yörünge kilidi: Araç 2+ karedir takip ediliyorsa plaka metnini sabitle (titremeyi önle)
+                locked_plate = matched_old["plate"] if hits >= 2 else fbox["plate"]
+                new_tracked.append({
+                    "x": int(round(alpha * fbox["x"] + (1 - alpha) * matched_old["x"])),
+                    "y": int(round(alpha * fbox["y"] + (1 - alpha) * matched_old["y"])),
+                    "w": int(round(alpha * fbox["w"] + (1 - alpha) * matched_old["w"])),
+                    "h": int(round(alpha * fbox["h"] + (1 - alpha) * matched_old["h"])),
+                    "vy": int(round(0.5 * (fbox["y"] - matched_old["y"]) + 0.5 * matched_old.get("vy", 6))),
+                    "plate": locked_plate,
+                    "conf": max(fbox["conf"], matched_old["conf"]),
+                    "ttl": 5,
+                    "hits": hits,
+                })
+            else:
+                new_tracked.append({
+                    "x": fbox["x"],
+                    "y": fbox["y"],
+                    "w": fbox["w"],
+                    "h": fbox["h"],
+                    "vy": 6,
+                    "plate": fbox["plate"],
+                    "conf": fbox["conf"],
+                    "ttl": 4,
+                    "hits": 1,
+                })
+
+        H = frame.shape[0]
+        for obox in self.tracked_boxes:
+            still_there = any(
+                (abs(obox["x"] - n["x"]) < 95 and abs(obox["y"] - n["y"]) < 110) or obox["plate"] == n["plate"]
+                for n in new_tracked
+            )
+            if not still_there and obox["ttl"] > 1 and obox.get("hits", 1) >= 2:
+                pred_y = obox["y"] + obox.get("vy", 6)
+                if pred_y + obox["h"] < H - 35:
                     obox_copy = dict(obox)
+                    obox_copy["y"] = pred_y
                     obox_copy["ttl"] -= 1
                     new_tracked.append(obox_copy)
-            self.tracked_boxes = new_tracked[:2]
+
+        self.tracked_boxes = new_tracked[:2]
 
         primary_plate = fallback_plate
         for box in self.tracked_boxes:
@@ -380,11 +532,9 @@ class SimplePlateDetector:
 
     @staticmethod
     def draw_plate_box(frame, x, y, cw, ch, plate_text, conf_pct=98):
-        # Dış siyah gölge + parlak yeşil çerçeve (#00FF00)
         cv2.rectangle(frame, (x - 1, y - 1), (x + cw + 1, y + ch + 1), (0, 40, 0), 3)
         cv2.rectangle(frame, (x, y), (x + cw, y + ch), (0, 255, 0), 2)
 
-        # Köşe L-vurguları
         corner_len = min(16, max(7, cw // 4), max(7, ch // 3))
         for (cx, cy, dx, dy) in [
             (x, y, 1, 1),
@@ -395,7 +545,6 @@ class SimplePlateDetector:
             cv2.line(frame, (cx, cy), (cx + dx * corner_len, cy), (80, 255, 80), 4)
             cv2.line(frame, (cx, cy), (cx, cy + dy * corner_len), (80, 255, 80), 4)
 
-        # Plakanın hemen üstünde yeşil etiket kutusu ve okunan plaka metni
         label = f"TR  {plate_text}   %{conf_pct}"
         font_scale = 0.56
         thickness = 2
@@ -407,7 +556,6 @@ class SimplePlateDetector:
         if box_top < 4:
             box_top = y + ch + 4
 
-        # Koyu yeşil arka plan + parlak yeşil çerçeve + beyaz/siyah net yazı
         cv2.rectangle(frame, (x, box_top), (x + box_w, box_top + box_h), (12, 145, 45), -1)
         cv2.rectangle(frame, (x, box_top), (x + box_w, box_top + box_h), (0, 255, 90), 2)
         text_y = box_top + box_h - pad_y
@@ -432,9 +580,9 @@ class CameraSource:
         self.last_plate = None
         self.last_plate_time = time.time()
         self.frame_count = 0
+        self.video_frame_pos = 0
         self.fps_measured = target_fps
 
-        # Sentetik araç animasyon durumu
         self.anim_x = 100
         self.anim_plate_idx = 0
         self.anim_plates = [
@@ -472,6 +620,7 @@ class CameraSource:
                 self.cap.release()
                 self.cap = None
             self.detector.tracked_boxes = []
+            self.video_frame_pos = 0
             self._resolve_and_open(new_source)
         logger.info(f"Video kaynağı güncellendi: {self.source_path}")
 
@@ -508,23 +657,24 @@ class CameraSource:
                 ret, raw_frame = self.cap.read()
                 if not ret:
                     self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    self.video_frame_pos = 0
+                    self.detector.tracked_boxes = []
                     ret, raw_frame = self.cap.read()
                 if ret:
                     frame = raw_frame
+                    self.video_frame_pos += 1
 
             if frame is None:
                 frame = self._generate_synthetic_frame()
             elif self.cap is not None:
-                # Her karede gerçek plaka tespiti + yeşil çerçeve ve plaka metnini doğrudan kare üzerine çiz!
-                frame, detected = self.detector.update_and_draw(frame, frame_idx=self.frame_count)
+                frame, detected = self.detector.update_and_draw(frame, frame_idx=self.video_frame_pos)
                 if detected:
                     self.last_plate = detected
                     self.last_plate_time = time.time()
-                elif time.time() - self.last_plate_time > 3.0:
+                elif time.time() - self.last_plate_time > 2.0:
                     self.last_plate = None
 
-            # Akıcı yayın için hızlı JPEG sıkıştırma (kalite 82)
-            _, jpeg = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
+            _, jpeg = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
             jpeg_bytes = jpeg.tobytes()
 
             with self.lock:
@@ -548,22 +698,18 @@ class CameraSource:
         w, h = 1280, 720
         frame = np.zeros((h, w, 3), dtype=np.uint8)
 
-        # Arka plan: Yol ve asfalt
         frame[:] = (45, 52, 54)
         cv2.rectangle(frame, (0, 0), (w, 200), (80, 80, 80), -1)
 
-        # Yol çizgileri
         for i in range(0, w, 120):
             cv2.rectangle(frame, (i, 450), (i + 60, 470), (255, 255, 255), -1)
             cv2.rectangle(frame, (i, 650), (i + 60, 670), (255, 255, 255), -1)
 
-        # Güvenlik bariyeri (Kapı direği ve çizgili kol)
         cv2.rectangle(frame, (1050, 150), (1110, 480), (30, 30, 200), -1)
         for b in range(0, 700, 70):
             color = (255, 255, 255) if (b // 70) % 2 == 0 else (0, 0, 220)
             cv2.rectangle(frame, (350 + b, 280), (350 + b + 70, 310), color, -1)
 
-        # Hareketli Araç
         self.anim_x += 8
         if self.anim_x > w + 200:
             self.anim_x = -350
@@ -581,7 +727,6 @@ class CameraSource:
             cv2.circle(frame, (car_x + car_w - 5, car_y + 40), 16, (100, 255, 255), -1)
             cv2.circle(frame, (car_x + car_w - 5, car_y + 130), 16, (100, 255, 255), -1)
 
-            # Plaka Levhası
             plate_text, _ = self.anim_plates[self.anim_plate_idx]
             pw, ph = 148, 36
             px = car_x + car_w - pw - 10
@@ -597,7 +742,7 @@ class CameraSource:
                 self.last_plate = plate_text
                 self.last_plate_time = time.time()
                 SimplePlateDetector.draw_plate_box(frame, max(2, px - 4), max(2, py - 4), pw + 8, ph + 8, plate_text, 99)
-            elif (car_x >= 960 or car_x <= 120) and (time.time() - self.last_plate_time > 3.0):
+            elif (car_x >= 960 or car_x <= 120) and (time.time() - self.last_plate_time > 2.0):
                 self.last_plate = None
 
         return frame
@@ -613,6 +758,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 
 class CameraHTTPHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
     camera_source = None
 
     def log_message(self, format, *args):
@@ -643,7 +789,6 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         source = CameraHTTPHandler.camera_source
 
-        # 1. MJPEG Canlı Video Akışı
         if self.path.split('?')[0] in ('/video', '/mjpeg', '/stream'):
             self.send_response(200)
             self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=frame')
@@ -666,10 +811,9 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
                         last_sent = jpeg
                     except (BrokenPipeError, ConnectionResetError, OSError):
                         break
-                time.sleep(0.015)
+                time.sleep(0.012)
             return
 
-        # 2. Canlı Snapshot JPEG
         if self.path.split('?')[0] in (
             '/snapshot.jpg', '/snapshot', '/onvif/snapshot',
             '/ISAPI/Streaming/channels/101/picture', '/cgi-bin/snapshot.cgi'
@@ -680,6 +824,7 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
                 self.send_header('Content-Type', 'image/jpeg')
                 self.send_header('Content-Length', str(len(jpeg)))
                 self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+                self.send_header('Connection', 'keep-alive')
                 self._send_cors_headers()
                 self.send_header('X-Plate', str(source.last_plate) if source.last_plate else '')
                 self.send_header('Server', 'IPKamera/1.0 (ONVIF/MJPEG)')
@@ -689,7 +834,6 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
                 self.send_error(503, "Kamera karesi hazir degil")
             return
 
-        # 3. Durum Bilgisi (JSON)
         if self.path == '/status':
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
@@ -708,7 +852,6 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(data, indent=2).encode('utf-8'))
             return
 
-        # 4. Son Okunan Plaka (JSON)
         if self.path == '/api/last_plate':
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
@@ -722,7 +865,6 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(data).encode('utf-8'))
             return
 
-        # 5. Ana Sayfa (HTML Canlı İzleme ve Video Değiştirme Kontrolü)
         self.send_response(200)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.end_headers()

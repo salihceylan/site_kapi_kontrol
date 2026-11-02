@@ -28,7 +28,7 @@ class PlateCameraLivePreview extends StatefulWidget {
     this.camerasService,
     this.borderRadius,
     this.showControls = false,
-    this.pollInterval = const Duration(milliseconds: 55),
+    this.pollInterval = const Duration(milliseconds: 38),
   });
 
   final int cameraId;
@@ -78,10 +78,17 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
         oldWidget.host != widget.host ||
         oldWidget.port != widget.port ||
         oldWidget.isActive != widget.isActive ||
+        oldWidget.pollInterval != widget.pollInterval ||
         oldWidget.camera != widget.camera) {
       _resolvedCamera = widget.camera;
       _resolveCameraAndStart();
     }
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    _resolveCameraAndStart();
   }
 
   @override
@@ -170,7 +177,7 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
     // Motor zaten son 300ms içinde kare verdiyse fazladan istek atma
     if (_lastFrameAt != null &&
         DateTime.now().difference(_lastFrameAt!).inMilliseconds < 25 &&
-        PlateRecognitionEngine.instance.isRunning) {
+        false && PlateRecognitionEngine.instance.isRunning) {
       return;
     }
 
@@ -222,7 +229,7 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
         if (widget.camerasService != null &&
             widget.siteCode != null &&
             widget.cameraId > 0 &&
-            (_lastServerUploadAt == null || now.difference(_lastServerUploadAt!).inSeconds >= 6)) {
+            (_lastServerUploadAt == null || now.difference(_lastServerUploadAt!).inSeconds >= 2)) {
           _lastServerUploadAt = now;
           unawaited(widget.camerasService!.uploadSnapshot(widget.siteCode!, widget.cameraId, res.bytes!));
         }
@@ -299,7 +306,7 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
                     isActive: widget.isActive,
                     siteCode: widget.siteCode,
                     camerasService: widget.camerasService,
-                    pollInterval: const Duration(milliseconds: 250),
+                    pollInterval: const Duration(milliseconds: 35),
                   ),
                 ),
               ),
@@ -317,15 +324,16 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
     final plate = _detectedPlate;
 
     final content = Stack(
-      fit: StackFit.expand,
       children: <Widget>[
         // Arka plan
-        Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: <Color>[Color(0xFF0F172A), Color(0xFF1E293B)],
+        Positioned.fill(
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: <Color>[Color(0xFF0F172A), Color(0xFF1E293B)],
+              ),
             ),
           ),
         ),
@@ -337,35 +345,37 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
               bytes,
               fit: BoxFit.cover,
               gaplessPlayback: true,
-              filterQuality: FilterQuality.medium,
+              filterQuality: FilterQuality.low,
             ),
           )
         else
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.08),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+          Positioned.fill(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                    ),
+                    child: Icon(
+                      Icons.videocam_rounded,
+                      size: 28,
+                      color: widget.isActive ? const Color(0xFF10B981) : Colors.grey,
+                    ),
                   ),
-                  child: Icon(
-                    Icons.videocam_rounded,
-                    size: 28,
-                    color: widget.isActive ? const Color(0xFF10B981) : Colors.grey,
-                  ),
-                ),
-                if (widget.showControls) ...<Widget>[
-                  const SizedBox(height: 6),
-                  Text(
-                    widget.isActive ? 'Kamera akışı bağlanıyor...' : 'Kamera pasif',
-                    style: const TextStyle(color: Colors.white70, fontSize: 11),
-                  ),
+                  if (widget.showControls) ...<Widget>[
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.isActive ? 'Kamera akışı bağlanıyor...' : 'Kamera pasif',
+                      style: const TextStyle(color: Colors.white70, fontSize: 11),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
 
@@ -415,8 +425,14 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (!constraints.hasBoundedHeight) {
-          return SizedBox(height: 180, child: interactive);
+        final double? h = constraints.hasBoundedHeight ? null : 180.0;
+        final double? w = constraints.hasBoundedWidth ? null : 320.0;
+        if (h != null || w != null) {
+          return SizedBox(
+            width: w,
+            height: h,
+            child: interactive,
+          );
         }
         return interactive;
       },
@@ -629,21 +645,22 @@ class _PlateLiveCamerasSectionState extends State<PlateLiveCamerasSection> {
                         SizedBox(
                           height: 240,
                           child: Stack(
-                            fit: StackFit.expand,
                             children: <Widget>[
-                              PlateCameraLivePreview(
-                                key: ValueKey<String>('live_cam_${cam.id}'),
-                                cameraId: cam.id,
-                                name: cam.name,
-                                camera: cam,
-                                host: cam.host,
-                                port: cam.port,
-                                rtspUrl: cam.rtspUrl,
-                                isActive: cam.isActive,
-                                siteCode: widget.siteCode,
-                                camerasService: widget.camerasService,
-                                showControls: true,
-                                borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.md)),
+                              Positioned.fill(
+                                child: PlateCameraLivePreview(
+                                  key: ValueKey<String>('live_cam_${cam.id}'),
+                                  cameraId: cam.id,
+                                  name: cam.name,
+                                  camera: cam,
+                                  host: cam.host,
+                                  port: cam.port,
+                                  rtspUrl: cam.rtspUrl,
+                                  isActive: cam.isActive,
+                                  siteCode: widget.siteCode,
+                                  camerasService: widget.camerasService,
+                                  showControls: true,
+                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.md)),
+                                ),
                               ),
                               Positioned(
                                 top: 10,

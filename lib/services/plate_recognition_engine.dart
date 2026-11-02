@@ -168,6 +168,7 @@ class PlateRecognitionEngine {
 
   // Son okunan plakaların tekrarını engelleme (15 saniyelik cooldown)
   final Map<String, DateTime> _recentReads = <String, DateTime>{};
+  final Map<int, DateTime> _lastCameraEventAt = <int, DateTime>{};
 
   /// Motoru başlatır
   void start({
@@ -373,7 +374,12 @@ class PlateRecognitionEngine {
     if (lastSeen != null && now.difference(lastSeen).inSeconds < 15) {
       return;
     }
+    final lastCamEvent = _lastCameraEventAt[camera.id];
+    if (lastCamEvent != null && now.difference(lastCamEvent).inMilliseconds < 3500) {
+      return;
+    }
     _recentReads[plate] = now;
+    _lastCameraEventAt[camera.id] = now;
 
     // --- KARAR MOTORU ---
     final decision = _evaluatePlate(plate, camera);

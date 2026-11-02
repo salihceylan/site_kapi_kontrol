@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/services/plate_cameras_api.dart';
 
@@ -10,8 +11,15 @@ import 'package:site_kapi_kontrol/services/plate_cameras_api.dart';
 class PlateCameraSnapshot {
   PlateCameraSnapshot._();
 
-  /// Kamera kimliğine göre son başarılı çalışan anlık kare adresi önbelleği.
-  static final Map<int, Uri> _workingUriCache = <int, Uri>{};
+  /// Kamera kimliğine veya adresine göre son başarılı çalışan anlık kare adresi önbelleği.
+  static final Map<String, Uri> _workingUriCache = <String, Uri>{};
+
+  static String _cacheKey(PlateCameraRow camera) =>
+      '${camera.id}_${camera.host.trim()}_${camera.port ?? 0}';
+
+  static Uri? cachedUriFor(PlateCameraRow camera) =>
+      _workingUriCache[_cacheKey(camera)] ??
+      (camera.id > 0 ? _workingUriCache['id_${camera.id}'] : null);
 
   /// MJPEG / video akış yolları tek kare değildir; `toBytes()` ile okunursa bitmez. Aday listesinden çıkarılır.
   static bool _isStreamPath(String path) {
@@ -23,18 +31,26 @@ class PlateCameraSnapshot {
   static List<Uri> candidates(PlateCameraRow camera) {
     final host = camera.host.trim();
     final port = camera.port;
-    // 554 RTSP portudur; HTTP anlık kare orada sunulmaz -> 80'e (veya yerel 8080'e) düş.
-    final httpPort = (port == null || port == 554) ? 80 : port;
+    // 554 RTSP portudur; HTTP anlık kare orada sunulmaz -> 8080/80'e düş.
+    final httpPort = (port == null || port == 554) ? 8080 : port;
+    final loopbackPort = (port != null && port != 554 && port != 80) ? port : 8080;
 
     final out = <Uri>[];
     void addUnique(Uri u) {
       if (!out.contains(u)) out.add(u);
     }
 
-    // Önbellekte çalışan adres varsa ilk sıraya koy
-    final cached = _workingUriCache[camera.id];
+    // 1. Önbellekte çalışan adres varsa ilk sıraya koy
+    final cached = cachedUriFor(camera);
     if (cached != null) {
       addUnique(cached);
+    }
+
+    // 2. HTTPS Web tarayıcısında (kIsWeb) 192.168.x.x adresleri Mixed-Content nedeniyle engellenir;
+    // W3C Secure Context olan 127.0.0.1 / localhost adreslerini en başa koy ki 0ms gecikmeyle bağlansın.
+    if (kIsWeb) {
+      addUnique(Uri.parse('http://127.0.0.1:$loopbackPort/snapshot.jpg'));
+      addUnique(Uri.parse('http://localhost:$loopbackPort/snapshot.jpg'));
     }
 
     final custom = (camera.rtspUrl ?? '').trim();
@@ -55,14 +71,16 @@ class PlateCameraSnapshot {
       for (final path in snapshotPaths) {
         addUnique(Uri.parse('$base$path'));
       }
+      if (httpPort != 80) {
+        addUnique(Uri.parse('http://$host:80/snapshot.jpg'));
+      }
       if (httpPort != 8080) {
         addUnique(Uri.parse('http://$host:8080/snapshot.jpg'));
       }
     }
 
-    // Aynı bilgisayarda çalışan yerel kamera yayın sunucusu (HTTPS/Web Mixed-Content uyumlu loopback geri-düşüşü)
+    // Aynı bilgisayarda çalışan yerel kamera yayın sunucusu geri-düşüşü
     if (host != '127.0.0.1' && host != 'localhost') {
-      final loopbackPort = (port != null && port != 554 && port != 80) ? port : 8080;
       addUnique(Uri.parse('http://127.0.0.1:$loopbackPort/snapshot.jpg'));
       addUnique(Uri.parse('http://localhost:$loopbackPort/snapshot.jpg'));
     }
@@ -81,9 +99,10 @@ class PlateCameraSnapshot {
     http.Client client,
     PlateCameraRow camera,
     Uri uri, {
-    Duration timeout = const Duration(milliseconds: 1400),
+    Duration timeout = const Duration(milliseconds: 900),
     bool fetchPlateFallback = false,
   }) async {
+    final key = _cacheKey(camera);
     try {
       final res = await client.get(uri, headers: _headers(camera)).timeout(timeout);
       if (res.statusCode == 401 || res.statusCode == 403) {
@@ -103,15 +122,22 @@ class PlateCameraSnapshot {
         cleanPlate = await _queryLastPlateApi(client, uri);
       }
 
+      _workingUriCache[key] = uri;
       if (camera.id > 0) {
-        _workingUriCache[camera.id] = uri;
+        _workingUriCache['id_${camera.id}'] = uri;
       }
       return SnapshotResult.success(bytes, plate: cleanPlate, sourceUri: uri);
     } on TimeoutException {
-      if (_workingUriCache[camera.id] == uri) _workingUriCache.remove(camera.id);
+      if (_workingUriCache[key] == uri) _workingUriCache.remove(key);
+      if (camera.id > 0 && _workingUriCache['id_${camera.id}'] == uri) {
+        _workingUriCache.remove('id_${camera.id}');
+      }
       return SnapshotResult.failure('Zaman aşımı');
     } catch (_) {
-      if (_workingUriCache[camera.id] == uri) _workingUriCache.remove(camera.id);
+      if (_workingUriCache[key] == uri) _workingUriCache.remove(key);
+      if (camera.id > 0 && _workingUriCache['id_${camera.id}'] == uri) {
+        _workingUriCache.remove('id_${camera.id}');
+      }
       return SnapshotResult.failure('Bağlanılamadı');
     }
   }
@@ -119,7 +145,7 @@ class PlateCameraSnapshot {
   static Future<String?> _queryLastPlateApi(http.Client client, Uri snapshotUri) async {
     try {
       final apiUri = snapshotUri.replace(path: '/api/last_plate', query: null);
-      final res = await client.get(apiUri).timeout(const Duration(milliseconds: 400));
+      final res = await client.get(apiUri).timeout(const Duration(milliseconds: 350));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data is Map && data['plate'] != null) {
@@ -137,8 +163,21 @@ class PlateCameraSnapshot {
     PlateCameraRow camera, {
     bool fetchPlateFallback = false,
   }) async {
+    final cached = cachedUriFor(camera);
+    if (cached != null) {
+      final fast = await fetch(
+        client,
+        camera,
+        cached,
+        timeout: const Duration(milliseconds: 650),
+        fetchPlateFallback: fetchPlateFallback,
+      );
+      if (fast.ok) return (cached, fast);
+    }
+
     SnapshotResult last = SnapshotResult.failure('Kamera adresi yok');
     for (final uri in candidates(camera)) {
+      if (uri == cached) continue;
       final r = await fetch(client, camera, uri, fetchPlateFallback: fetchPlateFallback);
       if (r.ok) return (uri, r);
       last = r;

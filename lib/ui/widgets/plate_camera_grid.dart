@@ -435,7 +435,7 @@ class _PlateCameraTileState extends State<PlateCameraTile> with WidgetsBindingOb
                 child: AspectRatio(
                   aspectRatio: 16 / 9,
                   child: Stack(
-                    fit: StackFit.expand,
+                    fit: StackFit.loose,
                     children: <Widget>[
                       ColoredBox(color: p.surfaceMuted),
                       if (_bytes != null)
