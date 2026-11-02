@@ -203,19 +203,42 @@ async function loadIdentityLabels(db, siteCode, apartmentId, personId) {
 }
 
 /** En iyi çaba: günlük yazılamazsa olay kaydı ve yanıt etkilenmez (recordDoorAccessLog zaten hatayı yutar; etiket sorgusu için ayrıca sarılır). */
-async function writePlateDoorLog({ writeDoorLog, siteCode, gate, plate, identityKind, apartmentId, personId, seenAt }) {
+async function writePlateDoorLog({ writeDoorLog, siteCode, gate, plate, identityKind, apartmentId, personId, seenAt, deviceUid }) {
   try {
     const labels = await loadIdentityLabels(pool, siteCode, apartmentId, personId);
     const entry = doorLogEntry({ plateText: formatPlate(plate), identityKind, apartmentLabel: labels.apartmentLabel, personLabel: labels.personLabel });
+    let targetDoorId = gate?.door_id ?? null;
+    let targetDoorName = gate?.name ?? 'Ana Giriş Kapısı';
+    let targetDeviceUid = deviceUid ?? gate?.device_uid ?? null;
+
+    if (!targetDoorId || !targetDeviceUid) {
+      const fallbackDoor = (
+        await pool.query(
+          `SELECT sd.id, sd.door_name, d.device_uid
+             FROM site_doors sd
+             LEFT JOIN devices d ON d.id = sd.assigned_device_id
+            WHERE sd.site_code = $1 AND sd.is_active
+            ORDER BY sd.id LIMIT 1`,
+          [siteCode],
+        )
+      ).rows[0];
+      if (fallbackDoor) {
+        if (!targetDoorId) targetDoorId = Number(fallbackDoor.id);
+        if (!targetDoorName || targetDoorName === 'Plaka tanıma kapısı') targetDoorName = fallbackDoor.door_name;
+        if (!targetDeviceUid) targetDeviceUid = fallbackDoor.device_uid;
+      }
+    }
+
     await writeDoorLog({
       siteCode,
-      doorId: gate?.door_id ?? null,
-      doorName: gate?.name ?? 'Plaka tanıma kapısı',
+      doorId: targetDoorId,
+      doorName: targetDoorName,
       userName: entry.userName,
       userRole: 'plate',
       apartmentLabel: entry.apartmentLabel,
       triggerType: 'plate',
       openedAt: seenAt,
+      deviceUid: targetDeviceUid,
     });
   } catch (error) {
     // eslint-disable-next-line no-console
@@ -383,24 +406,49 @@ export async function recordManagerPlateEvent({ siteCode, body }) {
     try {
       const gateRow = (
         await pool.query(
-          `SELECT g.id, g.door_id, g.device_uid
+          `SELECT g.id, g.door_id, g.name AS gate_name,
+                  COALESCE(g.device_uid, d.device_uid) AS device_uid,
+                  COALESCE(sd.door_name, g.name) AS door_name
              FROM plate_gates g
+             LEFT JOIN site_doors sd ON sd.id = g.door_id AND sd.site_code = g.site_code
+             LEFT JOIN devices d ON d.id = sd.assigned_device_id
              LEFT JOIN plate_gate_cameras gc ON gc.gate_id = g.id
-            WHERE g.site_code = $1 AND (g.id = $2 OR gc.camera_id = $3)
-            ORDER BY g.id LIMIT 1`,
+            WHERE g.site_code = $1 AND (g.id = $2 OR gc.camera_id = $3 OR $3 IS NULL)
+            ORDER BY CASE WHEN gc.camera_id = $3 THEN 1 WHEN g.id = $2 THEN 2 ELSE 3 END, g.id LIMIT 1`,
           [siteCode, body?.gate_id ?? null, cameraId || null],
         )
       ).rows[0];
-      if (gateRow?.device_uid) {
+
+      let targetDeviceUid = gateRow?.device_uid;
+      let targetDoorId = gateRow?.door_id ?? gateRow?.id;
+
+      if (!targetDeviceUid) {
+        const fallbackDev = (
+          await pool.query(
+            `SELECT sd.id AS door_id, sd.door_name, d.device_uid
+               FROM site_doors sd
+               JOIN devices d ON d.id = sd.assigned_device_id
+              WHERE sd.site_code = $1 AND sd.is_active AND d.is_active
+              ORDER BY sd.id LIMIT 1`,
+            [siteCode],
+          )
+        ).rows[0];
+        if (fallbackDev) {
+          targetDeviceUid = fallbackDev.device_uid;
+          targetDoorId = fallbackDev.door_id;
+        }
+      }
+
+      if (targetDeviceUid) {
         await publishDoorPulse({
-          deviceUid: gateRow.device_uid,
-          requestedBy: `Plaka: ${String(body?.plate ?? '')}`,
-          doorId: gateRow.door_id ?? gateRow.id,
+          deviceUid: targetDeviceUid,
+          requestedBy: `Plaka: ${body?.plate || 'Otomatik'}`,
+          doorId: targetDoorId,
           siteCode,
         });
       }
     } catch (_) {
-      // Cihaz çevrimdışıysa olay kaydı etkilenmez (yerel UDP ayrıca gönderilmiştir)
+      // Cihaz cevrimdisiysa olay kaydi etkilenmez (yerel UDP ayrica gonderilmistir)
     }
   }
   return res;

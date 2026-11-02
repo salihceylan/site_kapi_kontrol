@@ -145,6 +145,8 @@ class SimplePlateDetector:
         self.recent_reads = []
         self.confirmed_gates = set()
         self.last_gate_trigger_at = 0
+        self.cooldown_until = 0.0  # 10 sn kapı geçiş molası (araba geçerken tekrar okuma yapmaz)
+        self.last_opened_plate = None
 
         self.detector = None
         self.ocr = None
@@ -205,9 +207,11 @@ class SimplePlateDetector:
 
     def _trigger_instant_gate(self, plate):
         now = time.time()
-        if now - self.last_gate_trigger_at < 12.0:
+        if now < self.cooldown_until:
             return
+        self.cooldown_until = now + 10.0  # 10 sn kesin mola kuralı
         self.last_gate_trigger_at = now
+        self.last_opened_plate = plate
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -219,7 +223,7 @@ class SimplePlateDetector:
             }).encode('utf-8')
             sock.sendto(msg, ("255.255.255.255", 8765))
             sock.close()
-            logger.info(">>> [LPR ANLIK KAPI TETİĞİ] UDP 8765 aç gönderildi: %s <<<", plate)
+            logger.info(">>> [LPR ANLIK KAPI TETİĞİ] UDP 8765 aç gönderildi: %s (10 sn mola başladı) <<<", plate)
         except Exception as e:
             logger.debug("Yerel kapı tetikleme hatası: %s", e)
 
@@ -228,6 +232,17 @@ class SimplePlateDetector:
             try:
                 frame = self.in_queue.get(timeout=0.1)
             except queue.Empty:
+                continue
+
+            now = time.time()
+            if now < self.cooldown_until:
+                # 10 saniye kapı açılış bekleme süresindeyiz, yeni okuma yapma
+                with self.lock:
+                    self.smoothed_box = None
+                    self.active_plate = None
+                    self.active_conf = 0.0
+                    self.box_ttl = 0
+                time.sleep(0.08)
                 continue
 
             if self.detector is None or self.ocr is None:
@@ -310,6 +325,12 @@ class SimplePlateDetector:
                         self.active_conf = 0.0
 
     def update_and_draw(self, frame, fallback_plate=None, frame_idx=0, active_video="1"):
+        now = time.time()
+        if now < self.cooldown_until:
+            rem = int(math.ceil(self.cooldown_until - now))
+            self._draw_cooldown_banner(frame, rem, self.last_opened_plate)
+            return frame, self.last_opened_plate
+
         self.push_frame(frame)
         box, plate, conf = self.get_current_state()
 
@@ -321,6 +342,26 @@ class SimplePlateDetector:
             return frame, plate
 
         return frame, None
+
+    def _draw_cooldown_banner(self, frame, remaining_sec, plate):
+        H, W = frame.shape[:2]
+        banner_h = 36
+        # Koyu yeşil zemin & açık yeşil alt çizgi (Kapı açık durumu)
+        cv2.rectangle(frame, (0, 0), (W, banner_h), (12, 45, 24), -1)
+        cv2.line(frame, (0, banner_h), (W, banner_h), (50, 205, 50), 2)
+
+        # Yeşil Rozet
+        cv2.rectangle(frame, (8, 6), (36, 30), (50, 205, 50), -1)
+        cv2.putText(frame, "OK", (11, 23), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 0, 0), 2)
+
+        # Plaka Metni (Açılan plaka)
+        p_text = plate if plate else "GECIS"
+        cv2.rectangle(frame, (40, 6), (170, 30), (255, 255, 255), -1)
+        cv2.putText(frame, p_text, (44, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (0, 0, 0), 2)
+
+        # Durum ve Geri Sayım
+        msg = f"KAPI ACILDI • GECIS BEKLENIYOR ({remaining_sec} sn sonra yeni okuma)"
+        cv2.putText(frame, msg, (185, 23), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (220, 255, 220), 1, cv2.LINE_AA)
 
     def _draw_hud_banner(self, frame, plate):
         H, W = frame.shape[:2]

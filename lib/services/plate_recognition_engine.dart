@@ -215,6 +215,23 @@ class PlateRecognitionEngine {
   final Map<String, DateTime> _recentReads = <String, DateTime>{};
   final Map<int, DateTime> _lastCameraEventAt = <int, DateTime>{};
 
+  // Kapı açıldıktan sonra 10 saniye boyunca tekrar okuma yapmayı engelleyen mola (cooldown) zamanları
+  final Map<int, DateTime> _cameraCooldownUntil = <int, DateTime>{};
+
+  /// Kameranın kapı açılışı sonrası 10 saniyelik bekleme molasında olup olmadığını döndürür.
+  bool isCameraCoolingDown(int cameraId) {
+    final cd = _cameraCooldownUntil[cameraId];
+    return cd != null && DateTime.now().isBefore(cd);
+  }
+
+  /// Kameranın kalan mola süresini (saniye) döndürür.
+  int cameraCooldownRemainingSeconds(int cameraId) {
+    final cd = _cameraCooldownUntil[cameraId];
+    if (cd == null) return 0;
+    final diff = cd.difference(DateTime.now()).inSeconds;
+    return diff > 0 ? diff : 0;
+  }
+
   /// Motoru başlatır
   void start({
     required int siteCode,
@@ -322,6 +339,10 @@ class PlateRecognitionEngine {
     try {
       for (final camera in _activeCameras) {
         try {
+          final cd = _cameraCooldownUntil[camera.id];
+          if (cd != null && DateTime.now().isBefore(cd)) {
+            continue; // Kapı açıldıktan sonra 10 sn geçmeden tekrar okuma yapmaya çalışma
+          }
           final lastRx = _lastFrameReceivedAt[camera.id];
           if (lastRx != null && DateTime.now().difference(lastRx).inMilliseconds < 1500) {
             continue;
@@ -341,11 +362,15 @@ class PlateRecognitionEngine {
 
   /// Canlı önizleme bileşeninin aldığı son kareyi önbelleğe yazar (motorun aynı kamerayı paralel sorgulamasını önler).
   void recordPreviewFrame(int cameraId, Uint8List bytes, {String? plate}) {
+    final now = DateTime.now();
+    final cd = _cameraCooldownUntil[cameraId];
+    final isCoolingDown = cd != null && now.isBefore(cd);
+
     _lastFrames[cameraId] = bytes;
-    _lastFrameReceivedAt[cameraId] = DateTime.now();
-    if (plate != null && plate.isNotEmpty && plate.toLowerCase() != 'none') {
+    _lastFrameReceivedAt[cameraId] = now;
+    if (!isCoolingDown && plate != null && plate.isNotEmpty && plate.toLowerCase() != 'none') {
       _lastCameraPlates[cameraId] = plate;
-    } else {
+    } else if (!isCoolingDown) {
       _lastCameraPlates.remove(cameraId);
     }
   }
@@ -407,6 +432,14 @@ class PlateRecognitionEngine {
 
   /// Kareyi işler, plaka arar ve karar verir
   Future<void> _processFrame(PlateCameraRow camera, Uint8List frameBytes, {String? directPlate}) async {
+    final now = DateTime.now();
+
+    // 10 Saniye Kuralı: Kapı açıldıktan sonra 10 sn geçmeden tekrar okuma yapma
+    final camCd = _cameraCooldownUntil[camera.id];
+    if (camCd != null && now.isBefore(camCd)) {
+      return;
+    }
+
     final detectedPlate = directPlate ?? await _extractPlateFromImage(frameBytes);
     if (detectedPlate == null || detectedPlate.isEmpty || detectedPlate.toLowerCase() == 'none') return;
 
@@ -414,7 +447,6 @@ class PlateRecognitionEngine {
     if (!_isValidPlateFormat(plate)) return;
 
     // Cooldown: Son 15 saniye içinde aynı plakayı tekrar işleme
-    final now = DateTime.now();
     final lastSeen = _recentReads[plate];
     if (lastSeen != null && now.difference(lastSeen).inSeconds < 15) {
       return;
@@ -431,8 +463,10 @@ class PlateRecognitionEngine {
     _lastDecision = decision;
     _decisionsController.add(decision);
 
-    // Eğer kapı açma kararı verildiyse kapıyı tetikle
+    // Eğer kapı açma kararı verildiyse kapıyı tetikle ve 10 saniyelik okuma molasını başlat
     if (decision.decision == PlateDecisionType.acildi) {
+      _cameraCooldownUntil[camera.id] = now.add(const Duration(seconds: 10));
+      debugPrint('[PlateRecognitionEngine] KAPI AÇILDI: Kamera ${camera.id} için 10 sn mola başlatıldı (Araç: $plate)');
       await _triggerGate(camera, decision);
     }
 
