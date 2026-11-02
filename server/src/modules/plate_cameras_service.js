@@ -1,3 +1,4 @@
+const latestCameraPlate = new Map();
 // Plaka Tanıma sözleşme sürüm 3 (yönetici tarafı): kamera yönetimi (uygulamadan ekle / değiştir / sına), "ağda kamera ara" komutu, görüntü karoları,
 // plakayla otomatik kapı açma DURUMU ve kenarın sync'te aldığı kamera tanımları.
 //
@@ -355,6 +356,10 @@ export async function getLatestDiscovery({ siteCode }) {
 export async function storeSnapshot(client, rawCameraId, buffer, headers, db = pool) {
   const cameraId = parsePositive(rawCameraId, 'Kamera', 'CAMERA_NOT_FOUND');
   const upload = parseSnapshotUpload(buffer, headers);
+  if (headers && headers['x-plate']) {
+    const rawPlate = String(headers['x-plate']).trim();
+    if (rawPlate) latestCameraPlate.set(cameraId, { plate: rawPlate, at: Date.now() });
+  }
   const camera = (await db.query(`SELECT id, is_active FROM camera_devices WHERE id = $1 AND site_code = $2`, [cameraId, client.siteCode])).rows[0];
   if (!camera) throw notFound('Kamera', 'CAMERA_NOT_FOUND');
   if (camera.is_active === false) throw new PlatformError(409, 'CAMERA_INACTIVE', 'Kamera pasif; görüntü kabul edilmez.');
@@ -381,6 +386,10 @@ export async function storeSnapshot(client, rawCameraId, buffer, headers, db = p
 export async function storeManagerSnapshot({ siteCode, rawId, buffer, headers }, db = pool) {
   const cameraId = parsePositive(rawId, 'Kamera', 'CAMERA_NOT_FOUND');
   const upload = parseSnapshotUpload(buffer, headers);
+  if (headers && headers['x-plate']) {
+    const rawPlate = String(headers['x-plate']).trim();
+    if (rawPlate) latestCameraPlate.set(cameraId, { plate: rawPlate, at: Date.now() });
+  }
   const camera = (await db.query(`SELECT id, is_active FROM camera_devices WHERE id = $1 AND site_code = $2`, [cameraId, siteCode])).rows[0];
   if (!camera) throw notFound('Kamera', 'CAMERA_NOT_FOUND');
   if (camera.is_active === false) throw new PlatformError(409, 'CAMERA_INACTIVE', 'Kamera pasif; görüntü kabul edilmez.');
@@ -421,7 +430,9 @@ export async function readSnapshot({ siteCode, rawId }) {
   await markWatched(pool, siteCode);
   if (!row) throw new PlatformError(404, 'NO_SNAPSHOT', 'Bu kamera için güncel görüntü yok.');
   const capturedAt = new Date(row.captured_at);
-  return { jpeg: row.jpeg, capturedAt, etag: `"${capturedAt.getTime()}"` };
+  const cachedPlate = latestCameraPlate.get(cameraId);
+  const plate = (cachedPlate && (Date.now() - cachedPlate.at) < 6000) ? cachedPlate.plate : null;
+  return { jpeg: row.jpeg, capturedAt, etag: `"${capturedAt.getTime()}"`, plate };
 }
 
 // --- Bakım -------------------------------------------------------------------------------------------------------------------------------

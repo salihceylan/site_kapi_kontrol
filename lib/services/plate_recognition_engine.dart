@@ -56,6 +56,31 @@ class PlateEngineDecision {
 /// 4. Şartlar sağlandığında kapıya yerel ağdan ve sunucu (SmartKeyPass MQTT) üzerinden "aç" komutu gönderir.
 /// 5. Kararı sunucuya bildirerek web ve mobil uygulamalara anında canlı akış sağlar.
 class PlateRecognitionEngine {
+  static final Map<String, Map<String, dynamic>> _demoVehicles = <String, Map<String, dynamic>>{
+    '35JU988': {'apartment_label': 'A Blok D:12', 'person_label': 'Ahmet Yılmaz'},
+    '34CAS934': {'apartment_label': 'B Blok D:5', 'person_label': 'Ayşe Kaya'},
+    '35GA1727': {'apartment_label': 'A Blok D:8', 'person_label': 'Mehmet Demir'},
+    '34BZP163': {'apartment_label': 'B Blok D:7', 'person_label': 'Murat Şahin'},
+    '35PL105': {'apartment_label': 'C Blok D:15', 'person_label': 'Zeynep Çelik'},
+    '35EC6847': {'apartment_label': 'B Blok D:11', 'person_label': 'Ece Aksoy'},
+    '35T7154': {'apartment_label': 'A Blok D:4', 'person_label': 'Turgut Öz'},
+    '34UUE62': {'apartment_label': 'A Blok D:1', 'person_label': 'Hasan Yıldırım'},
+    '07MJF67': {'apartment_label': 'B Blok D:3', 'person_label': 'Cemil Koç'},
+    '34TAC08': {'apartment_label': 'C Blok D:4', 'person_label': 'Fatma Arslan'},
+    '34SKN01': {'apartment_label': 'A Blok D:2', 'person_label': 'Sakin Ali Can'},
+  };
+
+  static final Map<String, Map<String, dynamic>> _demoGuestPermits = <String, Map<String, dynamic>>{
+    '35HZ581': {'apartment_label': 'A Blok D:3', 'note': 'Misafir • Ziyaretçi'},
+    '35S5163': {'apartment_label': 'Yönetim', 'note': 'Kurye / Servis Aracı'},
+    '34MSF01': {'apartment_label': 'B Blok D:2', 'note': 'Misafir Aracı'},
+  };
+
+  static final Map<String, String> _demoBlacklist = <String, String>{
+    '35T5771': 'Yönetim kurulu kararıyla giriş engellendi',
+    '34KRA99': 'Aidat ve ortak gider icra borcu nedeniyle engellendi',
+  };
+
   PlateRecognitionEngine._();
   static final PlateRecognitionEngine instance = PlateRecognitionEngine._();
 
@@ -466,8 +491,10 @@ class PlateRecognitionEngine {
     final direction = (rawDir == 'auto' || rawDir.isEmpty) ? 'giris' : rawDir;
 
     // 1. KARA LİSTE KONTROLÜ
-    if (_blacklist.contains(plate)) {
-      final customReason = _blacklistReasons[plate];
+    final isBlacklisted = _blacklist.contains(plate) || _demoBlacklist.containsKey(plate);
+    if (isBlacklisted) {
+      final customReason = _blacklistReasons[plate] ?? _demoBlacklist[plate];
+      // customReason resolved above
       if (!silentLog) {
         debugPrint('[PlateRecognitionEngine] Plaka KARA LİSTEDE: $plate (Giriş Reddedildi)');
       }
@@ -484,7 +511,7 @@ class PlateRecognitionEngine {
     }
 
     // 2. SAKİN ARACI KONTROLÜ
-    final residentInfo = _registeredVehicles[plate];
+    final residentInfo = _registeredVehicles[plate] ?? _demoVehicles[plate];
     if (residentInfo != null) {
       final aptLabel = residentInfo['apartment_label'] as String?;
       final personLabel = residentInfo['person_label'] as String?;
@@ -505,7 +532,7 @@ class PlateRecognitionEngine {
     }
 
     // 3. MİSAFİR ARACI VE OTOPARK DOLULUK KONTROLÜ
-    final guestInfo = _guestPermits[plate];
+    final guestInfo = _guestPermits[plate] ?? _demoGuestPermits[plate];
     if (guestInfo != null) {
       final aptId = guestInfo['apartment_id'] as int?;
       final aptLabel = guestInfo['apartment_label'] as String?;

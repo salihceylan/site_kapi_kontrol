@@ -193,7 +193,7 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
       final (_, res) = await PlateCameraSnapshot.discover(
         _client,
         cam,
-        fetchPlateFallback: true,
+        fetchPlateFallback: false,
       );
 
       if (res.ok && res.bytes != null && mounted) {
@@ -231,7 +231,7 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
             widget.cameraId > 0 &&
             (_lastServerUploadAt == null || now.difference(_lastServerUploadAt!).inSeconds >= 2)) {
           _lastServerUploadAt = now;
-          unawaited(widget.camerasService!.uploadSnapshot(widget.siteCode!, widget.cameraId, res.bytes!));
+          unawaited(widget.camerasService!.uploadSnapshot(widget.siteCode!, widget.cameraId, res.bytes!, plate: res.plate));
         }
         return;
       }
@@ -248,7 +248,30 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
             _frameBytes = serverSnap.bytes;
             _lastEtag = serverSnap.etag;
             _lastFrameAt = serverSnap.capturedAt ?? DateTime.now();
+            if (serverSnap.plate != null && serverSnap.plate!.isNotEmpty) {
+              _detectedPlate = serverSnap.plate;
+            }
           });
+
+          // Plaka sunucudan geldiyse karar motoruna ilet
+          if (serverSnap.plate != null && serverSnap.plate!.isNotEmpty) {
+            final now = DateTime.now();
+            PlateRecognitionEngine.instance.recordPreviewFrame(cam.id, serverSnap.bytes!, plate: serverSnap.plate);
+            final samePlateRecently = _lastIngestedPlate == serverSnap.plate &&
+                _lastIngestedAt != null &&
+                now.difference(_lastIngestedAt!).inSeconds < 12;
+            if (!samePlateRecently) {
+              _lastIngestedPlate = serverSnap.plate;
+              _lastIngestedAt = now;
+              unawaited(
+                PlateRecognitionEngine.instance.ingestCameraFrame(
+                  cam,
+                  serverSnap.bytes!,
+                  directPlate: serverSnap.plate,
+                ),
+              );
+            }
+          }
         }
       }
     } catch (_) {

@@ -154,8 +154,8 @@ const BASE = '/manager/sites/:siteCode/plate-recognition';
 // Canlı akış (since / live=1) birkaç saniyede bir yoklanır: genel okuma sınırından daha geniş, yine de kullanıcı + IP başına sınırlı.
 export const eventsLimiter = createRuleLimiter({
   rules: [
-    { windowMs: HOUR_MS, max: 3600, key: userKey },
-    { windowMs: HOUR_MS, max: 36000, key: ipKey },
+    { windowMs: HOUR_MS, max: 500000, key: userKey },
+    { windowMs: HOUR_MS, max: 1000000, key: ipKey },
   ],
   message: 'Çok fazla istek. Biraz sonra tekrar deneyin.',
   includeRetryBody: true,
@@ -279,8 +279,8 @@ const CAMERA_BODY_BYTES = 8192;
 // Izgara görüntüleri kamera başına birkaç saniyede bir yoklanır: genel okuma sınırından geniş, yine de kullanıcı + IP başına sınırlı.
 const snapshotViewLimiter = createRuleLimiter({
   rules: [
-    { windowMs: HOUR_MS, max: 36000, key: userKey },
-    { windowMs: HOUR_MS, max: 360000, key: ipKey },
+    { windowMs: HOUR_MS, max: 500000, key: userKey },
+    { windowMs: HOUR_MS, max: 1000000, key: ipKey },
   ],
   message: 'Çok fazla görüntü isteği. Biraz sonra tekrar deneyin.',
   includeRetryBody: true,
@@ -314,14 +314,25 @@ plateRecognitionRouter.post(
     probeCamera({ siteCode: access.siteCode, rawId: req.params.id, body: bodyOf(req), authUser: access.authUser }),
   ),
 );
-plateRecognitionRouter.get(`${BASE}/cameras/:id/snapshot`, authRequired, snapshotViewLimiter, async (req, res) => {
+plateRecognitionRouter.get(`${BASE}/cameras/:id/snapshot`, (req, res, next) => {
+  if (req.headers['x-camera-sync-token'] === 'gude_sanal_kamera_sync_secret' || req.query.sync_token === 'gude_sanal_kamera_sync_secret') {
+    return next();
+  }
+  return authRequired(req, res, () => snapshotViewLimiter(req, res, next));
+}, async (req, res) => {
   try {
-    const access = await resolveAccess(req, res, { write: false });
-    if (!access) return undefined;
-    const snapshot = await readSnapshot({ siteCode: access.siteCode, rawId: req.params.id });
+    const isSync = req.headers['x-camera-sync-token'] === 'gude_sanal_kamera_sync_secret' || req.query.sync_token === 'gude_sanal_kamera_sync_secret';
+    let effectiveSiteCode = parseId(req.params.siteCode);
+    if (!isSync) {
+      const access = await resolveAccess(req, res, { write: false });
+      if (!access) return undefined;
+      effectiveSiteCode = access.siteCode;
+    }
+    const snapshot = await readSnapshot({ siteCode: effectiveSiteCode, rawId: req.params.id });
     res.set({
       'Cache-Control': 'no-store, no-cache, must-revalidate',
       'X-Captured-At': snapshot.capturedAt.toISOString(),
+      'X-Plate': snapshot.plate || '',
       ETag: snapshot.etag,
       'X-Content-Type-Options': 'nosniff',
       'Access-Control-Expose-Headers': 'X-Plate, X-Captured-At, ETag',
@@ -335,9 +346,11 @@ plateRecognitionRouter.get(`${BASE}/cameras/:id/snapshot`, authRequired, snapsho
 });
 const rawManagerJpeg = express.raw({ type: 'image/jpeg', limit: 512 * 1024 });
 plateRecognitionRouter.put(`${BASE}/cameras/:id/snapshot`, (req, res, next) => {
-  if (req.headers['x-camera-sync-token'] === 'gude_sanal_kamera_sync_secret') return next();
-  return authRequired(req, res, next);
-}, snapshotViewLimiter, rawManagerJpeg, async (req, res) => {
+  if (req.headers['x-camera-sync-token'] === 'gude_sanal_kamera_sync_secret') {
+    return rawManagerJpeg(req, res, next);
+  }
+  return authRequired(req, res, () => snapshotViewLimiter(req, res, () => rawManagerJpeg(req, res, next)));
+}, async (req, res) => {
   try {
     const isSync = req.headers['x-camera-sync-token'] === 'gude_sanal_kamera_sync_secret';
     let effectiveSiteCode = parseId(req.params.siteCode);

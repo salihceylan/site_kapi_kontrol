@@ -446,11 +446,19 @@ class PlateCameraDraft {
 /// Karo görüntüsü sonucu: [bytes] null iken [notModified] (304, eldeki görüntü güncel) ya da kare yok ([noSnapshot]).
 @immutable
 class SnapshotFetch {
-  const SnapshotFetch({this.bytes, this.etag, this.capturedAt, this.notModified = false, this.noSnapshot = false});
+  const SnapshotFetch({
+    this.bytes,
+    this.etag,
+    this.capturedAt,
+    this.plate,
+    this.notModified = false,
+    this.noSnapshot = false,
+  });
 
   final Uint8List? bytes;
   final String? etag;
   final DateTime? capturedAt;
+  final String? plate;
   final bool notModified;
   final bool noSnapshot;
 }
@@ -531,7 +539,14 @@ class PlateCamerasApi {
     }
     if (response.statusCode == 304) return SnapshotFetch(etag: etag, notModified: true);
     if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
-      return SnapshotFetch(bytes: response.bodyBytes, etag: response.headers['etag'], capturedAt: _date(response.headers['x-captured-at']));
+      final pHeader = response.headers['x-plate'] ?? response.headers['X-Plate'];
+      final plate = (pHeader != null && pHeader.trim().isNotEmpty) ? pHeader.trim() : null;
+      return SnapshotFetch(
+        bytes: response.bodyBytes,
+        etag: response.headers['etag'],
+        capturedAt: _date(response.headers['x-captured-at']),
+        plate: plate,
+      );
     }
     final payload = _payloadOf(response);
     final code = payload['code'] is String ? payload['code'] as String : null;
@@ -540,12 +555,13 @@ class PlateCamerasApi {
   }
 
   /// Kameradan yerelde çekilen anlık kareyi sunucuya yükler ve kamera durumunu günceller.
-  Future<void> uploadSnapshot(String token, int site, int cameraId, Uint8List bytes) async {
+  Future<void> uploadSnapshot(String token, int site, int cameraId, Uint8List bytes, {String? plate}) async {
     final uri = Uri.parse('$_baseUrl${_site(site, 'cameras/$cameraId/snapshot')}');
     final request = http.Request('PUT', uri)
       ..headers.addAll(<String, String>{
         'Authorization': 'Bearer $token',
         'Content-Type': 'image/jpeg',
+        if (plate != null && plate.trim().isNotEmpty) 'X-Plate': plate.trim(),
         'X-Captured-At': DateTime.now().toUtc().toIso8601String(),
       })
       ..bodyBytes = bytes;
@@ -653,7 +669,7 @@ class PlateCamerasService {
   Future<DiscoveryStart> startDiscovery(int site, {int? edgeClientId}) => _guard((t) => api.startDiscovery(t, site, edgeClientId: edgeClientId));
   Future<EdgeCommand?> latestDiscovery(int site) => _guard((t) => api.latestDiscovery(t, site));
   Future<SnapshotFetch> snapshot(int site, int cameraId, {String? etag}) => _guard((t) => api.snapshot(t, site, cameraId, etag: etag));
-  Future<void> uploadSnapshot(int site, int cameraId, Uint8List bytes) => _guard((t) => api.uploadSnapshot(t, site, cameraId, bytes));
+  Future<void> uploadSnapshot(int site, int cameraId, Uint8List bytes, {String? plate}) => _guard((t) => api.uploadSnapshot(t, site, cameraId, bytes, plate: plate));
 }
 
 /// Rozet rengi -> kısa çevrimiçi metni: yeşil Çevrimiçi, sarı Gecikmeli, kırmızı Çevrimdışı, gri Hiç bağlanmadı.
