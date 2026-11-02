@@ -151,6 +151,7 @@ class PlateRecognitionEngine {
   Map<int, String> get lastCameraPlates => Map<int, String>.unmodifiable(_lastCameraPlates);
 
   final Map<int, DateTime> _lastSnapshotUploadAt = <int, DateTime>{};
+  final Map<int, DateTime> _lastFrameReceivedAt = <int, DateTime>{};
 
   // Yerel hafızadaki izin ve kapasite verileri
   Set<String> _blacklist = <String>{};
@@ -275,6 +276,10 @@ class PlateRecognitionEngine {
     try {
       for (final camera in _activeCameras) {
         try {
+          final lastRx = _lastFrameReceivedAt[camera.id];
+          if (lastRx != null && DateTime.now().difference(lastRx).inMilliseconds < 1500) {
+            continue;
+          }
           final captured = await _captureFrame(camera);
           if (captured != null && captured.bytes.isNotEmpty) {
             await ingestCameraFrame(camera, captured.bytes, directPlate: captured.plate);
@@ -285,6 +290,17 @@ class PlateRecognitionEngine {
       }
     } finally {
       _tickBusy = false;
+    }
+  }
+
+  /// Canlı önizleme bileşeninin aldığı son kareyi önbelleğe yazar (motorun aynı kamerayı paralel sorgulamasını önler).
+  void recordPreviewFrame(int cameraId, Uint8List bytes, {String? plate}) {
+    _lastFrames[cameraId] = bytes;
+    _lastFrameReceivedAt[cameraId] = DateTime.now();
+    if (plate != null && plate.isNotEmpty && plate.toLowerCase() != 'none') {
+      _lastCameraPlates[cameraId] = plate;
+    } else {
+      _lastCameraPlates.remove(cameraId);
     }
   }
 

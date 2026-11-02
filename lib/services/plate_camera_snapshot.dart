@@ -99,7 +99,7 @@ class PlateCameraSnapshot {
           ? null
           : plate.trim();
 
-      if (cleanPlate == null && fetchPlateFallback) {
+      if (cleanPlate == null && fetchPlateFallback && !res.headers.containsKey('x-plate')) {
         cleanPlate = await _queryLastPlateApi(client, uri);
       }
 

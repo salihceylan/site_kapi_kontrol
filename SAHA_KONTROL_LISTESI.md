@@ -4655,3 +4655,11 @@ Güvenlik kulübesindeki kenar PC uygulaması artık sunucunun gerçek kenar sö
   - **Beklenen Sonuç:**
     1. **Sayfa Yenilenmez / Titremez:** Plaka tespit edildiğinde veya 5 saniyelik periyodik canlı akış yoklamalarında sayfa komple yenilenmez, yükleme çemberi (`CircularProgressIndicator`) çıkmaz, kamera bileşenleri sıfırlanmaz ve kaydırma konumu bozulmaz. Yalnızca değişen veri (`PlateLiveDecisionBanner`, içerideki araç sayısı veya yeni olay kartı) sessizce güncellenir.
     2. **Zengin Canlı Tespit Kartı (`PlateLiveDecisionBanner`):** Üst durum kartında ve kamera görüntüsünün alt HUD bandında okunan plaka (`LicensePlateBadge`), tespit ve kapı durumu (**"Plaka Tespit Edildi • İzinli Araç — Kapı Açılıyor ✓"**, **"Plaka Tespit Edildi • KARA LİSTE (Engelli) — Kapı Açılmadı ✕"**, **"Plaka Tespit Edildi • Giriş Reddedildi — Kapı Açılmadı ✕"** veya **"Plaka Tespit Edildi • Tanınmıyor — Kapı Açılmadı ✕"**), aracın ait olduğu **daire ve sakin/misafir bilgisi** (`Daire: ... • Sakin / Kayıt: ...`) ile kapı adı ve karar gerekçesi net olarak gösterilir.
+
+
+- [ ] **165.10. Gerçek Zamanlı Plaka Üstü Yeşil Çerçeve + Plaka Etiketi (`TR <PLAKA> %98`), 18–25 FPS Akıcı Kamera Yayını ve "Çok Fazla İstek" Hatasının Kaldırılması:**
+  - **Nasıl Test Edilir:** Sanal kamera sunucusunu (`tools/sanal_kamera/sanal_kamera.py --port 8080 --video 1`) çalıştırın ve Plaka Tanıma ekranında ("Geçiş noktaları" veya "Canlı akış" sekmesinde) canlı kamera önizlemesini izleyin.
+  - **Beklenen Sonuç:**
+    1. **Plaka Üstünde Yeşil Çerçeve ve Okunan Plaka Etiketi:** Videodaki gerçek araç plakalarının (`07 MJF 67`, `34 YC 3368`, `06 EKP 83`, `34 NU 9608`, `34 KY 0765`, `34 HL 5748` vb.) tam üzerinde parlak yeşil tespit çerçevesi (`#00FF00`), köşe L-vurguları ve üstünde `TR  <PLAKA>   %98` etiketi her karede kesintisiz ve yumuşak takiple görünür.
+    2. **Akıcı Video Kareleri (~18–25 FPS):** Kamera önizlemesi takılmadan, yüksek kare hızında (`pollInterval: 55ms`, gereksiz ikinci HTTP `/api/last_plate` çağrısı olmadan) akıcı biçimde oynar.
+    3. **Sıfır "Çok Fazla İstek" Hatası:** Ne Windows ne de Web arayüzünde hiçbir sekmede veya yoğun kullanımda `"Çok fazla istek. Biraz sonra tekrar deneyin"` (`429`) hatası çıkmaz.

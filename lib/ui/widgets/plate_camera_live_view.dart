@@ -28,7 +28,7 @@ class PlateCameraLivePreview extends StatefulWidget {
     this.camerasService,
     this.borderRadius,
     this.showControls = false,
-    this.pollInterval = const Duration(milliseconds: 400),
+    this.pollInterval = const Duration(milliseconds: 55),
   });
 
   final int cameraId;
@@ -169,7 +169,7 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
     if (_inFlight || !mounted || !widget.isActive) return;
     // Motor zaten son 300ms içinde kare verdiyse fazladan istek atma
     if (_lastFrameAt != null &&
-        DateTime.now().difference(_lastFrameAt!).inMilliseconds < 280 &&
+        DateTime.now().difference(_lastFrameAt!).inMilliseconds < 25 &&
         PlateRecognitionEngine.instance.isRunning) {
       return;
     }
@@ -198,6 +198,7 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
 
         // Plaka okunduysa karar motoruna ilet (aynı plaka için gereksiz tekrarları önle)
         final now = DateTime.now();
+        PlateRecognitionEngine.instance.recordPreviewFrame(cam.id, res.bytes!, plate: res.plate);
         if (res.plate != null && res.plate!.isNotEmpty) {
           final samePlateRecently = _lastIngestedPlate == res.plate &&
               _lastIngestedAt != null &&
@@ -221,7 +222,7 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
         if (widget.camerasService != null &&
             widget.siteCode != null &&
             widget.cameraId > 0 &&
-            (_lastServerUploadAt == null || now.difference(_lastServerUploadAt!).inSeconds >= 3)) {
+            (_lastServerUploadAt == null || now.difference(_lastServerUploadAt!).inSeconds >= 6)) {
           _lastServerUploadAt = now;
           unawaited(widget.camerasService!.uploadSnapshot(widget.siteCode!, widget.cameraId, res.bytes!));
         }
