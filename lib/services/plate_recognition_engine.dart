@@ -68,16 +68,23 @@ class PlateRecognitionEngine {
     '07MJF67': {'apartment_label': 'B Blok D:3', 'person_label': 'Cemil Koç'},
     '34TAC08': {'apartment_label': 'C Blok D:4', 'person_label': 'Fatma Arslan'},
     '34SKN01': {'apartment_label': 'A Blok D:2', 'person_label': 'Sakin Ali Can'},
+    '35AFM688': {'apartment_label': 'B Blok D:4', 'person_label': 'Murat Akın'},
+    '06BJZ818': {'apartment_label': 'C Blok D:7', 'person_label': 'Kemal Aslan'},
+    '35AIL740': {'apartment_label': 'A Blok D:6', 'person_label': 'Ali Yıldız'},
+    '35ANT69': {'apartment_label': 'B Blok D:8', 'person_label': 'Selin Erdem'},
+    '35DC3088': {'apartment_label': 'A Blok D:1', 'person_label': 'Hasan Yıldırım'},
   };
 
   static final Map<String, Map<String, dynamic>> _demoGuestPermits = <String, Map<String, dynamic>>{
     '35HZ581': {'apartment_label': 'A Blok D:3', 'note': 'Misafir • Ziyaretçi'},
     '35S5163': {'apartment_label': 'Yönetim', 'note': 'Kurye / Servis Aracı'},
     '34MSF01': {'apartment_label': 'B Blok D:2', 'note': 'Misafir Aracı'},
+    '34JR8778': {'apartment_label': 'A Blok D:5', 'note': 'Yemeksepeti Kurye'},
   };
 
   static final Map<String, String> _demoBlacklist = <String, String>{
-    '35T5771': 'Yönetim kurulu kararıyla giriş engellendi',
+    '35T5771': 'Yönetim kurulu kararıyla icra borcu nedeniyle engellendi',
+    '35T6040': 'Yönetim kararı: Ticari taksilerin izinsiz otopark girişi yasaktır',
     '34KRA99': 'Aidat ve ortak gider icra borcu nedeniyle engellendi',
   };
 

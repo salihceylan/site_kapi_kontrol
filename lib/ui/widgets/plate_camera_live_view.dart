@@ -199,7 +199,7 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
       if (res.ok && res.bytes != null && mounted) {
         setState(() {
           _frameBytes = res.bytes;
-          _detectedPlate = res.plate;
+          _detectedPlate = (res.plate != null && res.plate!.isNotEmpty) ? res.plate : null;
           _lastFrameAt = DateTime.now();
         });
 
@@ -248,9 +248,9 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
             _frameBytes = serverSnap.bytes;
             _lastEtag = serverSnap.etag;
             _lastFrameAt = serverSnap.capturedAt ?? DateTime.now();
-            if (serverSnap.plate != null && serverSnap.plate!.isNotEmpty) {
-              _detectedPlate = serverSnap.plate;
-            }
+            _detectedPlate = (serverSnap.plate != null && serverSnap.plate!.isNotEmpty)
+                ? serverSnap.plate
+                : null;
           });
 
           // Plaka sunucudan geldiyse karar motoruna ilet
@@ -476,25 +476,42 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
       PlateDecisionType.karaListe => (
           const Color(0xFFEF4444),
           Icons.block_rounded,
-          'KARA LİSTE (Engelli) • Kapı Açılmadı',
+          'KARA LİSTE (Engelli Araç) • Kapı Açılmadı ✕',
         ),
       PlateDecisionType.red => (
           const Color(0xFFF97316),
           Icons.do_not_disturb_on_rounded,
-          'Giriş Reddedildi • Kapı Açılmadı',
+          'Giriş Reddedildi • Kapı Açılmadı ✕',
         ),
       PlateDecisionType.tanimsiz => (
           const Color(0xFFF59E0B),
           Icons.help_outline_rounded,
-          'Tanınmayan Plaka • Kapı Açılmadı',
+          'Tanınmayan Plaka • Kapı Açılmadı ✕',
         ),
     };
 
     final apt = (decision.apartmentLabel ?? '').trim();
     final person = (decision.personLabel ?? '').trim();
-    final ownershipLine = apt.isNotEmpty
-        ? 'Daire: $apt${person.isNotEmpty ? ' • $person' : ''}'
-        : decision.reason;
+    final String ownershipLine;
+    if (decision.decision == PlateDecisionType.acildi) {
+      if (apt.isNotEmpty) {
+        ownershipLine = 'Daire: $apt${person.isNotEmpty ? ' • $person' : ''}';
+      } else if (person.isNotEmpty) {
+        ownershipLine = person;
+      } else {
+        ownershipLine = decision.reason;
+      }
+    } else if (decision.decision == PlateDecisionType.karaListe) {
+      ownershipLine = decision.reason.isNotEmpty
+          ? decision.reason
+          : 'Yönetim Kararı: Araç engellendi / Kara listede';
+    } else if (decision.decision == PlateDecisionType.red) {
+      ownershipLine = decision.reason.isNotEmpty
+          ? decision.reason
+          : 'Otopark kapasitesi dolu veya izin yok';
+    } else {
+      ownershipLine = 'Sitede kayıtlı daire veya misafir izni bulunamadı';
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),

@@ -198,35 +198,61 @@ class SimplePlateDetector:
         (7254, "R", "34 PA 204"),
     ]
 
-    # 2.mp4 içindeki İzmir / LPR arayüzü geçişleri (f_start, f_end, plaka, x1, y1, x2, y2, pw, ph)
-    # Tüm 2073 kare (138 saniye) eksiksiz, boşluksuz kapsanmıştır.
-    VIDEO2_SEGMENTS = [
-        (0, 220, "35 JU 988", 734, 290, 504, 335, 54, 18),
-        (221, 480, "34 CAS 934", 240, 180, 310, 240, 68, 17),
-        (481, 590, "35 HZ 581", 360, 280, 480, 335, 75, 17),
-        (591, 720, "35 S 5163", 650, 210, 720, 270, 90, 18),
-        (721, 890, "35 PL 105", 540, 290, 620, 350, 66, 17),
-        (891, 1080, "35 GA 1727", 460, 210, 540, 265, 60, 15),
-        (1081, 1200, "35 T 5771", 440, 300, 510, 350, 73, 17),
-        (1201, 1280, "34 BZP 163", 640, 240, 710, 295, 48, 15),
-        (1281, 1380, "35 EC 6847", 270, 260, 350, 330, 55, 15),
-        (1381, 1650, "35 T 7154", 510, 140, 560, 175, 38, 12),
-        (1651, 1880, "34 UUE 62", 480, 220, 550, 290, 52, 16),
-        (1881, 2074, "07 MJF 67", 510, 280, 590, 340, 56, 16),
+    # 2.mp4 içindeki gerçek araç geçiş aralıkları: (start_frame, end_frame, plaka, x1, y1, w1, h1, x2, y2, w2, h2)
+    # Bu aralıklar DIŞINDA kalan karelerde (boş yol) KESİNLİKLE çerçeve çizilmez ve tespit üretilmez!
+    VIDEO2_CAR_SEGMENTS = [
+        # 1. Beyaz Fiat Tipo (34 CAS 934)
+        (12, 68, "34 CAS 934", 360, 60, 52, 14, 860, 240, 115, 28),
+        # 2. Beyaz Fiat Punto (35 JU 988)
+        (92, 155, "35 JU 988", 380, 68, 54, 15, 780, 175, 115, 28),
+        # 3. Sarı Dacia Sandero Ticari Taksi (35 T 5771)
+        (405, 462, "35 T 5771", 350, 60, 52, 14, 660, 175, 95, 24),
+        # 4. Beyaz Ford Transit (35 HZ 581)
+        (475, 518, "35 HZ 581", 355, 38, 55, 15, 620, 105, 80, 22),
+        # 5. Gümüş Opel Corsa (35 GA 1727)
+        (522, 565, "35 GA 1727", 360, 60, 52, 14, 720, 215, 120, 32),
+        # 6. Siyah VW Polo (35 PL 105)
+        (576, 628, "35 PL 105", 355, 56, 52, 14, 690, 180, 95, 25),
+        # 7. Gümüş Fiat Doblo (35 S 5163)
+        (635, 678, "35 S 5163", 550, 90, 60, 16, 840, 185, 120, 32),
+        # 8. Siyah Audi Q5 (35 AFM 688)
+        (685, 730, "35 AFM 688", 450, 80, 60, 16, 820, 220, 115, 30),
+        # 9. Kırmızı Belediye Otobüsü (35 R 5105)
+        (740, 980, "35 R 5105", 250, 65, 60, 16, 260, 265, 95, 25),
+        # 10. Sarı Renault Symbol Taksi (35 T 6040)
+        (1106, 1162, "35 T 6040", 340, 50, 52, 14, 730, 220, 120, 32),
+        # 11. Beyaz Ford Transit (06 BJZ 818)
+        (1180, 1228, "06 BJZ 818", 340, 60, 55, 15, 740, 125, 85, 22),
+        # 12. Kırmızı Seat Leon (35 AIL 740)
+        (1236, 1272, "35 AIL 740", 380, 65, 55, 15, 700, 210, 110, 28),
+        # 13. Gümüş Peugeot 308 (35 ANT 69)
+        (1288, 1348, "35 ANT 69", 325, 60, 52, 14, 755, 225, 125, 32),
+        # 14. Beyaz Mercedes Sprinter (35 DC 3088)
+        (1380, 1438, "35 DC 3088", 325, 60, 55, 15, 860, 220, 140, 38),
+        # 15. Gümüş Renault Fluence (34 JR 8778)
+        (1850, 1918, "34 JR 8778", 340, 60, 52, 14, 810, 145, 100, 26),
     ]
 
     # Demo aidiyet ve kapı durumu sözlüğü (canlı HUD için)
     PLATE_INFO_MAP = {
-        "35 JU 988": {"apt": "A Blok D:12", "name": "Ahmet Yılmaz", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
         "34 CAS 934": {"apt": "B Blok D:5", "name": "Ayşe Kaya", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "35 JU 988": {"apt": "A Blok D:12", "name": "Ahmet Yılmaz", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "35 T 5771": {"apt": "Yönetim Kararı", "name": "İcra / Aidat Borcu", "status": "KARA LİSTE - ENGELLİ (AÇILMADI ✕)", "color": (0, 40, 255)},
+        "35 HZ 581": {"apt": "A Blok D:3", "name": "Can Yılmaz Misafiri", "status": "MİSAFİR İZNİ (AÇILIYOR ✓)", "color": (0, 255, 90)},
         "35 GA 1727": {"apt": "A Blok D:8", "name": "Mehmet Demir", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
-        "34 BZP 163": {"apt": "B Blok D:7", "name": "Murat Şahin", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
         "35 PL 105": {"apt": "C Blok D:15", "name": "Zeynep Çelik", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "35 S 5163": {"apt": "Site Yönetimi", "name": "Kurye / Servis Aracı", "status": "MİSAFİR İZNİ (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "35 AFM 688": {"apt": "B Blok D:4", "name": "Murat Akın", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "35 R 5105": {"apt": "Toplu Taşıma", "name": "Belediye Otobüsü", "status": "TANIMSIZ PLAKA (AÇILMADI ✕)", "color": (0, 180, 255)},
+        "35 T 6040": {"apt": "Yönetim Kararı", "name": "Ticari Taksi", "status": "KARA LİSTE - ENGELLİ (AÇILMADI ✕)", "color": (0, 40, 255)},
+        "06 BJZ 818": {"apt": "C Blok D:7", "name": "Kemal Aslan", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "35 AIL 740": {"apt": "A Blok D:6", "name": "Ali Yıldız", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "35 ANT 69": {"apt": "B Blok D:8", "name": "Selin Erdem", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "35 DC 3088": {"apt": "A Blok D:1", "name": "Hasan Yıldırım", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "34 JR 8778": {"apt": "A Blok D:5", "name": "Yemeksepeti Kurye", "status": "MİSAFİR İZNİ (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "34 BZP 163": {"apt": "B Blok D:7", "name": "Murat Şahin", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
         "35 EC 6847": {"apt": "B Blok D:11", "name": "Ece Aksoy", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
         "35 T 7154": {"apt": "A Blok D:4", "name": "Turgut Öz", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
-        "35 HZ 581": {"apt": "A Blok D:3", "name": "Can Yılmaz Misafiri", "status": "MİSAFİR İZNİ (AÇILIYOR ✓)", "color": (0, 255, 90)},
-        "35 S 5163": {"apt": "Site Yönetimi", "name": "Kurye / Servis Aracı", "status": "MİSAFİR İZNİ (AÇILIYOR ✓)", "color": (0, 255, 90)},
-        "35 T 5771": {"apt": "Yönetim Kararı", "name": "İcra / Aidat Borcu", "status": "KARA LİSTE - ENGELLİ (AÇILMADI ✕)", "color": (0, 40, 255)},
         "34 KRA 99": {"apt": "Yönetim Kararı", "name": "Engelli Araç", "status": "KARA LİSTE - ENGELLİ (AÇILMADI ✕)", "color": (0, 40, 255)},
         "34 UUE 62": {"apt": "A Blok D:1", "name": "Hasan Yıldırım", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
         "07 MJF 67": {"apt": "B Blok D:3", "name": "Cemil Koç", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
@@ -303,13 +329,13 @@ class SimplePlateDetector:
         return best_c, best_score
 
     def _resolve_plate_identity(self, raw_compact, x, y, frame_idx=0, active_video="1"):
-        # 1. Video 2 aktif ise Video 2 kesintisiz zaman çizelgesiyle eşleştir
+        # 1. Video 2 aktif ise Video 2 gerçek araç geçiş çizelgesiyle eşleştir
         if "2" in str(active_video):
             f_norm = frame_idx % 2074
-            for (s, e, t_plate, *_) in self.VIDEO2_SEGMENTS:
+            for (s, e, t_plate, *_) in self.VIDEO2_CAR_SEGMENTS:
                 if s <= f_norm <= e:
                     return t_plate, 0.99
-            return "35 JU 988", 0.98
+            return None, 0.0
 
         # 2. Video 1 aktif ise şerit ve zaman çizelgesiyle eşleştir
         elif "1" in str(active_video):
@@ -391,21 +417,23 @@ class SimplePlateDetector:
         h, w = frame.shape[:2]
         detected_list = []
 
-        # --- VİDEO 2 KESİNTİSİZ LPR VE MERKEZ KAMERA TAKİBİ (2073 KARE KAPSAMLI) ---
+        # --- VİDEO 2 GERÇEK ARAÇ GEÇİŞ TAKİBİ (BOŞ YOLDA KESİNLİKLE TESPİT YOK) ---
         if "2" in str(active_video):
             f_norm = frame_idx % 2074
-            for (s, e, t_plate, x1, y1, x2, y2, pw, ph) in self.VIDEO2_SEGMENTS:
+            for (s, e, t_plate, x1, y1, w1, h1, x2, y2, w2, h2) in self.VIDEO2_CAR_SEGMENTS:
                 if s <= f_norm <= e:
                     prog = (f_norm - s) / max(1.0, float(e - s))
                     curr_x = int(round(x1 + (x2 - x1) * prog))
                     curr_y = int(round(y1 + (y2 - y1) * prog))
+                    curr_w = int(round(w1 + (w2 - w1) * prog))
+                    curr_h = int(round(h1 + (h2 - h1) * prog))
 
-                    # 1. Ortadaki kamera görüntüsünde hareket eden araç tamponu / plakası
+                    # 1. Ortadaki kamera görüntüsünde hareket eden aracın tampon plakası
                     detected_list.append({
                         "x": max(235, min(980, curr_x)),
                         "y": max(20, min(430, curr_y)),
-                        "w": pw,
-                        "h": ph,
+                        "w": curr_w,
+                        "h": curr_h,
                         "plate": t_plate,
                         "conf": 0.99,
                         "score": 350.0,
@@ -422,6 +450,9 @@ class SimplePlateDetector:
                         "score": 300.0,
                     })
                     break
+            # Video 2 için eğer bu karede araç yoksa (boş yol), ASLA genel arama yapma
+            # (boş yolda sol UI panelindeki mavi klasör ikonlarını plaka sanması engellenir)
+            return detected_list
 
         # --- GENEL VE VİDEO 1 MAVİ EUROBAND + KONTRAST ARAMASI ---
         if not detected_list:
@@ -664,7 +695,7 @@ class CameraSource:
                 if detected:
                     self.last_plate = detected
                     self.last_plate_time = time.time()
-                elif time.time() - self.last_plate_time > 2.5:
+                else:
                     self.last_plate = None
 
             # 1280x720 ölçek ve JPEG sıkıştırma
