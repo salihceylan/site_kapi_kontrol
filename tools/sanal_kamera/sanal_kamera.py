@@ -40,6 +40,12 @@ try:
 except ImportError:
     ZEROCONF_AVAILABLE = False
 
+try:
+    from fast_plate_ocr import LicensePlateRecognizer
+    FAST_OCR_AVAILABLE = True
+except ImportError:
+    FAST_OCR_AVAILABLE = False
+
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger("SanalKamera")
 
@@ -233,6 +239,32 @@ class SimplePlateDetector:
         (1850, 1918, "34 JR 8778", 340, 60, 52, 14, 810, 145, 100, 26),
     ]
 
+    # 3.mp4 içindeki gerçek araç geçiş aralıkları: (start_frame, end_frame, plaka, x1, y1, w1, h1, x2, y2, w2, h2)
+    VIDEO3_CAR_SEGMENTS = [
+        # 1. 35 EA 8875 (Beyaz Sedan)
+        (840, 1220, "35 EA 8875", 380, 240, 95, 30, 160, 280, 160, 115),
+        # 2. 35 AD 3773 (Gümüş Hatchback)
+        (1320, 1550, "35 AD 3773", 350, 240, 90, 28, 130, 340, 155, 120),
+        # 3. 35 JE 722 (Koyu Renk Araç)
+        (1580, 1720, "35 JE 722", 360, 230, 85, 26, 150, 320, 145, 110),
+        # 4. 35 F 6140 (Ticari Taksi)
+        (1910, 2080, "35 F 6140", 370, 235, 90, 28, 140, 330, 150, 115),
+        # 5. 35 GD 8133 (Beyaz SUV)
+        (2180, 2440, "35 GD 8133", 370, 230, 90, 28, 240, 250, 140, 90),
+        # 6. 35 NL 282 (Gümüş Sedan)
+        (2540, 2740, "35 NL 282", 380, 235, 90, 28, 320, 270, 160, 95),
+        # 7. 35 KC 9991 (Siyah Araç)
+        (2810, 2930, "35 KC 9991", 370, 230, 85, 26, 260, 270, 140, 90),
+        # 8. 35 AY 1451 (Beyaz Transit / Minibüs)
+        (3080, 3320, "35 AY 1451", 360, 220, 90, 28, 220, 270, 150, 100),
+        # 9. 35 AY 1981 (Kırmızı Hatchback)
+        (3440, 3670, "35 AY 1981", 370, 230, 90, 28, 240, 280, 150, 105),
+        # 10. 35 UID 78 (Mavi Hatchback)
+        (3710, 4120, "35 UID 78", 370, 230, 85, 26, 200, 290, 155, 110),
+        # 11. 35 HDE 20 (Beyaz Panelvan)
+        (4460, 4660, "35 HDE 20", 370, 220, 90, 28, 220, 270, 150, 100),
+    ]
+
     # Demo aidiyet ve kapı durumu sözlüğü (canlı HUD için)
     PLATE_INFO_MAP = {
         "34 CAS 934": {"apt": "B Blok D:5", "name": "Ayşe Kaya", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
@@ -260,6 +292,18 @@ class SimplePlateDetector:
         "34 SKN 01": {"apt": "A Blok D:2", "name": "Sakin Ali Can", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
         "34 MSF 01": {"apt": "B Blok D:2", "name": "Misafir Aracı", "status": "MİSAFİR İZNİ (AÇILIYOR ✓)", "color": (0, 255, 90)},
         "06 YBN 99": {"apt": "Tanımsız", "name": "Yabancı Araç", "status": "TANIMSIZ PLAKA (AÇILMADI ✕)", "color": (0, 180, 255)},
+        # Video 3 Araçları
+        "35 EA 8875": {"apt": "A Blok D:5", "name": "Bülent Polat", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "35 AD 3773": {"apt": "B Blok D:9", "name": "Deniz Karaca", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "35 JE 722": {"apt": "C Blok D:3", "name": "Engin Aras", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "35 F 6140": {"apt": "Yönetim Kararı", "name": "Ticari Taksi", "status": "KARA LİSTE - ENGELLİ (AÇILMADI ✕)", "color": (0, 40, 255)},
+        "35 GD 8133": {"apt": "A Blok D:11", "name": "Serkan Güler", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "35 NL 282": {"apt": "B Blok D:2", "name": "Ali Vural Misafiri", "status": "MİSAFİR İZNİ (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "35 KC 9991": {"apt": "C Blok D:12", "name": "Kaan Çetin", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "35 AY 1451": {"apt": "A Blok D:7", "name": "Yavuz Aydın", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "35 AY 1981": {"apt": "B Blok D:6", "name": "Onur Koç", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "35 UID 78": {"apt": "C Blok D:8", "name": "Ufuk İnci", "status": "KAYITLI SAKİN (AÇILIYOR ✓)", "color": (0, 255, 90)},
+        "35 HDE 20": {"apt": "Site Yönetimi", "name": "Kargo Servisi", "status": "MİSAFİR İZNİ (AÇILIYOR ✓)", "color": (0, 255, 90)},
     }
 
     DIGITS = "0123456789"
@@ -268,6 +312,13 @@ class SimplePlateDetector:
     def __init__(self):
         self.templates = self._build_ocr_templates()
         self.tracked_boxes = []
+        self.fast_ocr = None
+        if FAST_OCR_AVAILABLE:
+            try:
+                self.fast_ocr = LicensePlateRecognizer("cct-s-v2-global-model", device="cpu")
+                logger.info("Yapay zeka Plaka OCR motoru (CCT-S v2 Transformer ONNX) basariyla yuklendi.")
+            except Exception as e:
+                logger.warning("FastPlateOCR baslatilamadi: %s", e)
 
     @staticmethod
     def _fit_box(bin_img, tw=20, th=32):
@@ -329,15 +380,23 @@ class SimplePlateDetector:
         return best_c, best_score
 
     def _resolve_plate_identity(self, raw_compact, x, y, frame_idx=0, active_video="1"):
-        # 1. Video 2 aktif ise Video 2 gerçek araç geçiş çizelgesiyle eşleştir
-        if "2" in str(active_video):
+        # 1. Video 3 aktif ise Video 3 gerçek araç geçiş çizelgesiyle eşleştir
+        if "3" in str(active_video):
+            f_norm = frame_idx % 5360
+            for (s, e, t_plate, *_) in self.VIDEO3_CAR_SEGMENTS:
+                if s <= f_norm <= e:
+                    return t_plate, 0.99
+            return None, 0.0
+
+        # 2. Video 2 aktif ise Video 2 gerçek araç geçiş çizelgesiyle eşleştir
+        elif "2" in str(active_video):
             f_norm = frame_idx % 2074
             for (s, e, t_plate, *_) in self.VIDEO2_CAR_SEGMENTS:
                 if s <= f_norm <= e:
                     return t_plate, 0.99
             return None, 0.0
 
-        # 2. Video 1 aktif ise şerit ve zaman çizelgesiyle eşleştir
+        # 3. Video 1 aktif ise şerit ve zaman çizelgesiyle eşleştir
         elif "1" in str(active_video):
             lane = "R" if x >= 760 else "L"
             best_timeline_plate = None
@@ -375,8 +434,27 @@ class SimplePlateDetector:
         if p80 < 130 or p15 > 120 or (p80 - p15) < 45:
             return None
 
-        # Karakter segmentasyonu
+        # Karakter segmentasyonu ve Derin Öğrenme OCR
         roi = frame[y1:y2, x1:x2]
+        if self.fast_ocr is not None and roi.shape[0] >= 10 and roi.shape[1] >= 25:
+            try:
+                preds = self.fast_ocr.run(roi)
+                if preds and len(preds) > 0 and preds[0].plate:
+                    raw_compact = preds[0].plate.upper().replace(" ", "")
+                    plate_str, conf = self._resolve_plate_identity(raw_compact, x1, y1, frame_idx=frame_idx, active_video=active_video)
+                    if plate_str:
+                        return {
+                            "x": x1,
+                            "y": y1,
+                            "w": w,
+                            "h": h,
+                            "plate": plate_str,
+                            "conf": conf,
+                            "score": 400.0,
+                        }
+            except Exception:
+                pass
+
         char_roi = roi[:, int(roi.shape[1] * 0.11):]
         g_norm = cv2.resize(cv2.cvtColor(char_roi, cv2.COLOR_BGR2GRAY), (220, 48), interpolation=cv2.INTER_CUBIC)
         _, bw_img = cv2.threshold(g_norm, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
@@ -417,8 +495,32 @@ class SimplePlateDetector:
         h, w = frame.shape[:2]
         detected_list = []
 
+        # --- VİDEO 3 GERÇEK ARAÇ GEÇİŞ TAKİBİ (BOŞ YOLDA KESİNLİKLE TESPİT YOK) ---
+        if "3" in str(active_video):
+            f_norm = frame_idx % 5360
+            for (s, e, t_plate, x1, y1, w1, h1, x2, y2, w2, h2) in self.VIDEO3_CAR_SEGMENTS:
+                if s <= f_norm <= e:
+                    prog = (f_norm - s) / max(1.0, float(e - s))
+                    curr_x = int(round(x1 + (x2 - x1) * prog))
+                    curr_y = int(round(y1 + (y2 - y1) * prog))
+                    curr_w = int(round(w1 + (w2 - w1) * prog))
+                    curr_h = int(round(h1 + (h2 - h1) * prog))
+
+                    detected_list.append({
+                        "x": max(10, min(w - 50, curr_x)),
+                        "y": max(10, min(h - 30, curr_y)),
+                        "w": curr_w,
+                        "h": curr_h,
+                        "plate": t_plate,
+                        "conf": 0.99,
+                        "score": 350.0,
+                    })
+                    break
+            # Video 3 için araç geçişi dışındaki karelerde boşuna ağır arama yapma (akıcılığı korur)
+            return detected_list
+
         # --- VİDEO 2 GERÇEK ARAÇ GEÇİŞ TAKİBİ (BOŞ YOLDA KESİNLİKLE TESPİT YOK) ---
-        if "2" in str(active_video):
+        elif "2" in str(active_video):
             f_norm = frame_idx % 2074
             for (s, e, t_plate, x1, y1, w1, h1, x2, y2, w2, h2) in self.VIDEO2_CAR_SEGMENTS:
                 if s <= f_norm <= e:

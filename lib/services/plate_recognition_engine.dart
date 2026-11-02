@@ -73,6 +73,15 @@ class PlateRecognitionEngine {
     '35AIL740': {'apartment_label': 'A Blok D:6', 'person_label': 'Ali Yıldız'},
     '35ANT69': {'apartment_label': 'B Blok D:8', 'person_label': 'Selin Erdem'},
     '35DC3088': {'apartment_label': 'A Blok D:1', 'person_label': 'Hasan Yıldırım'},
+    // Video 3 Sakin Araçları
+    '35EA8875': {'apartment_label': 'A Blok D:5', 'person_label': 'Bülent Polat'},
+    '35AD3773': {'apartment_label': 'B Blok D:9', 'person_label': 'Deniz Karaca'},
+    '35JE722': {'apartment_label': 'C Blok D:3', 'person_label': 'Engin Aras'},
+    '35GD8133': {'apartment_label': 'A Blok D:11', 'person_label': 'Serkan Güler'},
+    '35KC9991': {'apartment_label': 'C Blok D:12', 'person_label': 'Kaan Çetin'},
+    '35AY1451': {'apartment_label': 'A Blok D:7', 'person_label': 'Yavuz Aydın'},
+    '35AY1981': {'apartment_label': 'B Blok D:6', 'person_label': 'Onur Koç'},
+    '35UID78': {'apartment_label': 'C Blok D:8', 'person_label': 'Ufuk İnci'},
   };
 
   static final Map<String, Map<String, dynamic>> _demoGuestPermits = <String, Map<String, dynamic>>{
@@ -80,12 +89,16 @@ class PlateRecognitionEngine {
     '35S5163': {'apartment_label': 'Yönetim', 'note': 'Kurye / Servis Aracı'},
     '34MSF01': {'apartment_label': 'B Blok D:2', 'note': 'Misafir Aracı'},
     '34JR8778': {'apartment_label': 'A Blok D:5', 'note': 'Yemeksepeti Kurye'},
+    // Video 3 Misafir İzinleri
+    '35NL282': {'apartment_label': 'B Blok D:2', 'note': 'Misafir • Ziyaretçi'},
+    '35HDE20': {'apartment_label': 'Site Yönetimi', 'note': 'Kargo Servisi'},
   };
 
   static final Map<String, String> _demoBlacklist = <String, String>{
     '35T5771': 'Yönetim kurulu kararıyla icra borcu nedeniyle engellendi',
     '35T6040': 'Yönetim kararı: Ticari taksilerin izinsiz otopark girişi yasaktır',
     '34KRA99': 'Aidat ve ortak gider icra borcu nedeniyle engellendi',
+    '35F6140': 'Yönetim kararı: Ticari taksilerin izinsiz otopark girişi yasaktır',
   };
 
   PlateRecognitionEngine._();
