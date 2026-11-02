@@ -4650,3 +4650,8 @@ Güvenlik kulübesindeki kenar PC uygulaması artık sunucunun gerçek kenar sö
 
 
 
+- [ ] **165.9. Sayfa Yenilemesiz (Sıfır Titreme) Sessiz Güncelleme ve Zengin Canlı Plaka / Daire / Kapı Durum Bildirimi (`PlateLiveDecisionBanner` & Kamera HUD):**
+  - **Nasıl Test Edilir:** Hem Windows masaüstü uygulamasında hem de Web tarayıcısında ("İzleme Modu") "Plaka Tanıma" ekranını açın ("Geçiş noktaları" veya "Canlı akış" sekmesinde kalın). Kameradan araç geçmesini bekleyin veya **"Plaka Test Et"** butonuyla Sakin Aracı (`34 SKN 01`), Misafir Aracı (`34 MSF 02`), Kara Liste (`34 KRA 99`) ve Tanımsız (`06 TNM 10`) plakalarını test edin.
+  - **Beklenen Sonuç:**
+    1. **Sayfa Yenilenmez / Titremez:** Plaka tespit edildiğinde veya 5 saniyelik periyodik canlı akış yoklamalarında sayfa komple yenilenmez, yükleme çemberi (`CircularProgressIndicator`) çıkmaz, kamera bileşenleri sıfırlanmaz ve kaydırma konumu bozulmaz. Yalnızca değişen veri (`PlateLiveDecisionBanner`, içerideki araç sayısı veya yeni olay kartı) sessizce güncellenir.
+    2. **Zengin Canlı Tespit Kartı (`PlateLiveDecisionBanner`):** Üst durum kartında ve kamera görüntüsünün alt HUD bandında okunan plaka (`LicensePlateBadge`), tespit ve kapı durumu (**"Plaka Tespit Edildi • İzinli Araç — Kapı Açılıyor ✓"**, **"Plaka Tespit Edildi • KARA LİSTE (Engelli) — Kapı Açılmadı ✕"**, **"Plaka Tespit Edildi • Giriş Reddedildi — Kapı Açılmadı ✕"** veya **"Plaka Tespit Edildi • Tanınmıyor — Kapı Açılmadı ✕"**), aracın ait olduğu **daire ve sakin/misafir bilgisi** (`Daire: ... • Sakin / Kayıt: ...`) ile kapı adı ve karar gerekçesi net olarak gösterilir.

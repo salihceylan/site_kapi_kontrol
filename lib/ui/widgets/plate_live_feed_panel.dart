@@ -56,6 +56,7 @@ class _PlateLiveFeedPanelState extends State<PlateLiveFeedPanel> {
   String? _error;
   bool _auto = true;
   bool _busy = false;
+  bool _inFlight = false;
   DateTime? _updatedAt;
   Timer? _timer;
   StreamSubscription<PlateEngineDecision>? _decisionSub;
@@ -63,9 +64,10 @@ class _PlateLiveFeedPanelState extends State<PlateLiveFeedPanel> {
   @override
   void initState() {
     super.initState();
-    _decisionSub = PlateRecognitionEngine.instance.decisionsStream.listen((_) {
-      Future<void>.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) unawaited(_load());
+    _decisionSub = PlateRecognitionEngine.instance.decisionsStream.listen((decision) {
+      if (decision.fromServer) return;
+      Future<void>.delayed(const Duration(milliseconds: 600), () {
+        if (mounted) unawaited(_load(silent: true));
       });
     });
     unawaited(_load());
@@ -88,24 +90,48 @@ class _PlateLiveFeedPanelState extends State<PlateLiveFeedPanel> {
     super.dispose();
   }
 
-  Future<void> _load() async {
-    if (_busy) return;
+  Future<void> _load({bool silent = false}) async {
+    if (_inFlight) return;
+    _inFlight = true;
     _timer?.cancel();
-    setState(() => _busy = true);
+    final showBusy = !silent || _feed == null;
+    if (showBusy && mounted) {
+      setState(() => _busy = true);
+    }
     try {
       final feed = await widget.service.liveFeed(widget.siteCode);
       if (!mounted) return;
-      setState(() {
-        _feed = feed;
-        _error = null;
-        _updatedAt = DateTime.now();
-      });
+      if (feed.events.isNotEmpty) {
+        PlateRecognitionEngine.instance.ingestServerDecisionRow(feed.events.first);
+      }
+      final prev = _feed;
+      final hasChanged = prev == null ||
+          _error != null ||
+          prev.insideCount != feed.insideCount ||
+          prev.refreshSeconds != feed.refreshSeconds ||
+          prev.events.length != feed.events.length ||
+          (prev.events.isNotEmpty &&
+              feed.events.isNotEmpty &&
+              (prev.events.first.id != feed.events.first.id ||
+                  prev.events.first.gateState != feed.events.first.gateState));
+      if (!silent || hasChanged) {
+        setState(() {
+          _feed = feed;
+          _error = null;
+          _updatedAt = DateTime.now();
+        });
+      }
     } on ApiException catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.message);
+      if (!silent || _error != e.message) {
+        setState(() => _error = e.message);
+      }
     } finally {
+      _inFlight = false;
       if (mounted) {
-        setState(() => _busy = false);
+        if (_busy) {
+          setState(() => _busy = false);
+        }
         _schedule();
       }
     }
@@ -115,13 +141,13 @@ class _PlateLiveFeedPanelState extends State<PlateLiveFeedPanel> {
     _timer?.cancel();
     if (!_auto || !mounted) return;
     final seconds = _feed?.refreshSeconds;
-    _timer = Timer(seconds == null ? widget.fallbackRefresh : Duration(seconds: seconds), () => unawaited(_load()));
+    _timer = Timer(seconds == null ? widget.fallbackRefresh : Duration(seconds: seconds), () => unawaited(_load(silent: true)));
   }
 
   void _toggleAuto(bool value) {
     setState(() => _auto = value);
     if (value) {
-      unawaited(_load());
+      unawaited(_load(silent: true));
     } else {
       _timer?.cancel();
     }
@@ -153,7 +179,12 @@ class _PlateLiveFeedPanelState extends State<PlateLiveFeedPanel> {
         if (feed.events.isEmpty)
           const EmptyState(icon: Icons.sensors_rounded, title: 'Henüz geçiş yok', message: 'Araçlar kapıdan geçince burada anında görünür.', tone: AppTone.neutral)
         else
-          for (final e in feed.events) Padding(padding: const EdgeInsets.only(bottom: AppSpace.sm), child: LiveEventCard(event: e)),
+          for (final e in feed.events)
+            Padding(
+              key: ValueKey<int>(e.id),
+              padding: const EdgeInsets.only(bottom: AppSpace.sm),
+              child: LiveEventCard(event: e),
+            ),
       ],
     );
   }

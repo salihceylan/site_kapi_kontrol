@@ -56,6 +56,8 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
 
   Uint8List? _frameBytes;
   String? _detectedPlate;
+  String? _lastIngestedPlate;
+  DateTime? _lastIngestedAt;
   DateTime? _lastFrameAt;
   DateTime? _lastServerUploadAt;
   String? _lastEtag;
@@ -102,7 +104,7 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
 
   void _onEngineFrames(Map<int, Uint8List> frames) {
     final bytes = frames[widget.cameraId];
-    if (bytes != null && bytes.isNotEmpty && mounted) {
+    if (bytes != null && bytes.isNotEmpty && mounted && !identical(bytes, _frameBytes)) {
       setState(() {
         _frameBytes = bytes;
         _detectedPlate = PlateRecognitionEngine.instance.lastCameraPlates[widget.cameraId];
@@ -194,19 +196,28 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
           _lastFrameAt = DateTime.now();
         });
 
-        // Plaka okunduysa karar motoruna ilet
+        // Plaka okunduysa karar motoruna ilet (aynı plaka için gereksiz tekrarları önle)
+        final now = DateTime.now();
         if (res.plate != null && res.plate!.isNotEmpty) {
-          unawaited(
-            PlateRecognitionEngine.instance.ingestCameraFrame(
-              cam,
-              res.bytes!,
-              directPlate: res.plate,
-            ),
-          );
+          final samePlateRecently = _lastIngestedPlate == res.plate &&
+              _lastIngestedAt != null &&
+              now.difference(_lastIngestedAt!).inSeconds < 12;
+          if (!samePlateRecently) {
+            _lastIngestedPlate = res.plate;
+            _lastIngestedAt = now;
+            unawaited(
+              PlateRecognitionEngine.instance.ingestCameraFrame(
+                cam,
+                res.bytes!,
+                directPlate: res.plate,
+              ),
+            );
+          }
+        } else {
+          _lastIngestedPlate = null;
         }
 
         // Her 3 saniyede bir sunucuya son kareyi yükle (durum rozeti yeşil kalsın & uzaktan izlenebilsin)
-        final now = DateTime.now();
         if (widget.camerasService != null &&
             widget.siteCode != null &&
             widget.cameraId > 0 &&
@@ -357,34 +368,16 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
             ),
           ),
 
-        // Okunan plaka rozeti (sağ alt)
+        // Okunan plaka ve karar HUD çubuğu (alt bant)
         if (plate != null && plate.isNotEmpty)
           Positioned(
+            left: 8,
             right: 8,
             bottom: 6,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: const Color(0xFF065F46).withValues(alpha: 0.92),
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-                border: Border.all(color: const Color(0xFF34D399)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  const Icon(Icons.directions_car_rounded, size: 12, color: Color(0xFF6EE7B7)),
-                  const SizedBox(width: 4),
-                  Text(
-                    LicensePlateBadge.format(plate),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontFamily: 'monospace',
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ],
+            child: _buildCameraDetectionHud(
+              PlateRecognitionEngine.instance.evaluatePlatePreview(
+                plate,
+                camera: _resolvedCamera ?? widget.camera,
               ),
             ),
           ),
@@ -426,6 +419,103 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
         }
         return interactive;
       },
+    );
+  }
+
+  Widget _buildCameraDetectionHud(PlateEngineDecision decision) {
+    final (
+      Color accent,
+      IconData icon,
+      String statusTitle,
+    ) = switch (decision.decision) {
+      PlateDecisionType.acildi => (
+          const Color(0xFF10B981),
+          Icons.check_circle_rounded,
+          'Plaka Tespit Edildi • Kapı Açılıyor ✓',
+        ),
+      PlateDecisionType.karaListe => (
+          const Color(0xFFEF4444),
+          Icons.block_rounded,
+          'KARA LİSTE (Engelli) • Kapı Açılmadı',
+        ),
+      PlateDecisionType.red => (
+          const Color(0xFFF97316),
+          Icons.do_not_disturb_on_rounded,
+          'Giriş Reddedildi • Kapı Açılmadı',
+        ),
+      PlateDecisionType.tanimsiz => (
+          const Color(0xFFF59E0B),
+          Icons.help_outline_rounded,
+          'Tanınmayan Plaka • Kapı Açılmadı',
+        ),
+    };
+
+    final apt = (decision.apartmentLabel ?? '').trim();
+    final person = (decision.personLabel ?? '').trim();
+    final ownershipLine = apt.isNotEmpty
+        ? 'Daire: $apt${person.isNotEmpty ? ' • $person' : ''}'
+        : decision.reason;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A).withValues(alpha: 0.88),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: accent.withValues(alpha: 0.85), width: 1.2),
+      ),
+      child: Row(
+        children: <Widget>[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.22),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: accent.withValues(alpha: 0.7)),
+            ),
+            child: Text(
+              LicensePlateBadge.format(decision.plate),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(icon, size: 15, color: accent),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  statusTitle,
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  ownershipLine,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -638,6 +728,226 @@ class _PlateLiveCamerasSectionState extends State<PlateLiveCamerasSection> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// Sayfayı yeniden yüklemeden (yalnızca kendi iç durumunu güncelleyerek) son tespit edilen plakayı,
+/// hangi daireye/kişiye ait olduğunu ve kapının açılıp açılmadığını canlı gösteren durum bandı.
+class PlateLiveDecisionBanner extends StatefulWidget {
+  const PlateLiveDecisionBanner({super.key});
+
+  @override
+  State<PlateLiveDecisionBanner> createState() => _PlateLiveDecisionBannerState();
+}
+
+class _PlateLiveDecisionBannerState extends State<PlateLiveDecisionBanner> {
+  StreamSubscription<PlateEngineDecision>? _decisionSub;
+  StreamSubscription<void>? _clearSub;
+  Timer? _expiryTimer;
+  PlateEngineDecision? _activeDecision;
+
+  @override
+  void initState() {
+    super.initState();
+    _activeDecision = PlateRecognitionEngine.instance.currentActiveDecision;
+    _scheduleExpiry();
+    _decisionSub = PlateRecognitionEngine.instance.decisionsStream.listen((decision) {
+      if (!mounted) return;
+      setState(() => _activeDecision = decision);
+      _scheduleExpiry();
+    });
+    _clearSub = PlateRecognitionEngine.instance.clearStream.listen((_) {
+      if (!mounted) return;
+      _expiryTimer?.cancel();
+      setState(() => _activeDecision = null);
+    });
+  }
+
+  void _scheduleExpiry() {
+    _expiryTimer?.cancel();
+    final d = _activeDecision;
+    if (d == null) return;
+    final elapsed = DateTime.now().difference(d.timestamp);
+    final remaining = const Duration(seconds: 10) - elapsed;
+    if (remaining <= Duration.zero) {
+      _activeDecision = null;
+      return;
+    }
+    _expiryTimer = Timer(remaining, () {
+      if (mounted) {
+        setState(() => _activeDecision = null);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _expiryTimer?.cancel();
+    _decisionSub?.cancel();
+    _clearSub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final decision = _activeDecision;
+    final p = context.palette;
+
+    if (decision == null) {
+      return Wrap(
+        spacing: AppSpace.sm,
+        runSpacing: AppSpace.xs,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: <Widget>[
+          Chip(
+            avatar: const Icon(Icons.videocam_rounded, size: 16),
+            label: const Text('Kamera Dinleniyor • Araç Bekleniyor'),
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+      );
+    }
+
+    final (
+      Color accent,
+      IconData statusIcon,
+      String headline,
+      String gateActionText,
+    ) = switch (decision.decision) {
+      PlateDecisionType.acildi => (
+          const Color(0xFF10B981),
+          Icons.check_circle_rounded,
+          'Plaka Tespit Edildi • İzinli Araç',
+          'Kapı Açılıyor ✓',
+        ),
+      PlateDecisionType.karaListe => (
+          const Color(0xFFEF4444),
+          Icons.block_rounded,
+          'Plaka Tespit Edildi • KARA LİSTE (Engelli)',
+          'Kapı Açılmadı ✕',
+        ),
+      PlateDecisionType.red => (
+          const Color(0xFFF97316),
+          Icons.do_not_disturb_on_rounded,
+          'Plaka Tespit Edildi • Giriş Reddedildi',
+          'Kapı Açılmadı ✕',
+        ),
+      PlateDecisionType.tanimsiz => (
+          const Color(0xFFF59E0B),
+          Icons.help_outline_rounded,
+          'Plaka Tespit Edildi • Tanınmıyor',
+          'Kapı Açılmadı ✕',
+        ),
+    };
+
+    final apt = (decision.apartmentLabel ?? '').trim();
+    final person = (decision.personLabel ?? '').trim();
+    final directionLabel = decision.direction == 'cikis' ? 'Çıkış' : 'Giriş';
+
+    final String ownershipText;
+    if (apt.isNotEmpty) {
+      ownershipText = 'Daire: $apt${person.isNotEmpty ? '  •  Sakin / Kayıt: $person' : ''}';
+    } else if (decision.decision == PlateDecisionType.karaListe) {
+      ownershipText = 'Aidiyet: Kara listede engelli plaka';
+    } else {
+      ownershipText = 'Aidiyet: Sitede kayıtlı daire veya misafir izni bulunamadı';
+    }
+
+    return Container(
+      key: ValueKey<String>('live_decision_${decision.plate}_${decision.timestamp.millisecondsSinceEpoch}'),
+      padding: const EdgeInsets.all(AppSpace.sm),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: accent.withValues(alpha: 0.65), width: 1.4),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          LicensePlateBadge(plate: decision.plate),
+          const SizedBox(width: AppSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Wrap(
+                  spacing: AppSpace.xs,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: <Widget>[
+                    Icon(statusIcon, size: 18, color: accent),
+                    Text(
+                      headline,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13.5,
+                        color: p.text,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: 0.20),
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                        border: Border.all(color: accent),
+                      ),
+                      child: Text(
+                        gateActionText,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          color: accent,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: <Widget>[
+                    Icon(
+                      apt.isNotEmpty ? Icons.home_work_outlined : Icons.info_outline_rounded,
+                      size: 14,
+                      color: p.textSecondary,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        ownershipText,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: p.text,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${decision.gateName} ($directionLabel)  •  ${decision.reason}',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: p.textSecondary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Temizle',
+            visualDensity: VisualDensity.compact,
+            icon: Icon(Icons.close_rounded, size: 18, color: p.textSecondary),
+            onPressed: () => PlateRecognitionEngine.instance.clearDecision(),
+          ),
+        ],
       ),
     );
   }

@@ -77,11 +77,11 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
     super.initState();
     _site = widget.sites.isEmpty ? null : widget.sites.first;
     _engineDecisionSub = PlateRecognitionEngine.instance.decisionsStream.listen((decision) {
-      if (!mounted) return;
-      setState(() {});
-      Future<void>.delayed(const Duration(milliseconds: 500), () {
-        if (mounted && (_tab == 0 || _tab == 1)) {
-          unawaited(reload());
+      if (!mounted || decision.fromServer) return;
+      Future<void>.delayed(const Duration(milliseconds: 600), () {
+        if (!mounted) return;
+        if (_tab == 1 || (_tab == 0 && decision.decision == PlateDecisionType.acildi)) {
+          unawaited(reload(silent: true));
         }
       });
     });
@@ -99,14 +99,24 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
     }
   }
 
-  Future<void> reload() async {
+  Future<void> reload({bool silent = false}) async {
     final site = _site;
     if (site == null) {
       if (mounted) setState(() => _loading = false);
       return;
     }
     final token = ++_loadToken;
-    if (mounted) setState(() => _loading = true);
+    final hasData = site.isResident
+        ? _resident != null
+        : switch (_tab) {
+            0 => _gates != null && _inside != null,
+            1 => _events.isNotEmpty,
+            2 => true,
+            _ => _settings != null,
+          };
+    if (!silent && !hasData && mounted) {
+      setState(() => _loading = true);
+    }
     try {
       if (site.isResident) {
         final data = await _service.residentOverview(site.code);
@@ -115,17 +125,29 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
       } else {
         switch (_tab) {
           case 0:
-            final gates = await _service.gatesOverview(site.code);
-            final inside = await _service.inside(site.code);
-            if (!_isCurrent(token)) return;
-            setState(() {
-              _gates = gates;
-              _inside = inside;
-            });
+            if (silent && _gates != null) {
+              final inside = await _service.inside(site.code);
+              if (!_isCurrent(token)) return;
+              if (_inside?.total != inside.total || _inside?.items.length != inside.items.length) {
+                setState(() => _inside = inside);
+              }
+            } else {
+              final gates = await _service.gatesOverview(site.code);
+              final inside = await _service.inside(site.code);
+              if (!_isCurrent(token)) return;
+              setState(() {
+                _gates = gates;
+                _inside = inside;
+              });
+            }
           case 1:
             final rows = await _service.events(site.code);
             if (!_isCurrent(token)) return;
-            setState(() => _events = rows);
+            final changed = _events.length != rows.length ||
+                (_events.isNotEmpty && rows.isNotEmpty && _events.first.id != rows.first.id);
+            if (!silent || changed) {
+              setState(() => _events = rows);
+            }
           case 2:
             break; // Canlı akış
           default:
@@ -141,16 +163,18 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
         }
       }
       if (_isCurrent(token)) {
-        setState(() {
-          _error = null;
-          _loading = false;
-        });
-        if (!site.isResident) {
+        if (_loading || _error != null) {
+          setState(() {
+            _error = null;
+            _loading = false;
+          });
+        }
+        if (!site.isResident && !silent) {
           unawaited(_syncWindowsEngine(site));
         }
       }
     } on ApiException catch (e) {
-      if (_isCurrent(token)) {
+      if (_isCurrent(token) && !silent) {
         setState(() {
           _error = e.message;
           _loading = false;
@@ -360,6 +384,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
       if (e.seenAt != null) _fmt(e.seenAt!),
     ].join('  •  ');
     return Padding(
+      key: ValueKey<int>(e.id),
       padding: const EdgeInsets.only(bottom: AppSpace.sm),
       child: AppCard(
         padding: const EdgeInsets.all(AppSpace.md),
@@ -709,7 +734,9 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
         parkingSlotsByLabel: slotsByLabel,
         insideCountsByLabel: insideByLabel,
       );
-      if (mounted) setState(() {});
+      if (mounted && !kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+        setState(() {});
+      }
     } catch (_) {}
   }
 
@@ -717,41 +744,65 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
     padding: const EdgeInsets.only(bottom: AppSpace.md),
     child: AppCard(
       padding: const EdgeInsets.all(AppSpace.md),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Icon(Icons.info_outline_rounded, color: context.palette.action, size: 24),
-          const SizedBox(width: AppSpace.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  'İzleme Modu (Web / Mobil)',
-                  style: TextStyle(fontWeight: FontWeight.bold, color: context.palette.text),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Kamera ile otomatik plaka tespiti ve SmartKeyPass kapı tetikleme işlemi kameralarla aynı yerel ağda (LAN) çalışan Windows masaüstü güvenlik / yönetim bilgisayarında yürütülür. Web ve mobil cihazlardan canlı akış ve olay kayıtları izlenebilir.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.palette.textSecondary),
-                ),
-                if (kIsWeb) ...<Widget>[
-                  const SizedBox(height: AppSpace.sm),
-                  FilledButton.icon(
-                    onPressed: () => launchUrl(
-                      Uri.parse('/download/windows'),
-                      mode: LaunchMode.externalApplication,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Icon(Icons.info_outline_rounded, color: context.palette.action, size: 24),
+              const SizedBox(width: AppSpace.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(
+                            'İzleme Modu (Web / Mobil)',
+                            style: TextStyle(fontWeight: FontWeight.bold, color: context.palette.text),
+                          ),
+                        ),
+                        if (site.canWrite)
+                          OutlinedButton.icon(
+                            onPressed: () => _showPlateSimulationDialog(site),
+                            icon: const Icon(Icons.speed_rounded, size: 16),
+                            label: const Text('Plaka Test Et'),
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: AppSpace.xs),
+                            ),
+                          ),
+                      ],
                     ),
-                    icon: const Icon(Icons.download_rounded, size: 18),
-                    label: const Text('Windows Saha Uygulamasını İndir (.ZIP)'),
-                    style: FilledButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.xs),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Kamera ile otomatik plaka tespiti ve SmartKeyPass kapı tetikleme işlemi kameralarla aynı yerel ağda (LAN) çalışan Windows masaüstü güvenlik / yönetim bilgisayarında yürütülür. Web ve mobil cihazlardan canlı akış ve olay kayıtları izlenebilir.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.palette.textSecondary),
                     ),
-                  ),
-                ],
-              ],
-            ),
+                    if (kIsWeb) ...<Widget>[
+                      const SizedBox(height: AppSpace.sm),
+                      FilledButton.icon(
+                        onPressed: () => launchUrl(
+                          Uri.parse('/download/windows'),
+                          mode: LaunchMode.externalApplication,
+                        ),
+                        icon: const Icon(Icons.download_rounded, size: 18),
+                        label: const Text('Windows Saha Uygulamasını İndir (.ZIP)'),
+                        style: FilledButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.xs),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: AppSpace.sm),
+          const PlateLiveDecisionBanner(),
         ],
       ),
     ),
@@ -760,7 +811,6 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
   Widget _buildWindowsEngineBanner(PlateSite site) {
     final engine = PlateRecognitionEngine.instance;
     final isRunning = engine.isRunning;
-    final lastDecision = engine.currentActiveDecision;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
@@ -783,8 +833,8 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
                 Expanded(
                   child: Text(
                     isRunning
-                      ? 'Windows Saha Plaka Tanıma & Kapı Motoru: Aktif'
-                      : 'Windows Plaka Tanıma Motoru: Durduruldu',
+                        ? 'Windows Saha Plaka Tanıma & Kapı Motoru: Aktif'
+                        : 'Windows Plaka Tanıma Motoru: Durduruldu',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -802,51 +852,11 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
               ],
             ),
             const SizedBox(height: AppSpace.sm),
-            Wrap(
-              spacing: AppSpace.sm,
-              runSpacing: AppSpace.xs,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: <Widget>[
-                Chip(
-                  avatar: const Icon(Icons.videocam_rounded, size: 16),
-                  label: Text(lastDecision == null ? ' Kamera Dinleniyor • Araç Bekleniyor' : ' Kamera Dinleniyor'),
-                  visualDensity: VisualDensity.compact,
-                ),
-                if (lastDecision != null) ...<Widget>[
-                  Text(
-                    'Son Okunan:',
-                    style: TextStyle(fontSize: 12, color: context.palette.textSecondary),
-                  ),
-                  LicensePlateBadge(plate: lastDecision.plate, compact: true),
-                  _engineDecisionBadge(lastDecision),
-                  InkWell(
-                    onTap: () {
-                      engine.clearDecision();
-                      setState(() {});
-                    },
-                    borderRadius: BorderRadius.circular(12),
-                    child: Padding(
-                      padding: const EdgeInsets.all(4.0),
-                      child: Icon(Icons.close_rounded, size: 16, color: context.palette.textSecondary),
-                    ),
-                  ),
-                ],
-              ],
-            ),
+            const PlateLiveDecisionBanner(),
           ],
         ),
       ),
     );
-  }
-
-  Widget _engineDecisionBadge(PlateEngineDecision decision) {
-    final (label, tone) = switch (decision.decision) {
-      PlateDecisionType.acildi => ('İzinli • Kapı Açıldı', AppTone.success),
-      PlateDecisionType.red => ('Giriş Reddedildi • ', AppTone.danger),
-      PlateDecisionType.karaListe => ('KARA LİSTE • Kapı Açılmadı', AppTone.danger),
-      PlateDecisionType.tanimsiz => ('Tanımsız Plaka', AppTone.warning),
-    };
-    return StatusDot(label: label, tone: tone);
   }
 
   Future<void> _showPlateSimulationDialog(PlateSite site) async {
@@ -975,8 +985,30 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: AppSpace.xs),
-                        Text('Neden: ', style: const TextStyle(fontSize: 13)),
+                         const SizedBox(height: AppSpace.xs),
+                        if ((simulationResult!.apartmentLabel ?? '').trim().isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              'Daire: ${simulationResult!.apartmentLabel}${(simulationResult!.personLabel ?? '').trim().isNotEmpty ? ' • ${simulationResult!.personLabel}' : ''}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: simulationResult!.decision == PlateDecisionType.acildi
+                                    ? Colors.green.shade900
+                                    : Colors.red.shade900,
+                              ),
+                            ),
+                          ),
+                        Text(
+                          'Neden: ${simulationResult!.reason}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: simulationResult!.decision == PlateDecisionType.acildi
+                                ? Colors.green.shade900
+                                : Colors.red.shade900,
+                          ),
+                        ),
                         if (simulationResult!.isGateTriggered) ...<Widget>[
                           const SizedBox(height: AppSpace.xs),
                           Text(
