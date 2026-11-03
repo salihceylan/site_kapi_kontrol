@@ -391,6 +391,51 @@ class PlateRecognitionEngine {
     if (insideCountsByLabel != null) _apartmentInsideByLabel = insideCountsByLabel;
   }
 
+  /// Kapının geçiş ve güvenlik sürelerini bellek içinde anında günceller.
+  void updateGateCooldowns({
+    required int gateId,
+    required int consecutiveVehicleDelaySeconds,
+    required int entryRearSuppressSeconds,
+    required int exitRearSuppressSeconds,
+  }) {
+    for (int i = 0; i < _activeCameras.length; i++) {
+      final cam = _activeCameras[i];
+      if (cam.gate != null && cam.gate!.id == gateId) {
+        final g = cam.gate!;
+        final updatedGate = PlateCameraGate(
+          id: g.id,
+          name: g.name,
+          directionMode: g.directionMode,
+          doorId: g.doorId,
+          consecutiveVehicleDelaySeconds: consecutiveVehicleDelaySeconds,
+          entryRearSuppressSeconds: entryRearSuppressSeconds,
+          exitRearSuppressSeconds: exitRearSuppressSeconds,
+        );
+        _activeCameras[i] = PlateCameraRow(
+          id: cam.id,
+          name: cam.name,
+          brand: cam.brand,
+          brandLabel: cam.brandLabel,
+          host: cam.host,
+          isActive: cam.isActive,
+          managed: cam.managed,
+          status: cam.status,
+          probe: cam.probe,
+          snapshot: cam.snapshot,
+          port: cam.port,
+          rtspUrl: cam.rtspUrl,
+          username: cam.username,
+          hasPassword: cam.hasPassword,
+          gate: updatedGate,
+          direction: cam.direction,
+          lastFrameAt: cam.lastFrameAt,
+          lastReadAt: cam.lastReadAt,
+        );
+      }
+    }
+    debugPrint('[PlateRecognitionEngine] Kapı #$gateId süreleri güncellendi: sonraki=${consecutiveVehicleDelaySeconds}s, girişArka=${entryRearSuppressSeconds}s, çıkışArka=${exitRearSuppressSeconds}s');
+  }
+
   Future<void> _tick() async {
     if (!_isRunning || _activeCameras.isEmpty || _tickBusy) return;
     _tickBusy = true;

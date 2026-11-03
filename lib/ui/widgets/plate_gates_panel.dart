@@ -7,6 +7,7 @@ import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/plate_camera_snapshot.dart';
 import 'package:site_kapi_kontrol/services/plate_cameras_api.dart';
 import 'package:site_kapi_kontrol/services/plate_recognition_api.dart';
+import 'package:site_kapi_kontrol/services/plate_recognition_engine.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/status_dot.dart';
@@ -96,6 +97,39 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
       ),
     );
     return ok == true;
+  }
+
+  Future<void> _editGateTimings(PlateGate gate) async {
+    final result = await showDialog<GateTimingsDraft>(
+      context: context,
+      builder: (_) => GateTimingsDialog(gate: gate),
+    );
+    if (result == null) return;
+
+    final draft = GateDraft(
+      name: gate.name,
+      directionMode: gate.directionMode,
+      deviceUid: gate.deviceUid,
+      consecutiveVehicleDelaySeconds: result.consecutiveVehicleDelaySeconds,
+      entryRearSuppressSeconds: result.entryRearSuppressSeconds,
+      exitRearSuppressSeconds: result.exitRearSuppressSeconds,
+      cameras: <GateCameraDraft>[
+        for (final c in gate.cameras)
+          GateCameraDraft(cameraId: c.cameraId, direction: c.direction),
+      ],
+    );
+
+    PlateRecognitionEngine.instance.updateGateCooldowns(
+      gateId: gate.id,
+      consecutiveVehicleDelaySeconds: result.consecutiveVehicleDelaySeconds,
+      entryRearSuppressSeconds: result.entryRearSuppressSeconds,
+      exitRearSuppressSeconds: result.exitRearSuppressSeconds,
+    );
+
+    await _run(
+      () => widget.service.updateGatePoint(widget.siteCode, gate.id, draft),
+      '${gate.name} geçiş süreleri güncellendi (Yeni ayarlarla çalışıyor).',
+    );
   }
 
   Future<void> _probeCamera(int cameraId) async {
@@ -683,6 +717,17 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
                 ),
                 const SizedBox(width: AppSpace.xs),
                 GateBadgeView(badge: gate.status),
+                if (widget.canWrite) ...<Widget>[
+                  const SizedBox(width: AppSpace.xs),
+                  IconButton(
+                    key: ValueKey<String>('gate_timings_edit_btn_${gate.id}'),
+                    icon: const Icon(Icons.tune_rounded, size: 20),
+                    tooltip: 'Geçiş ve Güvenlik Sürelerini Ayarla',
+                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    padding: EdgeInsets.zero,
+                    onPressed: () => _editGateTimings(gate),
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 4),
@@ -741,17 +786,49 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
                     ),
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: p.border.withValues(alpha: 0.25),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    key: ValueKey<String>('gate_timings_badge_${gate.id}'),
                     borderRadius: BorderRadius.circular(AppRadius.sm),
-                  ),
-                  child: Text(
-                    'Süreler: Sonraki: ${gate.consecutiveVehicleDelaySeconds}s • Giriş Arka: ${gate.entryRearSuppressSeconds}s • Çıkış Arka: ${gate.exitRearSuppressSeconds}s',
-                    style: theme.textTheme.bodySmall?.copyWith(color: p.textSecondary),
+                    onTap: widget.canWrite ? () => _editGateTimings(gate) : null,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: p.border.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                        border: Border.all(color: p.border.withValues(alpha: 0.5)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Icon(Icons.timer_outlined, size: 13, color: p.textSecondary),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Süreler: Sonraki: ${gate.consecutiveVehicleDelaySeconds}s • Giriş Arka: ${gate.entryRearSuppressSeconds}s • Çıkış Arka: ${gate.exitRearSuppressSeconds}s',
+                            style: theme.textTheme.bodySmall?.copyWith(color: p.textSecondary, fontWeight: FontWeight.w500),
+                          ),
+                          if (widget.canWrite) ...<Widget>[
+                            const SizedBox(width: 4),
+                            Icon(Icons.edit_outlined, size: 12, color: p.textSecondary),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
                 ),
+                if (widget.canWrite)
+                  TextButton.icon(
+                    key: ValueKey<String>('gate_edit_timings_text_btn_${gate.id}'),
+                    icon: const Icon(Icons.edit_note_rounded, size: 16),
+                    label: const Text('Süreleri Değiştir', style: TextStyle(fontSize: 12)),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () => _editGateTimings(gate),
+                  ),
               ],
             ),
 
@@ -1087,38 +1164,6 @@ class _GateEditDialogState extends State<GateEditDialog> {
                 ],
                 onChanged: (v) => setState(() => _device = v),
               ),
-              const SizedBox(height: AppSpace.md),
-              Text(
-                'Geçiş ve Güvenlik Süreleri (Saniye)',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: AppSpace.xs),
-              TextField(
-                controller: _consecutiveDelay,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Bir sonraki araç için bekleme süresi (sn)',
-                  helperText: 'Bir araç geçtikten sonra bir sonraki aracın okunabilmesi için bekleme süresi (Varsayılan: 10 sn)',
-                ),
-              ),
-              const SizedBox(height: AppSpace.sm),
-              TextField(
-                controller: _entryRearSuppress,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Giriş yapan aracın arka plakasını engelleme süresi (sn)',
-                  helperText: 'Giriş yapan aracın çıkış kamerası tarafından arka plakasının okunmasını engeller (Varsayılan: 60 sn)',
-                ),
-              ),
-              const SizedBox(height: AppSpace.sm),
-              TextField(
-                controller: _exitRearSuppress,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Çıkış yapan aracın arka plakasını engelleme süresi (sn)',
-                  helperText: 'Çıkış yapan aracın giriş kamerası tarafından arka plakasının okunmasını engeller (Varsayılan: 60 sn)',
-                ),
-              ),
               const SizedBox(height: AppSpace.sm),
               Text('Kameralar', style: Theme.of(context).textTheme.titleSmall),
               if (_availableCameras.isEmpty) const Text('Boşta kamera yok. Kameralar kapıdaki "Kamera ekle" butonuyla eklenir.'),
@@ -1149,6 +1194,53 @@ class _GateEditDialogState extends State<GateEditDialog> {
                       ),
                   ],
                 ),
+              const SizedBox(height: AppSpace.md),
+              Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  initiallyExpanded: false,
+                  title: Text(
+                    'Geçiş ve Güvenlik Süreleri (Gelişmiş)',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    'Sonraki: ${_consecutiveDelay.text}s • Giriş Arka: ${_entryRearSuppress.text}s • Çıkış Arka: ${_exitRearSuppress.text}s',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  children: <Widget>[
+                    TextField(
+                      controller: _consecutiveDelay,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Bir sonraki araç için bekleme süresi (sn)',
+                        helperText: 'Aralık: 1 - 120 sn (Varsayılan: 10 sn)',
+                        suffixText: 'sn',
+                      ),
+                    ),
+                    const SizedBox(height: AppSpace.sm),
+                    TextField(
+                      controller: _entryRearSuppress,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Giriş yapan aracın arka plakasını engelleme süresi (sn)',
+                        helperText: 'Aralık: 5 - 600 sn (Varsayılan: 60 sn)',
+                        suffixText: 'sn',
+                      ),
+                    ),
+                    const SizedBox(height: AppSpace.sm),
+                    TextField(
+                      controller: _exitRearSuppress,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Çıkış yapan aracın arka plakasını engelleme süresi (sn)',
+                        helperText: 'Aralık: 5 - 600 sn (Varsayılan: 60 sn)',
+                        suffixText: 'sn',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               if (_error != null) Padding(padding: const EdgeInsets.only(top: AppSpace.sm), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
             ],
           ),
@@ -1157,6 +1249,180 @@ class _GateEditDialogState extends State<GateEditDialog> {
       actions: <Widget>[
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Vazgeç')),
         FilledButton(onPressed: _submit, child: const Text('Kaydet')),
+      ],
+    );
+  }
+}
+
+/// Geçiş noktası için bekleme ve arka plaka engelleme süreleri taslağı.
+class GateTimingsDraft {
+  const GateTimingsDraft({
+    required this.consecutiveVehicleDelaySeconds,
+    required this.entryRearSuppressSeconds,
+    required this.exitRearSuppressSeconds,
+  });
+
+  final int consecutiveVehicleDelaySeconds;
+  final int entryRearSuppressSeconds;
+  final int exitRearSuppressSeconds;
+}
+
+/// Sadece geçiş ve güvenlik sürelerini hızlıca düzenleme penceresi.
+@visibleForTesting
+class GateTimingsDialog extends StatefulWidget {
+  const GateTimingsDialog({super.key, required this.gate});
+
+  final PlateGate gate;
+
+  @override
+  State<GateTimingsDialog> createState() => _GateTimingsDialogState();
+}
+
+class _GateTimingsDialogState extends State<GateTimingsDialog> {
+  late final TextEditingController _consecutiveDelay = TextEditingController(
+    text: '${widget.gate.consecutiveVehicleDelaySeconds}',
+  );
+  late final TextEditingController _entryRearSuppress = TextEditingController(
+    text: '${widget.gate.entryRearSuppressSeconds}',
+  );
+  late final TextEditingController _exitRearSuppress = TextEditingController(
+    text: '${widget.gate.exitRearSuppressSeconds}',
+  );
+
+  String? _error;
+
+  @override
+  void dispose() {
+    _consecutiveDelay.dispose();
+    _entryRearSuppress.dispose();
+    _exitRearSuppress.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final nextSec = int.tryParse(_consecutiveDelay.text.trim());
+    final entrySec = int.tryParse(_entryRearSuppress.text.trim());
+    final exitSec = int.tryParse(_exitRearSuppress.text.trim());
+
+    if (nextSec == null || nextSec < 1 || nextSec > 120) {
+      setState(() => _error = 'Bir sonraki araç bekleme süresi 1 - 120 saniye arasında bir tam sayı olmalıdır.');
+      return;
+    }
+    if (entrySec == null || entrySec < 5 || entrySec > 600) {
+      setState(() => _error = 'Giriş arka plaka engelleme süresi 5 - 600 saniye arasında bir tam sayı olmalıdır.');
+      return;
+    }
+    if (exitSec == null || exitSec < 5 || exitSec > 600) {
+      setState(() => _error = 'Çıkış arka plaka engelleme süresi 5 - 600 saniye arasında bir tam sayı olmalıdır.');
+      return;
+    }
+
+    Navigator.pop(
+      context,
+      GateTimingsDraft(
+        consecutiveVehicleDelaySeconds: nextSec,
+        entryRearSuppressSeconds: entrySec,
+        exitRearSuppressSeconds: exitSec,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: <Widget>[
+          const Icon(Icons.timer_outlined, color: Color(0xFF10B981), size: 22),
+          const SizedBox(width: AppSpace.sm),
+          Expanded(
+            child: Text('${widget.gate.name} Süre Ayarları', overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 440,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Container(
+                padding: const EdgeInsets.all(AppSpace.sm),
+                margin: const EdgeInsets.only(bottom: AppSpace.md),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: Row(
+                  children: <Widget>[
+                    Icon(Icons.info_outline_rounded, size: 18, color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: AppSpace.sm),
+                    Expanded(
+                      child: Text(
+                        'Süreleri saniye olarak belirleyin. Kaydettiğiniz anda sistem yeni ayarlarla çalışmaya başlar.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextField(
+                key: const ValueKey<String>('gate_timing_consecutive'),
+                controller: _consecutiveDelay,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Sonraki Araç Bekleme Süresi (sn)',
+                  helperText: 'Aralık: 1 - 120 sn (Varsayılan: 10 sn)\nBir araç geçtikten sonra yeni bir aracın okunması için beklenecek süre.',
+                  helperMaxLines: 2,
+                  suffixText: 'sn',
+                ),
+              ),
+              const SizedBox(height: AppSpace.md),
+              TextField(
+                key: const ValueKey<String>('gate_timing_entry_rear'),
+                controller: _entryRearSuppress,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Giriş Yapan Aracın Arka Plakasını Engelleme (sn)',
+                  helperText: 'Aralık: 5 - 600 sn (Varsayılan: 60 sn)\nGiriş yapan aracın çıkış kamerası tarafından arka plakasının okunmasını engeller.',
+                  helperMaxLines: 2,
+                  suffixText: 'sn',
+                ),
+              ),
+              const SizedBox(height: AppSpace.md),
+              TextField(
+                key: const ValueKey<String>('gate_timing_exit_rear'),
+                controller: _exitRearSuppress,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Çıkış Yapan Aracın Arka Plakasını Engelleme (sn)',
+                  helperText: 'Aralık: 5 - 600 sn (Varsayılan: 60 sn)\nÇıkış yapan aracın giriş kamerası tarafından arka plakasının okunmasını engeller.',
+                  helperMaxLines: 2,
+                  suffixText: 'sn',
+                ),
+              ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpace.md),
+                  child: Text(
+                    _error!,
+                    style: TextStyle(color: Theme.of(context).colorScheme.error, fontWeight: FontWeight.bold),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Vazgeç'),
+        ),
+        FilledButton(
+          key: const ValueKey<String>('gate_timings_save_btn'),
+          onPressed: _submit,
+          child: const Text('Kaydet'),
+        ),
       ],
     );
   }

@@ -160,10 +160,67 @@ void main() {
         'name': 'Yan Kapı',
         'direction_mode': 'cift',
         'device_uid': null,
+        'consecutive_vehicle_delay_seconds': 10,
+        'entry_rear_suppress_seconds': 60,
+        'exit_rear_suppress_seconds': 60,
         'cameras': <Map<String, Object?>>[
           <String, Object?>{'camera_id': 9, 'direction': 'auto'},
         ],
       });
+    });
+
+    testWidgets('süre ayarları penceresi (GateTimingsDialog): 3 süre kutusu yüklenir, geçerli aralıklar doğrulanır ve kaydedilir', (tester) async {
+      GateTimingsDraft? result;
+      final gate = _overview().gates.first;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () async => result = await showDialog<GateTimingsDraft>(
+                  context: context,
+                  builder: (_) => GateTimingsDialog(gate: gate),
+                ),
+                child: const Text('süreleri aç'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('süreleri aç'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('${gate.name} Süre Ayarları'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('gate_timing_consecutive')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('gate_timing_entry_rear')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('gate_timing_exit_rear')), findsOneWidget);
+
+      // 1) Hatalı değer sınaması (sonraki araç < 1)
+      await tester.enterText(find.byKey(const ValueKey<String>('gate_timing_consecutive')), '0');
+      await tester.tap(find.byKey(const ValueKey<String>('gate_timings_save_btn')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('1 - 120 saniye arasında'), findsOneWidget);
+      expect(result, isNull);
+
+      // 2) Hatalı değer sınaması (giriş arka < 5)
+      await tester.enterText(find.byKey(const ValueKey<String>('gate_timing_consecutive')), '15');
+      await tester.enterText(find.byKey(const ValueKey<String>('gate_timing_entry_rear')), '2');
+      await tester.tap(find.byKey(const ValueKey<String>('gate_timings_save_btn')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('5 - 600 saniye arasında'), findsOneWidget);
+      expect(result, isNull);
+
+      // 3) Geçerli değerler ile başarılı kayıt
+      await tester.enterText(find.byKey(const ValueKey<String>('gate_timing_entry_rear')), '45');
+      await tester.enterText(find.byKey(const ValueKey<String>('gate_timing_exit_rear')), '90');
+      await tester.tap(find.byKey(const ValueKey<String>('gate_timings_save_btn')));
+      await tester.pumpAndSettle();
+
+      expect(result, isNotNull);
+      expect(result!.consecutiveVehicleDelaySeconds, 15);
+      expect(result!.entryRearSuppressSeconds, 45);
+      expect(result!.exitRearSuppressSeconds, 90);
     });
   });
 
