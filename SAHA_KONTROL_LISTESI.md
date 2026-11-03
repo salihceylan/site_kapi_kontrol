@@ -4694,3 +4694,9 @@ Güvenlik kulübesindeki kenar PC uygulaması artık sunucunun gerçek kenar sö
     1. **Doğrudan Erişim:** Süreler rozeti tıklanabilir (hover ve düzenleme ikonuyla); tıklandığında doğrudan süre ayar penceresi açılır.
     2. **Aralık Denetimi (Validation):** Metin kutuları belirlenen sınırlar dışındaki (örn: 0 sn veya negatif değerler) girişlerde kırmızı uyarı verir, geçersiz değerlerin kaydedilmesini engeller.
     3. **Anında Canlı Uygulama (Uygulama Yeniden Başlatma Gerekmez):** "Kaydet" butonuna basıldığı an yeni süreler hem sunucu veritabanına yazılır, hem arayüzde kartta anında güncellenir, hem de plaka tanıma motoru (`PlateRecognitionEngine`) bellek içi ayarlarını tazeleyerek derhal yeni süre kurallarıyla çalışmaya devam eder.
+- [ ] **165.16. Resmi Türkiye Standartlarında Plaka Tasarımı (520x110mm Oranı, Mühür/Hologram ve Asla Yayılmama):**
+  - **Nasıl Test Edilir:** Çekmeceden "Kişiler" -> "Araçlar" sekmesini veya Plaka Tanıma ekranını açın; kayıtlı plakaların (`35 EA 8875`, `06 TEST 001` vb.) görünümünü inceleyin.
+  - **Beklenen Sonuç:**
+    1. **Asla Ekrana / Karta Yayılmaz:** Plaka kartın sonuna kadar uzayan yayık beyaz bir şerit haline gelmez; resmi Türk plaka ölçü oranında (520 mm × 110 mm ≈ 4.73:1 en/boy) derli toplu ve standart ebatta durur.
+    2. **Standart Plaka Bileşenleri:** Sol tarafında Avrupa/Karayolları mavi "TR" bandı, il kodu ile harf grubu arasında resmi TŞOF kare mühür / karekod hologram simgesi, net siyah plaka yazı karakteri ve siyah dış kabartmalı çerçevesiyle tam bir standart Türk plakası görünümündedir.
+    3. **Tüm Ekranlarda Uyum:** Geniş ekranlarda, dar pencerelerde ve mobil görünümde taşma yapmaz (`FittedBox`); araç kartlarında, canlı kararlarda ve izin listelerinde estetik ve okunaklı durur.
