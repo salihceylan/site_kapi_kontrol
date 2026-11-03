@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/services/locale_service.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart';
 import 'package:site_kapi_kontrol/ui/widgets/web_push_tile.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
@@ -190,7 +191,7 @@ class NotificationPrefsSectionState extends State<NotificationPrefsSection> {
           SwitchListTile(
             key: const ValueKey<String>('notification_email_switch'),
             contentPadding: EdgeInsets.zero,
-            title: const Text('E-posta ile duyuru al'),
+            title: Text(context.l10n.receiveEmailAnnouncements),
             subtitle: const Text(
               'Kapalıyken normal duyurular e-postayla gelmez. Acil duyuruların e-postası tercihinizden '
               'etkilenmez; uygulamada her zaman görünürler.',
@@ -201,7 +202,7 @@ class NotificationPrefsSectionState extends State<NotificationPrefsSection> {
           SwitchListTile(
             key: const ValueKey<String>('notification_finance_reminders_switch'),
             contentPadding: EdgeInsets.zero,
-            title: const Text('Borç hatırlatma e-postaları'),
+            title: Text(context.l10n.receiveEmailFinance),
             subtitle: const Text(
               'Aidat borcunuz için site yönetiminin gönderdiği hatırlatma e-postaları. Kapalıyken bu '
               'hatırlatmalar e-postayla gelmez; duyurular ve borç bilgileriniz uygulamada görünmeye devam eder.',
@@ -264,7 +265,7 @@ class NotificationPrefsSectionState extends State<NotificationPrefsSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SectionHeader(title: 'Bildirim Tercihleri'),
+          SectionHeader(title: context.l10n.sectionNotificationPrefs),
           const SizedBox(height: AppSpace.xs),
           Text(
             'Duyuruları ve borç hatırlatmalarını nasıl almak istediğinizi seçin.',

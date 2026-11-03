@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/services/locale_service.dart';
 import 'package:site_kapi_kontrol/models/apartment_crm.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
@@ -127,7 +128,7 @@ class MyRecordsSectionState extends State<MyRecordsSection> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SectionHeader(
-            title: 'Kayıtlarım',
+            title: context.l10n.sectionMyRecords,
             trailing: IconButton(
               onPressed: _loading ? null : reload,
               tooltip: 'Kayıtlarımı yenile',
@@ -136,7 +137,7 @@ class MyRecordsSectionState extends State<MyRecordsSection> {
           ),
           const SizedBox(height: AppSpace.xs),
           Text(
-            'Bu bilgiler site yöneticiniz tarafından tutulur. Değişiklik için yöneticinizle iletişime geçin.',
+            context.l10n.sectionMyRecordsSubtitle,
             style: th.bodySmall,
           ),
           const SizedBox(height: AppSpace.md),

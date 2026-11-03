@@ -8,6 +8,7 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/password_policy.dart';
 import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
 import 'package:site_kapi_kontrol/ui/widgets/account_privacy_section.dart';
+import 'package:site_kapi_kontrol/services/locale_service.dart';
 import 'package:site_kapi_kontrol/ui/widgets/language_picker.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/managed_user_card.dart';
@@ -53,6 +54,7 @@ class ProfileView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final l = context.l10n;
 
     // Üstte kimlik özeti (hero), altında düzenleme formu: iki kardeş kart (kart-içinde-kart yok).
     return SizedBox(
@@ -69,13 +71,13 @@ class ProfileView extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SectionHeader(title: 'Kendi Bilgilerini Düzenle'),
+                  SectionHeader(title: l.profileEditTitle),
                   const SizedBox(height: AppSpace.lg),
                   TextFormField(
                     controller: fullNameController,
-                    decoration: const InputDecoration(labelText: 'Ad Soyad'),
+                    decoration: InputDecoration(labelText: l.profileFullName),
                     validator: (value) => (value ?? '').trim().length < 3
-                        ? 'Ad Soyad en az 3 karakter olmalı.'
+                        ? l.profileFullNameMinLength
                         : null,
                   ),
                   const SizedBox(height: AppSpace.md),
@@ -86,7 +88,7 @@ class ProfileView extends StatelessWidget {
                     enabled: false,
                     style: TextStyle(color: p.textSecondary),
                     decoration: InputDecoration(
-                      labelText: 'E-posta (Değiştirilemez)',
+                      labelText: l.profileEmailReadOnly,
                       filled: true,
                       fillColor: p.surfaceMuted,
                       suffixIcon: const Icon(
@@ -104,7 +106,7 @@ class ProfileView extends StatelessWidget {
                     keyboardType: TextInputType.phone,
                     inputFormatters: const [PhoneInputFormatter()],
                     decoration: InputDecoration(
-                      labelText: 'Telefon (opsiyonel)',
+                      labelText: l.profilePhone,
                       hintText: phoneFieldHint,
                       // Site yöneticisinin numarası sakinlerin "Yöneticiyi ara" kutusunda görünür (dokun-ara, P2-23): kime
                       // görüneceği, yazılırken açıkça söylenir.
@@ -124,15 +126,15 @@ class ProfileView extends StatelessWidget {
                     obscureText: true,
                     autocorrect: false,
                     enableSuggestions: false,
-                    decoration: const InputDecoration(
-                      labelText: 'Mevcut Şifre',
-                      helperText: 'Şifrenizi değiştirmek için zorunludur',
+                    decoration: InputDecoration(
+                      labelText: l.profileCurrentPassword,
+                      helperText: l.profileCurrentPasswordHelper,
                       helperMaxLines: 2,
                     ),
                     validator: (value) {
                       final newPassword = passwordController.text.trim();
                       if (newPassword.isNotEmpty && (value ?? '').isEmpty) {
-                        return 'Şifre değiştirmek için mevcut şifrenizi girin.';
+                        return l.profileCurrentPasswordRequired;
                       }
                       return null;
                     },
@@ -143,8 +145,8 @@ class ProfileView extends StatelessWidget {
                     obscureText: true,
                     autocorrect: false,
                     enableSuggestions: false,
-                    decoration: const InputDecoration(
-                      labelText: 'Yeni Şifre (opsiyonel)',
+                    decoration: InputDecoration(
+                      labelText: l.profileNewPassword,
                       helperText: PasswordPolicy.hint,
                     ),
                     validator: (value) => PasswordPolicy.validate(
@@ -170,7 +172,7 @@ class ProfileView extends StatelessWidget {
                             )
                           : const Icon(Icons.save_outlined),
                       label: Text(
-                        isSaving ? 'Kaydediliyor...' : 'Profili Kaydet',
+                        isSaving ? l.profileSaving : l.profileSaveButton,
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -239,7 +241,7 @@ class _ProfileHero extends StatelessWidget {
                   style: th.bodyMedium,
                 ),
                 const SizedBox(height: AppSpace.sm),
-                UserBadge(label: role.label, tone: role.tone),
+                UserBadge(label: role.localizedLabel(context), tone: role.tone),
               ],
             ),
           ),
@@ -276,11 +278,12 @@ class ResidentProfileView extends StatelessWidget {
     final th = Theme.of(context).textTheme;
     final phone = (session.phoneNumber ?? '').trim();
     final loginName = (session.loginName ?? '').trim();
+    final l = context.l10n;
     final rows = <(String, String, AppTone?)>[
-      ('Ad Soyad', session.fullName, null),
-      if (loginName.isNotEmpty) ('Kullanıcı Adı', loginName, null),
-      if (phone.isNotEmpty) ('Telefon', phone, null),
-      ('Hesap Türü', session.role.label, session.role.tone),
+      (l.profileFullName, session.fullName, null),
+      if (loginName.isNotEmpty) (l.accountUsername, loginName, null),
+      if (phone.isNotEmpty) (l.profilePhone, phone, null),
+      (l.accountType, session.role.localizedLabel(context), session.role.tone),
     ];
 
     final card = SizedBox(
@@ -299,7 +302,7 @@ class ResidentProfileView extends StatelessWidget {
                   glow: true,
                   gap: AppSpace.lg,
                 ),
-                const Expanded(child: SectionHeader(title: 'Hesap Bilgilerim')),
+                Expanded(child: SectionHeader(title: l.accountDetailsTitle)),
               ],
             ),
             const SizedBox(height: AppSpace.md),
@@ -349,13 +352,24 @@ class ResidentProfileView extends StatelessWidget {
       ),
     );
     final service = authService;
-    if (service == null) return card;
+    if (service == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          card,
+          const SizedBox(height: AppSpace.lg),
+          const LanguagePicker(),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         card,
         const SizedBox(height: AppSpace.lg),
         _ResidentPasswordSection(authService: service, session: session),
+        const SizedBox(height: AppSpace.lg),
+        const LanguagePicker(),
         const SizedBox(height: AppSpace.lg),
         MyRecordsSection(authService: service, showWhenEmpty: true),
         const SizedBox(height: AppSpace.lg),
@@ -411,7 +425,7 @@ class _ResidentPasswordSectionState extends State<_ResidentPasswordSection> {
     final confirmPass = _confirmController.text.trim();
     if (newPass != confirmPass) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Yeni şifreler eşleşmiyor.'), backgroundColor: Colors.red),
+        SnackBar(content: Text(context.l10n.newPasswordMismatch), backgroundColor: Colors.red),
       );
       return;
     }
@@ -433,7 +447,7 @@ class _ResidentPasswordSectionState extends State<_ResidentPasswordSection> {
       _newController.clear();
       _confirmController.clear();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Şifreniz başarıyla değiştirildi.'), backgroundColor: Colors.green),
+        SnackBar(content: Text(context.l10n.passwordUpdateSuccess), backgroundColor: Colors.green),
       );
     } catch (e) {
       if (!mounted) return;
@@ -447,6 +461,7 @@ class _ResidentPasswordSectionState extends State<_ResidentPasswordSection> {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     return AppCard(
       level: 2,
       padding: const EdgeInsets.all(AppSpace.lg),
@@ -459,7 +474,7 @@ class _ResidentPasswordSectionState extends State<_ResidentPasswordSection> {
               children: [
                 const Icon(Icons.lock_reset_rounded, size: 24),
                 const SizedBox(width: AppSpace.sm),
-                const Expanded(child: SectionHeader(title: 'Şifremi Değiştir')),
+                Expanded(child: SectionHeader(title: l.changePasswordTitle)),
               ],
             ),
             const SizedBox(height: AppSpace.md),
@@ -467,7 +482,7 @@ class _ResidentPasswordSectionState extends State<_ResidentPasswordSection> {
               controller: _currentController,
               obscureText: _obscureCurrent,
               decoration: InputDecoration(
-                labelText: 'Mevcut Şifre / PIN',
+                labelText: l.currentPasswordOrPin,
                 suffixIcon: IconButton(
                   icon: Icon(_obscureCurrent ? Icons.visibility_off : Icons.visibility),
                   onPressed: () => setState(() => _obscureCurrent = !_obscureCurrent),
@@ -480,7 +495,7 @@ class _ResidentPasswordSectionState extends State<_ResidentPasswordSection> {
               controller: _newController,
               obscureText: _obscureNew,
               decoration: InputDecoration(
-                labelText: 'Yeni Şifre',
+                labelText: l.newPassword,
                 helperText: PasswordPolicy.hint,
                 suffixIcon: IconButton(
                   icon: Icon(_obscureNew ? Icons.visibility_off : Icons.visibility),
@@ -499,7 +514,7 @@ class _ResidentPasswordSectionState extends State<_ResidentPasswordSection> {
               controller: _confirmController,
               obscureText: _obscureConfirm,
               decoration: InputDecoration(
-                labelText: 'Yeni Şifre (Tekrar)',
+                labelText: l.newPasswordConfirm,
                 suffixIcon: IconButton(
                   icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility),
                   onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
@@ -519,7 +534,7 @@ class _ResidentPasswordSectionState extends State<_ResidentPasswordSection> {
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
                     : const Icon(Icons.check_rounded),
-                label: Text(_isSaving ? 'Kaydediliyor...' : 'Şifremi Güncelle'),
+                label: Text(_isSaving ? l.profileSaving : l.passwordUpdateButton),
               ),
             ),
           ],

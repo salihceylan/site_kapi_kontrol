@@ -88,7 +88,7 @@ class ResidentBottomBar extends StatelessWidget {
                 key: ValueKey<String>('sakin_sekme_${tab.name}'),
                 icon: _icon(context, tab, selected: false),
                 selectedIcon: _icon(context, tab, selected: true),
-                label: tab.label,
+                label: tab.localizedLabel(context),
               ),
           ],
         ),

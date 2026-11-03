@@ -138,6 +138,7 @@ import 'package:site_kapi_kontrol/ui/widgets/hands_free_settings_dialog.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_security_policy_dialog.dart';
 
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
+import 'package:site_kapi_kontrol/services/locale_service.dart';
 
 import 'package:site_kapi_kontrol/models/platform_module.dart';
 import 'package:site_kapi_kontrol/models/work_tracking_models.dart';
@@ -2288,172 +2289,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
 
   String _titleForMenu(SirketMenuItem item) {
-
-    switch (item) {
-
-      case SirketMenuItem.dashboard:
-
-        return 'Panel';
-
-      case SirketMenuItem.profilim:
-
-        return 'Profilim';
-
-      case SirketMenuItem.ellerSerbest:
-
-        return 'Eller Serbest & Kestirmeler';
-
-      case SirketMenuItem.abonelikTalepleri:
-
-        return 'Yeni Abonelik Talepleri';
-
-      case SirketMenuItem.siteOnayTalepleri:
-
-        return 'Site Onay Talepleri';
-
-      case SirketMenuItem.kullaniciYonetimi:
-
-        return 'Kullanıcı Yönetimi';
-
-      case SirketMenuItem.superUserYonetimi:
-
-        return 'Süper Kullanıcı Yönetimi';
-
-      case SirketMenuItem.siteYoneticileriYonetimi:
-
-        return 'Site Yöneticileri Yönetimi';
-
-      case SirketMenuItem.daireKullanicilariYonetimi:
-
-        return 'Daire Sakinleri';
-
-      case SirketMenuItem.siteler:
-
-        return 'Site Yönetimi';
-
-      case SirketMenuItem.katilimVeKurulum:
-        return 'Daireye Katıl';
-
-      case SirketMenuItem.cihazEkle:
-        final currentRole = widget.authService.session?.role;
-        if (currentRole == UserRole.superUser) return 'Şirket Cihazı Kaydet';
-        if (currentRole == UserRole.individual) return 'Cihaz Ekle';
-        return 'Cihaz Kaydet';
-
-      case SirketMenuItem.kayitliCihazlar:
-        final currentRole = widget.authService.session?.role;
-        if (currentRole == UserRole.superUser) return 'Şirket Cihaz Envanteri';
-        return 'Kayıtlı Cihazlar';
-
-      case SirketMenuItem.bluetoothWifiKur:
-
-        return 'Bluetooth ile Wi-Fi Kurulumu';
-
-      case SirketMenuItem.moduller:
-        return 'Modüller';
-
-      case SirketMenuItem.denetimKaydi:
-        return 'Denetim Kaydı';
-
-      case SirketMenuItem.islemKayitlari:
-        return 'İşlem Kayıtları';
-
-      case SirketMenuItem.modulTalepleri:
-        return 'Modül Talepleri';
-
-      case SirketMenuItem.kisiler:
-        return 'Kişiler';
-
-      case SirketMenuItem.duyurular:
-        return 'Duyurular';
-
-      case SirketMenuItem.finans:
-        return 'Finans';
-
-      case SirketMenuItem.borcum:
-        return 'Borcum';
-
-      case SirketMenuItem.belgeler:
-        return 'Dosya Deposu';
-
-      case SirketMenuItem.talepler:
-        return 'Talepler';
-
-      case SirketMenuItem.taleplerim:
-        return 'Taleplerim';
-
-      case SirketMenuItem.rezervasyonlar:
-        return 'Rezervasyonlar';
-
-      case SirketMenuItem.rezervasyon:
-        return 'Rezervasyon';
-
-      case SirketMenuItem.siteBasvurulari:
-        return 'Site Başvuruları';
-
-      case SirketMenuItem.platformAyarlari:
-        return 'Platform Ayarları';
-
-      case SirketMenuItem.istemciHatalari:
-        return 'İstemci Hataları';
-
-      case SirketMenuItem.anketler:
-        return 'Anket ve Oylama';
-
-      case SirketMenuItem.anket:
-        return 'Anketler';
-
-      case SirketMenuItem.kararDefteri:
-        return 'Karar Defteri';
-
-      case SirketMenuItem.kararlar:
-        return 'Kararlar';
-
-      case SirketMenuItem.rehber:
-        return 'Rehber';
-      case SirketMenuItem.isletmeProjesi:
-        return 'İşletme Projesi';
-      case SirketMenuItem.komsuPanosu:
-        return 'Komşu Panosu';
-      case SirketMenuItem.faaliyetRaporu:
-        return 'Faaliyet Raporu';
-      case SirketMenuItem.plakaTanima:
-      case SirketMenuItem.odemeKamera:
-        // Sakinde ekranın içindeki başlık "Misafir plakası"dır; menü adı herkeste aynıdır.
-        return 'Plaka Tanıma & Kameralar';
-      case SirketMenuItem.ekipmanBakim:
-        return 'Ekipman ve Bakım';
-
-      case SirketMenuItem.ziyaretciKayitlari:
-        return 'Ziyaretçi ve Kargo';
-
-      case SirketMenuItem.ziyaretcilerim:
-        // Yönetim öğesinden ayrı başlık: kurul üyesinde ikisi birden görünür (bkz. YanMenu).
-        return 'Ziyaretçilerim';
-
-      case SirketMenuItem.sozlesmeler:
-        return 'Sözleşmeler';
-
-      case SirketMenuItem.sayaclar:
-        return 'Sayaçlar';
-
-      case SirketMenuItem.kapilar:
-        return 'Kapılar';
-
-      case SirketMenuItem.dairem:
-        return 'Dairem';
-
-      case SirketMenuItem.acilDurum:
-        return 'Acil durum';
-
-      case SirketMenuItem.yeniSite:
-        return 'Yeni Site Oluştur';
-
-    }
-
+    return YanMenu.titleFor(item, widget.authService.session?.role, context);
   }
-
-
 
   /// "Yerel Ağda Aktif" yalnızca cihaz yerelde görünüyorsa VE yerel açma gerçekten mümkünse (kapı
   /// politikası izin veriyor + sunucudan alınmış geçerli token var).
@@ -6306,7 +6143,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final p = context.palette;
     final tone = _isResidentMode ? AppTone.primary : AppTone.success;
     final ink = tone.ink(p);
-    final label = _isResidentMode ? 'Yönetici Paneli' : 'Sakin Modu';
+    final label = _isResidentMode ? context.l10n.menuSwitchToAdmin : context.l10n.residentMode;
     final width = MediaQuery.sizeOf(context).width;
     final iconOnly = width < 400 || MediaQuery.textScalerOf(context).scale(1) > 1.3 || (homeShown && width < 480);
     // Hapa ayrılabilecek en büyük genişlik: ekran - menü düğmesi (48) - öteki eylemler (48'er) - boşluklar.
@@ -6686,7 +6523,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           // İP-1D / G2: Ayarlar sağ üstte dişli; sağdan açılan Ayarlar panelini (endDrawer) açar.
           Builder(
             builder: (scaffoldContext) => _appBarAction(
-              tooltip: 'Ayarlar',
+              tooltip: context.l10n.settingsTooltip,
               icon: _settingsGearIcon(session),
               onPressed: () => Scaffold.of(scaffoldContext).openEndDrawer(),
             ),
@@ -6730,7 +6567,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${session.fullName} • ${_isResidentMode ? "Sakin Modu" : session.role.label}',
+                        '${session.fullName} • ${_isResidentMode ? context.l10n.residentMode : session.role.localizedLabel(context)}',
                         style: TextStyle(
                           fontSize: 12,
                           height: 1.2,

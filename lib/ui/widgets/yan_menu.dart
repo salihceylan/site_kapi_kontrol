@@ -217,6 +217,30 @@ enum SirketMenuGroup {
   siteHizmetleri('Site hizmetleri'),
   ayarlar('Ayarlar');
 
+  String localizedTitle(BuildContext context) {
+    final l = context.l10n;
+    switch (this) {
+      case SirketMenuGroup.anaSayfa:
+        return l.groupHome;
+      case SirketMenuGroup.daireler:
+        return l.groupApartments;
+      case SirketMenuGroup.borclar:
+        return l.groupDues;
+      case SirketMenuGroup.tahsilat:
+        return l.groupCollections;
+      case SirketMenuGroup.giderler:
+        return l.groupExpenses;
+      case SirketMenuGroup.iletisim:
+        return l.groupCommunication;
+      case SirketMenuGroup.raporlar:
+        return l.groupReports;
+      case SirketMenuGroup.siteHizmetleri:
+        return l.groupSiteServices;
+      case SirketMenuGroup.ayarlar:
+        return l.groupSettings;
+    }
+  }
+
   const SirketMenuGroup(this.title);
 
   /// Başlık metni: çekmecede bölüm başlığı, [ayarlar] için Ayarlar panelinin başlığı.
@@ -507,7 +531,7 @@ class YanMenu extends StatelessWidget {
       ];
 
   /// Öğenin çekmecedeki başlığı (vitrin kartı aynı metni kullanır).
-  static String titleFor(SirketMenuItem item, [UserRole? role]) => _titleForItem(item, role);
+  static String titleFor(SirketMenuItem item, [UserRole? role, BuildContext? context]) => _titleForItem(item, role, context);
 
   /// Öğenin çekmecedeki simgesi.
   static IconData iconFor(SirketMenuItem item) => _iconForItem(item);
@@ -547,7 +571,7 @@ class YanMenu extends StatelessWidget {
           const ValueKey<String>('yan_menu_tum_islemler'),
           _MenuTile(
             icon: PhosphorIconsRegular.listChecks,
-            title: 'Tüm işlemler',
+            title: context.l10n.menuAllActions,
             selected: false,
             tone: tone,
             badge: allActionsBadge,
@@ -584,7 +608,7 @@ class YanMenu extends StatelessWidget {
       rows.add(
         entry(
           ValueKey<String>('yan_menu_grup_${section.group.name}'),
-          _GroupHeader(title: section.group.title, first: s == 0),
+          _GroupHeader(title: section.group.localizedTitle(context), first: s == 0),
         ),
       );
       for (final item in section.items) {
@@ -593,7 +617,7 @@ class YanMenu extends StatelessWidget {
             ValueKey<SirketMenuItem>(item),
             _MenuTile(
               icon: _iconForItem(item),
-              title: _titleForItem(item, role),
+              title: _titleForItem(item, role, context),
               selected: selectedItem == item,
               tone: tone,
               badge: badgeCounts[item] ?? 0,
@@ -641,7 +665,7 @@ class YanMenu extends StatelessWidget {
           const ValueKey<String>('yan_menu_geri_bildirim'),
           _MenuTile(
             icon: PhosphorIconsRegular.chatCircleText,
-            title: 'Geri bildirim',
+            title: context.l10n.menuFeedback,
             selected: false,
             tone: tone,
             onTap: onOpenFeedback!,
@@ -809,7 +833,7 @@ class YanMenuAyarlar extends StatelessWidget {
             index: i,
             child: _MenuTile(
               icon: _iconForItem(item),
-              title: _titleForItem(item, role),
+              title: _titleForItem(item, role, context),
               selected: selectedItem == item,
               tone: tone,
               badge: badgeCounts[item] ?? 0,
@@ -835,7 +859,7 @@ class YanMenuAyarlar extends StatelessWidget {
     final header = _SettingsHeader(tone: tone, compact: compact);
     const listPadding = EdgeInsets.symmetric(vertical: 12, horizontal: 10);
     return Drawer(
-      semanticLabel: SirketMenuGroup.ayarlar.title,
+      semanticLabel: SirketMenuGroup.ayarlar.localizedTitle(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(AppRadius.xl),
@@ -883,7 +907,7 @@ class _SettingsHeader extends StatelessWidget {
               child: Semantics(
                 header: true,
                 child: Text(
-                  SirketMenuGroup.ayarlar.title,
+                  SirketMenuGroup.ayarlar.localizedTitle(context),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(color: p.text),
@@ -1130,7 +1154,7 @@ class _DrawerHeader extends StatelessWidget {
                       ),
                     ),
                     child: Text(
-                      role.label,
+                      role.localizedLabel(context),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: textTheme.bodySmall?.copyWith(
@@ -1484,7 +1508,112 @@ List<SirketMenuItem> _itemsForRole(
   }
 }
 
-String _titleForItem(SirketMenuItem item, [UserRole? role]) {
+String _titleForItem(SirketMenuItem item, [UserRole? role, BuildContext? context]) {
+  if (context != null) {
+    final l = context.l10n;
+    switch (item) {
+      case SirketMenuItem.dashboard:
+        return l.menuDashboard;
+      case SirketMenuItem.profilim:
+        return l.menuMyProfile;
+      case SirketMenuItem.ellerSerbest:
+        return l.menuHandsFree;
+      case SirketMenuItem.abonelikTalepleri:
+        return l.menuSubscriptionRequests;
+      case SirketMenuItem.siteOnayTalepleri:
+        return l.menuSiteApprovalRequests;
+      case SirketMenuItem.kullaniciYonetimi:
+        return l.menuUserManagement;
+      case SirketMenuItem.superUserYonetimi:
+        return l.menuSuperUserManagement;
+      case SirketMenuItem.siteYoneticileriYonetimi:
+        return l.menuSiteManagersManagement;
+      case SirketMenuItem.daireKullanicilariYonetimi:
+        return l.menuApartmentResidents;
+      case SirketMenuItem.siteler:
+        return l.menuSiteManagement;
+      case SirketMenuItem.katilimVeKurulum:
+        return l.menuJoinApartment;
+      case SirketMenuItem.cihazEkle:
+        if (role == UserRole.superUser) return l.menuAddDeviceCompany;
+        if (role == UserRole.individual) return l.menuAddDeviceIndividual;
+        return l.menuAddDevice;
+      case SirketMenuItem.kayitliCihazlar:
+        if (role == UserRole.superUser) return l.menuCompanyInventory;
+        return l.menuRegisteredDevices;
+      case SirketMenuItem.bluetoothWifiKur:
+        return l.menuBluetoothWifiSetup;
+      case SirketMenuItem.moduller:
+        return l.menuModules;
+      case SirketMenuItem.denetimKaydi:
+        return l.menuAuditLog;
+      case SirketMenuItem.islemKayitlari:
+        return l.menuOperationLogs;
+      case SirketMenuItem.modulTalepleri:
+        return l.menuModuleRequests;
+      case SirketMenuItem.kisiler:
+        return l.menuPeople;
+      case SirketMenuItem.duyurular:
+        return l.menuAnnouncements;
+      case SirketMenuItem.siteBasvurulari:
+        return l.menuSiteApplications;
+      case SirketMenuItem.finans:
+        return l.menuFinance;
+      case SirketMenuItem.borcum:
+        return l.menuMyDues;
+      case SirketMenuItem.belgeler:
+        return l.menuDocuments;
+      case SirketMenuItem.talepler:
+        return l.menuRequests;
+      case SirketMenuItem.taleplerim:
+        return l.menuMyRequests;
+      case SirketMenuItem.rezervasyonlar:
+        return l.menuReservations;
+      case SirketMenuItem.rezervasyon:
+        return l.menuReservation;
+      case SirketMenuItem.platformAyarlari:
+        return l.menuPlatformSettings;
+      case SirketMenuItem.istemciHatalari:
+        return l.menuClientErrors;
+      case SirketMenuItem.anketler:
+        return l.menuSurveys;
+      case SirketMenuItem.anket:
+        return l.menuSurveyList;
+      case SirketMenuItem.ziyaretciKayitlari:
+        return l.menuVisitorDelivery;
+      case SirketMenuItem.ziyaretcilerim:
+        return l.menuMyVisitors;
+      case SirketMenuItem.sozlesmeler:
+        return l.menuContracts;
+      case SirketMenuItem.sayaclar:
+        return l.menuUtilityMeters;
+      case SirketMenuItem.kararDefteri:
+        return l.menuDecisionBook;
+      case SirketMenuItem.kararlar:
+        return l.menuDecisions;
+      case SirketMenuItem.rehber:
+        return l.menuDirectory;
+      case SirketMenuItem.isletmeProjesi:
+        return l.menuOperatingProject;
+      case SirketMenuItem.komsuPanosu:
+        return l.menuNeighborBoard;
+      case SirketMenuItem.faaliyetRaporu:
+        return l.menuAnnualReport;
+      case SirketMenuItem.plakaTanima:
+      case SirketMenuItem.odemeKamera:
+        return l.menuPlateRecognition;
+      case SirketMenuItem.ekipmanBakim:
+        return l.menuEquipmentMaintenance;
+      case SirketMenuItem.kapilar:
+        return l.menuDoors;
+      case SirketMenuItem.dairem:
+        return l.menuMyApartment;
+      case SirketMenuItem.acilDurum:
+        return l.menuEmergency;
+      case SirketMenuItem.yeniSite:
+        return l.menuCreateNewSite;
+    }
+  }
   switch (item) {
     case SirketMenuItem.dashboard:
       return 'Panel';

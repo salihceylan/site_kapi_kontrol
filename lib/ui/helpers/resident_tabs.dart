@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart' show IconData;
+import 'package:flutter/material.dart' show BuildContext, IconData;
 import 'package:phosphor_glyphs/phosphor_glyphs.dart';
+import 'package:site_kapi_kontrol/services/locale_service.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 // İP-1D / G3 (karar kaydı 2026-10-21): daire sakini alt çubuğunun SAF kuralları (widget yok). Sekmeler çekmecenin
@@ -26,6 +27,23 @@ enum ResidentTab {
   /// Seçili değilken ve seçiliyken simge.
   final IconData icon;
   final IconData selectedIcon;
+
+  /// Dil seçimine duyarlı sekme etiketi.
+  String localizedLabel(BuildContext context) {
+    final l = context.l10n;
+    switch (this) {
+      case ResidentTab.ozet:
+        return l.tabSummary;
+      case ResidentTab.duyuru:
+        return l.tabAnnouncement;
+      case ResidentTab.ariza:
+        return l.tabRequest;
+      case ResidentTab.kapi:
+        return l.tabDoor;
+      case ResidentTab.belgeler:
+        return l.tabDocuments;
+    }
+  }
 }
 
 /// Çubuğun sekmeleri: [menuItems] (çekmecenin görünür öğeleri) içinde olanlar, karar sırasıyla. "Kapı" ayrıca kapı

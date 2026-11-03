@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/services/locale_service.dart';
 import 'package:site_kapi_kontrol/services/apartment_management_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
@@ -74,14 +75,14 @@ class _SearchVisibilitySectionState extends State<SearchVisibilitySection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SectionHeader(title: 'Aramalarda Görünme'),
+          SectionHeader(title: context.l10n.sectionSearchVisibility),
           const SizedBox(height: AppSpace.sm),
           if (value != null)
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               value: value,
               onChanged: _busy ? null : (v) => unawaited(_set(v)),
-              title: const Text('Beni aramalarda göster'),
+              title: Text(context.l10n.showInSearch),
               subtitle: const Text(
                 'Kapalıyken yalnızca e-posta adresinizi ya da telefonunuzu tam olarak bilen kişiler sizi daire davetleri için bulabilir. '
                 'Açıkken ad soyadınızla da bulunursunuz; sonuçlarda adınız maskelenmiş görünür.',

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/services/locale_service.dart';
 import 'package:site_kapi_kontrol/models/account_data_export.dart';
 import 'package:site_kapi_kontrol/services/account_api.dart';
 import 'package:site_kapi_kontrol/services/account_export_share.dart';
@@ -200,7 +201,7 @@ class AccountPrivacySectionState extends State<AccountPrivacySection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SectionHeader(title: 'Gizlilik ve Veri', icon: Icons.privacy_tip_outlined),
+          SectionHeader(title: context.l10n.sectionAccountPrivacy, icon: Icons.privacy_tip_outlined),
           const SizedBox(height: AppSpace.xs),
           Text(
             'Kişisel verilerinizin bir kopyasını alabilir veya hesabınızı kalıcı olarak silebilirsiniz.',
@@ -209,7 +210,7 @@ class AccountPrivacySectionState extends State<AccountPrivacySection> {
           const SizedBox(height: AppSpace.lg),
           _ActionBlock(
             icon: Icons.download_rounded,
-            title: 'Verilerimi İndir',
+            title: context.l10n.downloadData,
             description:
                 'Hesabınıza ait kişisel verilerin bir kopyasını JSON dosyası olarak alın. '
                 'Şifreniz istenir; 24 saatte en fazla 3 kez yapılabilir.',
