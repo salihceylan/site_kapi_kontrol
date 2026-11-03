@@ -4688,3 +4688,9 @@ Güvenlik kulübesindeki kenar PC uygulaması artık sunucunun gerçek kenar sö
     2. **Arka Plaka Engellemesi (Giriş -> Çıkış):** Giriş yapan bir aracın plakası onaylanıp kapı açıldığında, belirlenen süre (60 sn) boyunca çıkış kamerası bu aracın arka plakasını okuyarak mükerrer çıkış tetiği vermez.
     3. **Arka Plaka Engellemesi (Çıkış -> Giriş):** Çıkış yapan bir araç geçtiğinde, belirlenen süre (60 sn) boyunca giriş kamerası aracın arka plakasını okuyarak aracı içeri giriyor sanmaz ve mükerrer giriş tetiği vermez.
     4. **Sonraki Araç Akışı:** Bir araç geçtikten sonra belirlenen bekleme süresi (10 sn) tamamlandığında, arkadan gelen farklı bir araç anında okunup onaylanır; sistem kilitli kalmaz.
+- [ ] **165.15. Tıklanabilir Süreler Rozeti ve Doğrudan Değer Giriş Modalı (GateTimingsDialog):**
+  - **Nasıl Test Edilir:** Plaka Tanıma -> "Geçiş noktaları" sekmesinde kapı kartındaki `Süreler: Sonraki: 10s • Giriş Arka: 60s • Çıkış Arka: 60s` rozetine veya yanındaki "Süreleri Değiştir" / ayar butonuna tıklayın. Açılan modalda 3 metin kutusuna (1-120 sn, 5-600 sn, 5-600 sn aralıklarında) yeni değerler girip "Kaydet"e basın.
+  - **Beklenen Sonuç:**
+    1. **Doğrudan Erişim:** Süreler rozeti tıklanabilir (hover ve düzenleme ikonuyla); tıklandığında doğrudan süre ayar penceresi açılır.
+    2. **Aralık Denetimi (Validation):** Metin kutuları belirlenen sınırlar dışındaki (örn: 0 sn veya negatif değerler) girişlerde kırmızı uyarı verir, geçersiz değerlerin kaydedilmesini engeller.
+    3. **Anında Canlı Uygulama (Uygulama Yeniden Başlatma Gerekmez):** "Kaydet" butonuna basıldığı an yeni süreler hem sunucu veritabanına yazılır, hem arayüzde kartta anında güncellenir, hem de plaka tanıma motoru (`PlateRecognitionEngine`) bellek içi ayarlarını tazeleyerek derhal yeni süre kurallarıyla çalışmaya devam eder.
