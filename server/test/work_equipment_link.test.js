@@ -502,12 +502,11 @@ describe('servis geçmişi (listEquipmentWorkHistory)', () => {
     await assert.rejects(call(historyDb({ equipment: null })), { statusCode: 404, code: 'NOT_FOUND' });
   });
 
-  it('iş takibi modülü kapalıysa 403 değil boş liste + work_tracking_enabled=false (iş tablosuna hiç gidilmez)', async () => {
+  it('iş takibi TEMEL modül (Kural 25): site_modules satırı kapalı olsa da work_tracking_enabled=true (her zaman açık)', async () => {
     const db = historyDb({ moduleEnabled: false });
     const page = await call(db);
-    assert.deepEqual([page.work_tracking_enabled, page.items, page.next_before_id, page.counts], [false, [], null, { total: 0, open: 0 }]);
+    assert.equal(page.work_tracking_enabled, true);
     assert.equal(page.equipment.name, 'Asansör A');
-    assert.ok(!db.calls.some((entry) => /FROM work_items/.test(entry.sql)));
   });
 
   it('geçersiz sayfalama 400 INVALID_QUERY (veritabanına gitmeden)', async () => {
@@ -654,10 +653,10 @@ describe('GET /manager/sites/:siteCode/equipment/:id/work-history (HTTP)', () =>
     assert.deepEqual([bad.status, bad.body.code], [400, 'INVALID_QUERY']);
   });
 
-  it('iş takibi modülü kapalıyken 200 + boş liste + work_tracking_enabled=false (ekipman kartı bozulmaz)', async () => {
+  it('iş takibi TEMEL modül (Kural 25): site_modules satırı kapalıyken de 200 + work_tracking_enabled=true', async () => {
     state.workModule = false;
     const res = await get(url(), users.manager);
     assert.equal(res.status, 200);
-    assert.deepEqual([res.body.work_tracking_enabled, res.body.items], [false, []]);
+    assert.equal(res.body.work_tracking_enabled, true);
   });
 });

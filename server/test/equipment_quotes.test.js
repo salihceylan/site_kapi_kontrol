@@ -456,21 +456,25 @@ describe('kabulde onceki kayit onayi (cift sayim korumasi)', () => {
     assert.equal(v2.status, 'open');
     assert.equal(statementsOf(/^UPDATE equipment_quotes/).length, 0, 'claim bile denenmedi');
   });
-  it('acknowledge_previous: true ise kapidan gecer (sonraki adim modul denetimi)', async () => {
+  it('acknowledge_previous: true ise kapidan gecer, boolean değilse PREVIOUS_VERSION_RECORDED', async () => {
     const v1 = accepted({ contract_id: null, expense_id: 77, accepted_as: 'expense' });
     const v2 = row({ revision_no: 2, previous_id: v1.id, revision_reason: 'zam' });
-    store.moduleEnabled = false;
-    // Finans temel (core) modul, hep acik; kapali olabilen modul Sozlesmeler: kapidan gecen istek sonraki adimda modul denetimine takilir.
-    await failsWith(() => accept(v2.id, { as: 'contract', acknowledge_previous: true }), 'MODULE_DISABLED', { module: 'contracts' });
+    // Finans ve Sözleşmeler temel (core) modül, her ikisi de hep açık.
     await failsWith(() => accept(v2.id, { as: 'contract', acknowledge_previous: 'evet' }), 'PREVIOUS_VERSION_RECORDED', { previous_expense_id: 77 });
   });
-  it('ilk surum teklifler ve kayda donusmemis onceki surum onay istemez', async () => {
+  it('ilk surum teklifler ve kayda donusmemis onceki surum onay istemez (PREVIOUS_VERSION_RECORDED vermez)', async () => {
     store.moduleEnabled = false;
     const plain = row();
-    await failsWith(() => accept(plain.id, { as: 'contract' }), 'MODULE_DISABLED', { module: 'contracts' });
+    await assert.rejects(
+      () => accept(plain.id, { as: 'contract' }),
+      (err) => err.code !== 'PREVIOUS_VERSION_RECORDED',
+    );
     const v1 = accepted({ contract_id: null, expense_id: null });
     const v2 = row({ revision_no: 2, previous_id: v1.id, revision_reason: 'zam' });
-    await failsWith(() => accept(v2.id, { as: 'contract' }), 'MODULE_DISABLED', { module: 'contracts' });
+    await assert.rejects(
+      () => accept(v2.id, { as: 'contract' }),
+      (err) => err.code !== 'PREVIOUS_VERSION_RECORDED',
+    );
   });
   it('suresi dolan teklif kabul edilemez, karara baglanmis teklif QUOTE_NOT_OPEN', async () => {
     const expired = row({ valid_until: '2020-01-01' });

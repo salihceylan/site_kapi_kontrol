@@ -217,12 +217,12 @@ describe('yönetim uçları: sıra biçim -> yetki -> site -> modül', () => {
     assert.deepEqual([missing.status, missing.body.code], [404, 'SITE_NOT_FOUND']);
   });
 
-  it('modül KAPALI: yetkili herkes 403 MODULE_DISABLED { module: reservation }; yetki modülden ÖNCE denetlenir', async () => {
+  it('rezervasyon TEMEL modül (Kural 25): site_modules satırı enabled=false (ya da hiç yok) olsa bile MODULE_DISABLED YOK; rol denetimi aynen sürer', async () => {
     state.moduleEnabled = false;
     for (const user of [users.superUser, users.manager, users.staff, users.board]) {
       for (const path of ['/reservations', '/reservation-areas', '/concierge-requests']) {
         const res = await call('GET', M(path), { user });
-        assert.deepEqual([res.status, res.body.code, res.body.module], [403, 'MODULE_DISABLED', 'reservation'], path);
+        assert.notEqual(res.body.code, 'MODULE_DISABLED');
       }
     }
     assert.equal((await call('GET', M('/reservations'), { user: users.outsider })).body.code, 'FORBIDDEN_ROLE');

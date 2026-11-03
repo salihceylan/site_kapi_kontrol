@@ -87,7 +87,7 @@ sema "110 kontrol izi (expense_check_marks / payment_notice_check_marks)" "$(tb 
 sema "111 is kaydi firma yonlendirmesi (work_items.vendor_*, firmada durumu)" "$(cl "'work_items.vendor_name','work_items.vendor_contact','work_items.vendor_phone','work_items.vendor_amount_kurus','work_items.vendor_referred_at'" 5) and $(ks "'chk_work_items_vendor','chk_work_items_firmada_vendor'" 2) and $(kd chk_work_items_status firmada)"
 # TEMEL modüller (AGENTS.md Kural 25; catalog.js core:true) HER sitede açık olmalıdır: açık olmayan site varsa SORUNLU basılır. Liste
 # catalog.js ile aynı tutulur (server/test/core_modules.test.js denetler); yeni bir modül temel yapılırsa buraya da eklenir.
-CORE_MODULES="people announcements finance survey neighbor_board equipment annual_report drive_storage"
+CORE_MODULES="people announcements finance reservation work_tracking survey visitor_log contracts decision_book directory budget drive_storage neighbor_board annual_report equipment"
 echo "== site_modules: temel moduller her sitede acik olmali (SORUNLU = acik olmayan site var)"
 total_sites="$(q1 "select count(*) from sites")"
 core_sql=""

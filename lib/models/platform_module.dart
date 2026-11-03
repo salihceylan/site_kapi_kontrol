@@ -10,7 +10,9 @@ abstract final class PlatformModuleCodes {
   static const String announcements = 'announcements';
   static const String finance = 'finance';
 
+  /// Rezervasyon ve Konsiyerj. TEMEL modül (Kural 25): her sitede açık.
   static const String reservation = 'reservation';
+  /// İş Takibi. TEMEL modül (Kural 25): her sitede açık.
   static const String workTracking = 'work_tracking';
   static const String metering = 'metering';
   static const String onlinePayment = 'online_payment';

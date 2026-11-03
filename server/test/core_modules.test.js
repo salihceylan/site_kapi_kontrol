@@ -22,8 +22,10 @@ const readRoot = (rel) => fs.readFileSync(path.resolve(here, '..', '..', rel), '
 
 /** 082'nin kapsadığı modüller (katalog sırasıyla). Yeni bir temel modül için YENİ bir migration eklenir; bu liste değişmez. */
 const MIGRATION_082_CODES = ['survey', 'drive_storage', 'neighbor_board', 'annual_report', 'equipment'];
+/** 126'nın kapsadığı modüller (katalog sırasıyla). */
+const MIGRATION_126_CODES = ['reservation', 'work_tracking', 'visitor_log', 'contracts', 'decision_book', 'directory', 'budget'];
 /** Kural 25 kapsamındaki tüm temel modüller. */
-const ALL_CORE_CODES = ['people', 'announcements', 'finance', ...MIGRATION_082_CODES];
+const ALL_CORE_CODES = ['people', 'announcements', 'finance', ...MIGRATION_082_CODES, ...MIGRATION_126_CODES];
 
 describe('temel modüller (Kural 25): katalog', () => {
   it('temel modül kümesi: kişi, duyuru, finans, anket, dosya deposu, komşu panosu, faaliyet raporu, ekipman', () => {
@@ -68,6 +70,14 @@ describe('temel modüller (Kural 25): doldurma metni ve migrationlar', () => {
     const migration = read('migrations/082_more_core_modules.sql');
     assert.ok(migration.endsWith(buildCoreModulesBackfillSql(MIGRATION_082_CODES)), 'migration gövdesi buildCoreModulesBackfillSql(082 kodları) ile aynı olmalı');
     for (const code of MIGRATION_082_CODES) {
+      assert.ok(CORE_MODULE_CODES.includes(code), `${code} katalogda temel modül olmalı`);
+    }
+  });
+
+  it('migrations/126, yedi modül için üretici metnin aynısını içerir (rezervasyon, iş takibi, ziyaretçi, sözleşmeler, karar defteri, rehber, bütçe)', () => {
+    const migration = read('migrations/126_additional_core_modules.sql');
+    assert.ok(migration.endsWith(buildCoreModulesBackfillSql(MIGRATION_126_CODES)), 'migration gövdesi buildCoreModulesBackfillSql(126 kodları) ile aynı olmalı');
+    for (const code of MIGRATION_126_CODES) {
       assert.ok(CORE_MODULE_CODES.includes(code), `${code} katalogda temel modül olmalı`);
     }
   });

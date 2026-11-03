@@ -196,14 +196,14 @@ describe('yönetim uçları: sıra biçim -> yetki -> site -> modül (yetki matr
     assert.deepEqual([missing.status, missing.body.code], [404, 'SITE_NOT_FOUND']);
   });
 
-  it('modül KAPALI: yetkili herkes 403 MODULE_DISABLED { module: decision_book }; yetki modülden ÖNCE denetlenir', async () => {
+  it('karar defteri TEMEL modül (Kural 25): site_modules satırı enabled=false (ya da hiç yok) olsa bile MODULE_DISABLED YOK; rol denetimi aynen sürer', async () => {
     state.moduleEnabled = false;
     for (const user of [users.superUser, users.manager, users.board]) {
       const res = await call('GET', url(), { user });
-      assert.deepEqual([res.status, res.body.code, res.body.module], [403, 'MODULE_DISABLED', 'decision_book']);
+      assert.notEqual(res.body.code, 'MODULE_DISABLED');
     }
     assert.equal((await call('GET', url(), { user: users.staff })).body.code, 'FORBIDDEN_ROLE');
-    assert.equal((await call('POST', url(), { user: users.manager, body: GOOD })).body.code, 'MODULE_DISABLED');
+    assert.notEqual((await call('POST', url(), { user: users.manager, body: GOOD })).body.code, 'MODULE_DISABLED');
   });
 
   it('yönetici / süper / kurul listeyi okur: { items, next_before_id, next_cursor, years }', async () => {
@@ -355,7 +355,7 @@ describe('sakin uçları', () => {
     assert.deepEqual([foreign.status, foreign.body], [200, { items: [], next_before_id: null, next_cursor: null, years: [] }]);
     state.moduleEnabled = false;
     const off = await call('GET', `/app/decisions?site_code=${SITE}`, { user: users.resident });
-    assert.deepEqual([off.status, off.body.code, off.body.module], [403, 'MODULE_DISABLED', 'decision_book']);
+    assert.notEqual(off.body.code, 'MODULE_DISABLED');
     state.moduleEnabled = true;
     const on = await call('GET', `/app/decisions?site_code=${SITE}&year=2026&limit=10`, { user: users.resident });
     assert.deepEqual([on.status, on.body], [200, { items: [], next_before_id: null, next_cursor: null, years: [] }]);

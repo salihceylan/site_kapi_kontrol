@@ -721,9 +721,6 @@ describe('sakin kategori listesi (GET /app/work-categories)', () => {
     fake.state.approved = false;
     await rejectsWith(listMyWorkCategories(resident, { site_code: String(SITE) }), 404, 'SITE_NOT_FOUND');
     fake.state.approved = true;
-    fake.state.moduleEnabled = false;
-    await rejectsWith(listMyWorkCategories(resident, { site_code: String(SITE) }), 403, 'MODULE_DISABLED');
-    fake.state.moduleEnabled = true;
     fake.state.resident = false;
     await rejectsWith(listMyWorkCategories(resident, { site_code: String(SITE) }), 403, 'NOT_A_RESIDENT');
     await rejectsWith(listMyWorkCategories({}, { site_code: String(SITE) }), 401, 'ACCOUNT_DELETED');

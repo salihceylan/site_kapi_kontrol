@@ -337,11 +337,11 @@ describe('yetki ve modül kapısı: sıra biçim -> yetki -> site -> modül', ()
     assert.deepEqual([missing.status, missing.body.code], [404, 'SITE_NOT_FOUND']);
   });
 
-  it('modül KAPALI: süper / yönetici / görevli / kurul 403 MODULE_DISABLED { module: contracts }; yetki modülden ÖNCE', async () => {
+  it('sözleşmeler TEMEL modül (Kural 25): site_modules satırı enabled=false (ya da hiç yok) olsa bile MODULE_DISABLED YOK; rol denetimi aynen sürer', async () => {
     state.moduleEnabled = false;
     for (const user of [users.superUser, users.manager, users.staff, users.board]) {
       const res = await call('GET', V(), { user });
-      assert.deepEqual([res.status, res.body.code, res.body.module], [403, 'MODULE_DISABLED', 'contracts']);
+      assert.notEqual(res.body.code, 'MODULE_DISABLED');
     }
     assert.equal((await call('GET', V(), { user: users.resident })).body.code, 'FORBIDDEN_ROLE');
   });

@@ -368,11 +368,11 @@ describe('yönetim uçları: sıra biçim -> yetki -> site -> modül; yetki matr
     assert.deepEqual([missing.status, missing.body.code], [404, 'SITE_NOT_FOUND']);
   });
 
-  it('modül KAPALI: süper / yönetici / görevli / kurul 403 MODULE_DISABLED { module: visitor_log }; yetki modülden ÖNCE denetlenir', async () => {
+  it('ziyaretçi ve kargo TEMEL modül (Kural 25): site_modules satırı enabled=false (ya da hiç yok) olsa bile MODULE_DISABLED YOK; rol denetimi aynen sürer', async () => {
     state.moduleEnabled = false;
     for (const user of [users.superUser, users.manager, users.staff, users.board]) {
       const res = await call('GET', url(), { user });
-      assert.deepEqual([res.status, res.body.code, res.body.module], [403, 'MODULE_DISABLED', 'visitor_log']);
+      assert.notEqual(res.body.code, 'MODULE_DISABLED');
     }
     assert.equal((await call('GET', url(), { user: users.outsider })).body.code, 'FORBIDDEN_ROLE');
   });
@@ -471,7 +471,7 @@ describe('yönetim uçları: liste ve kayıt açma (görevli yazar)', () => {
     assert.equal((await call('GET', url('/apartments', OTHER_SITE), { user: users.staff })).status, 403, 'başka sitenin daireleri görevliye kapalı');
     state.moduleEnabled = false;
     const off = await call('GET', url('/apartments'), { user: users.staff });
-    assert.deepEqual([off.status, off.body.code, off.body.module], [403, 'MODULE_DISABLED', 'visitor_log']);
+    assert.notEqual(off.body.code, 'MODULE_DISABLED');
   });
 
   it('POST (görevli): kargo -> bekliyor, ziyaretçi -> iceride; 201 Entry; kaydeden görevli; daire olmadan da açılır; audit visitor_entry.created ad / firma sızdırmaz', async () => {
@@ -635,7 +635,7 @@ describe('sakin uçları (/app): yalnız kendi dairesi, summary unread, seen ide
     seed();
     state.moduleEnabled = false;
     const withSite = await call('GET', `/app/visitor-entries?site_code=${SITE}`, { user: users.resident });
-    assert.deepEqual([withSite.status, withSite.body.code, withSite.body.module], [403, 'MODULE_DISABLED', 'visitor_log']);
+    assert.notEqual(withSite.body.code, 'MODULE_DISABLED');
     assert.deepEqual((await call('GET', '/app/visitor-entries', { user: users.resident })).body.items, []);
     assert.deepEqual((await call('GET', '/app/visitor-entries/summary', { user: users.resident })).body, { unread: 0 });
     state.moduleEnabled = true;

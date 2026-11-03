@@ -6,8 +6,9 @@
 //    satırın `enabled` değeri, yoksa katalogdaki varsayılan (`defaultEnabled`).
 //  - Satırı olmayan site katalog varsayılanına göre davranır (door_control varsayılanı 2bf1bd4'ten beri KAPALI;
 //    cihaz kapıya bağlanınca açılır).
-//  - TEMEL modüller (AGENTS.md Kural 25; core: true): Kişi ve Daire Kayıtları, Duyuru ve Bildirim, Aidat ve Finans, Anket ve Oylama, Komşu Panosu,
-//    Ekipman ve Bakım, Faaliyet Raporu, Dosya Deposu. Talep gerekmeden her sitede açık, kapatılamaz; site_modules satırı
+//  - TEMEL modüller (AGENTS.md Kural 25; core: true): Kişi ve Daire Kayıtları, Duyuru ve Bildirim, Aidat ve Finans, Rezervasyon ve Konsiyerj,
+//    İş Takibi, Anket ve Oylama, Ziyaretçi ve Kargo, Firma ve Sözleşme Takibi, Karar Defteri, Rehber, İşletme Projesi (Bütçe), Dosya Deposu,
+//    Komşu Panosu, Faaliyet Raporu, Ekipman ve Bakım. Talep gerekmeden her sitede açık, kapatılamaz; site_modules satırı
 //    core_modules.js ile kurulumda yazılır / açılışta doldurulur.
 //  - Kart Ödemesi (eski `card_payments`) ayrı modül DEĞİLDİR: Aidat ve Finans'ın parçasıdır (kapıları `finance` denetler); eski kod
 //    `retiredModuleNotice` ile yanıtlanır (migrations/083).
@@ -67,17 +68,17 @@ export const MODULE_CATALOG = Object.freeze([
     code: 'reservation',
     name: 'Rezervasyon ve Konsiyerj',
     description: 'Ortak alan rezervasyonu ve konsiyerj talepleri.',
-    core: false,
+    core: true,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
+    defaultEnabled: true,
   }),
   defineModule({
     code: 'work_tracking',
     name: 'İş Takibi',
     description: 'Arıza, bakım ve görev kayıtlarının takibi.',
-    core: false,
+    core: true,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
+    defaultEnabled: true,
   }),
   defineModule({
     code: 'metering',
@@ -108,9 +109,9 @@ export const MODULE_CATALOG = Object.freeze([
     code: 'visitor_log',
     name: 'Ziyaretçi ve Kargo',
     description: 'Ziyaretçi ve kargo kayıtları; sakine uygulama içi bildirim.',
-    core: false,
+    core: true,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
+    defaultEnabled: true,
   }),
   defineModule({
     code: 'card_access',
@@ -124,33 +125,33 @@ export const MODULE_CATALOG = Object.freeze([
     code: 'contracts',
     name: 'Firma ve Sözleşme Takibi',
     description: 'Firmalar, sözleşme bitiş tarihleri ve hatırlatmalar.',
-    core: false,
+    core: true,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
+    defaultEnabled: true,
   }),
   defineModule({
     code: 'decision_book',
     name: 'Karar Defteri',
     description: 'Yönetim kurulu ve genel kurul kararlarının kaydı.',
-    core: false,
+    core: true,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
+    defaultEnabled: true,
   }),
   defineModule({
     code: 'directory',
     name: 'Rehber',
     description: 'Yönetim kadrosu ve faydalı telefonların sakinlere gösterilmesi.',
-    core: false,
+    core: true,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
+    defaultEnabled: true,
   }),
   defineModule({
     code: 'budget',
     name: 'İşletme Projesi (Bütçe)',
     description: 'Yıllık gider bütçesi; taslak, tebliğ, kesin durumları ve planlanan-gerçekleşen karşılaştırması.',
-    core: false,
+    core: true,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
+    defaultEnabled: true,
   }),
   defineModule({
     code: 'drive_storage',
