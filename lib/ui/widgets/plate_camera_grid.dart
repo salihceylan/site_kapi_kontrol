@@ -345,6 +345,10 @@ class _PlateCameraTileState extends State<PlateCameraTile> with WidgetsBindingOb
       final result = await widget.service.snapshot(widget.siteCode, widget.camera.id, etag: _etag);
       if (!mounted) return;
       if (result.bytes != null) {
+        final oldBytes = _bytes;
+        if (oldBytes != null) {
+          PaintingBinding.instance.imageCache.evict(MemoryImage(oldBytes));
+        }
         setState(() {
           _bytes = result.bytes;
           _etag = result.etag;

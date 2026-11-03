@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -53,6 +54,8 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
   StreamSubscription<Map<int, Uint8List>>? _engineSub;
   Timer? _pollTimer;
   bool _inFlight = false;
+  ui.Image? _decodedImage;
+  bool _isDecoding = false;
 
   Uint8List? _frameBytes;
   String? _detectedPlate;
@@ -91,32 +94,53 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
     _resolveCameraAndStart();
   }
 
-  @override
+    @override
   void dispose() {
     _pollTimer?.cancel();
     _engineSub?.cancel();
+    _decodedImage?.dispose();
+    _decodedImage = null;
     _client.close();
     super.dispose();
+  }
+
+    Future<void> _decodeAndSetImage(Uint8List bytes, String? plate) async {
+    if (_isDecoding) return;
+    _isDecoding = true;
+    try {
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frameInfo = await codec.getNextFrame();
+      final newImage = frameInfo.image;
+      if (!mounted) {
+        newImage.dispose();
+        return;
+      }
+      final oldImage = _decodedImage;
+      setState(() {
+        _decodedImage = newImage;
+        _frameBytes = bytes;
+        _detectedPlate = plate;
+        _lastFrameAt = DateTime.now();
+      });
+      oldImage?.dispose();
+    } catch (_) {
+    } finally {
+      _isDecoding = false;
+    }
   }
 
   void _initFromEngineCache() {
     final cached = PlateRecognitionEngine.instance.lastFrames[widget.cameraId];
     final plate = PlateRecognitionEngine.instance.lastCameraPlates[widget.cameraId];
     if (cached != null && cached.isNotEmpty) {
-      _frameBytes = cached;
-      _detectedPlate = plate;
-      _lastFrameAt = DateTime.now();
+      _decodeAndSetImage(cached, plate);
     }
   }
 
   void _onEngineFrames(Map<int, Uint8List> frames) {
     final bytes = frames[widget.cameraId];
     if (bytes != null && bytes.isNotEmpty && mounted && !identical(bytes, _frameBytes)) {
-      setState(() {
-        _frameBytes = bytes;
-        _detectedPlate = PlateRecognitionEngine.instance.lastCameraPlates[widget.cameraId];
-        _lastFrameAt = DateTime.now();
-      });
+      _decodeAndSetImage(bytes, PlateRecognitionEngine.instance.lastCameraPlates[widget.cameraId]);
     }
   }
 
@@ -197,11 +221,7 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
       );
 
       if (res.ok && res.bytes != null && mounted) {
-        setState(() {
-          _frameBytes = res.bytes;
-          _detectedPlate = (res.plate != null && res.plate!.isNotEmpty) ? res.plate : null;
-          _lastFrameAt = DateTime.now();
-        });
+        unawaited(_decodeAndSetImage(res.bytes!, (res.plate != null && res.plate!.isNotEmpty) ? res.plate : null));
 
         // Plaka okunduysa karar motoruna ilet (aynı plaka için gereksiz tekrarları önle)
         final now = DateTime.now();
@@ -361,8 +381,14 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
             ),
           ),
 
-          // Canlı video karesi
-          if (hasLiveFrame)
+                    // Canlı video karesi (RawImage ile yerel bellek anında serbest bırakılır)
+          if (_decodedImage != null)
+            RawImage(
+              image: _decodedImage,
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.low,
+            )
+          else if (hasLiveFrame)
             Image.memory(
               bytes,
               fit: BoxFit.cover,

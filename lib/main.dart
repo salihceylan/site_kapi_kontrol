@@ -14,6 +14,9 @@ export 'package:site_kapi_kontrol/app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Canli kamera ve goruntu akislarinda bellek sizintisini onlemek icin ImageCache sinirlandirilir (OOM korumasi)
+  PaintingBinding.instance.imageCache.maximumSize = 30;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 30 * 1024 * 1024; // 30 MB
   // Çökme raporlama kancaları (FlutterError.onError + PlatformDispatcher.onError). Debug/testte kapalı,
   // raporlama hatası uygulamayı asla bozmaz; bekleyen yerel kuyruk kısa bir gecikmeyle gönderilir.
   unawaited(CrashReporter.instance.install());
