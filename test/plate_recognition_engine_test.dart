@@ -167,5 +167,14 @@ void main() {
       expect(engine.isGateWaitingForNextVehicle(1), isTrue);
       expect(engine.gateNextVehicleRemainingSeconds(1), greaterThan(0));
     });
+
+    test('11. Geçiş izni alan araç belirlenen süre boyunca (60 sn) hem giriş hem çıkışta mükerrer tetiklemeye karşı engellenir', () async {
+      await engine.testProcessPlate('34 SKN 01', direction: 'giris');
+      // Hem giriş (araç geçerken mükerrer okuma) hem çıkış (arka plaka) kamerasında engelli olmalıdır
+      expect(engine.isPlateSuppressed('34 SKN 01', 'giris'), isTrue);
+      expect(engine.isPlateSuppressed('34 SKN 01', 'cikis'), isTrue);
+      // Farklı bir araç ise engelli DEĞİLDİR
+      expect(engine.isPlateSuppressed('35 EA 8875', 'giris'), isFalse);
+    });
   });
 }

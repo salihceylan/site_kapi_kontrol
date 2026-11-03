@@ -138,6 +138,7 @@ export const SITE_AUDIT_LABELS = Object.freeze({
   'plate.inside_timeout': 'İçeride uzun süre kalan araçlar zaman aşımıyla düşürüldü',
   'plate.camera_created': 'Plaka kamerası eklendi',
   'plate.camera_updated': 'Plaka kamerası değişti',
+  'plate.camera_deleted': 'Plaka kamerası silindi',
   'plate.camera_probe_requested': 'Plaka kamerası sınama komutu verildi',
   'plate.discovery_requested': 'Ağda kamera arama komutu verildi',
   'device.ownership_released': 'Cihaz sahipliği sıfırlandı',

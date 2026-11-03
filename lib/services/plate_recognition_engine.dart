@@ -596,35 +596,26 @@ class PlateRecognitionEngine {
       _gateNextVehicleCooldownUntil[gateId] = now.add(Duration(seconds: consecutiveDelay));
       _cameraCooldownUntil[camera.id] = now.add(Duration(seconds: consecutiveDelay));
 
-      // 2 & 3) Arka plaka engelleme süresini başlat:
-      // Giriş yapıldıysa -> çıkış kamerası arka plakayı okumasın (entryRearSuppressSeconds, varsayılan 60 sn)
-      // Çıkış yapıldıysa -> giriş kamerası arka plakayı okumasın (exitRearSuppressSeconds, varsayılan 60 sn)
+      // 2 & 3) Geçiş yapan aynı araç için koruma süresini başlat (60 sn):
+      // Geçiş izni alan aynı araç belirlenen süre boyunca (varsayılan 60 sn):
+      // - Giriş kamerasından kapıdan geçerken veya yavaşlarken tekrar tetikleme yapamaz.
+      // - Çıkış kamerasından arka plakası okunarak mükerrer çıkış tetiği veremez.
+      // (Farklı/arkadan gelen başka bir araç ise consecutiveDelay (10 sn) sonra kapıyı açabilir).
       final isEntry = decision.direction != 'cikis';
-      if (isEntry) {
-        final entrySuppressSec = gate != null && gate.entryRearSuppressSeconds > 0
-            ? gate.entryRearSuppressSeconds
-            : 60;
-        _plateSuppressions[plate] = PlateSuppression(
-          plate: plate,
-          suppressDirection: 'cikis',
-          suppressUntil: now.add(Duration(seconds: entrySuppressSec)),
-          gateId: gateId,
-          reason: 'Giriş yapan aracın çıkış kamerası tarafından arka plakasının okunması engellendi ($entrySuppressSec sn)',
-        );
-        debugPrint('[PlateRecognitionEngine] KAPI AÇILDI (GİRİŞ): $plate geçiş yaptı. Çıkış kamerası $entrySuppressSec sn boyunca bu aracın arka plakasını okumayacak. Bir sonraki araç için kapı $consecutiveDelay sn bekleyecek.');
-      } else {
-        final exitSuppressSec = gate != null && gate.exitRearSuppressSeconds > 0
-            ? gate.exitRearSuppressSeconds
-            : 60;
-        _plateSuppressions[plate] = PlateSuppression(
-          plate: plate,
-          suppressDirection: 'giris',
-          suppressUntil: now.add(Duration(seconds: exitSuppressSec)),
-          gateId: gateId,
-          reason: 'Çıkış yapan aracın giriş kamerası tarafından arka plakasının okunması engellendi ($exitSuppressSec sn)',
-        );
-        debugPrint('[PlateRecognitionEngine] KAPI AÇILDI (ÇIKIŞ): $plate geçiş yaptı. Giriş kamerası $exitSuppressSec sn boyunca bu aracın arka plakasını okumayacak. Bir sonraki araç için kapı $consecutiveDelay sn bekleyecek.');
-      }
+      final suppressSec = isEntry
+          ? (gate != null && gate.entryRearSuppressSeconds > 0 ? gate.entryRearSuppressSeconds : 60)
+          : (gate != null && gate.exitRearSuppressSeconds > 0 ? gate.exitRearSuppressSeconds : 60);
+
+      _plateSuppressions[plate] = PlateSuppression(
+        plate: plate,
+        suppressDirection: 'both',
+        suppressUntil: now.add(Duration(seconds: suppressSec)),
+        gateId: gateId,
+        reason: isEntry
+            ? 'Giriş yapan aracın aynı kapıdan ($suppressSec sn) veya çıkış kamerasından mükerrer tetiklemesi engellendi'
+            : 'Çıkış yapan aracın aynı kapıdan ($suppressSec sn) veya giriş kamerasından mükerrer tetiklemesi engellendi',
+      );
+      debugPrint('[PlateRecognitionEngine] KAPI AÇILDI (${isEntry ? "GİRİŞ" : "ÇIKIŞ"}): $plate geçiş yaptı. Bu araç $suppressSec sn boyunca mükerrer tetikleme yapmayacak. Arkadan gelen başka bir araç için kapı $consecutiveDelay sn sonra açılabilecek.');
 
       await _triggerGate(camera, decision);
     }
@@ -661,25 +652,19 @@ class PlateRecognitionEngine {
       _gateNextVehicleCooldownUntil[effectiveDoorId] = DateTime.now().add(Duration(seconds: consecutiveDelay));
 
       final isEntry = direction != 'cikis';
-      if (isEntry) {
-        final entrySuppressSec = effectiveCamera?.gate?.entryRearSuppressSeconds ?? 60;
-        _plateSuppressions[plate] = PlateSuppression(
-          plate: plate,
-          suppressDirection: 'cikis',
-          suppressUntil: DateTime.now().add(Duration(seconds: entrySuppressSec)),
-          gateId: effectiveDoorId,
-          reason: 'Giriş yapan aracın çıkış kamerası tarafından arka plakasının okunması engellendi ($entrySuppressSec sn)',
-        );
-      } else {
-        final exitSuppressSec = effectiveCamera?.gate?.exitRearSuppressSeconds ?? 60;
-        _plateSuppressions[plate] = PlateSuppression(
-          plate: plate,
-          suppressDirection: 'giris',
-          suppressUntil: DateTime.now().add(Duration(seconds: exitSuppressSec)),
-          gateId: effectiveDoorId,
-          reason: 'Çıkış yapan aracın giriş kamerası tarafından arka plakasının okunması engellendi ($exitSuppressSec sn)',
-        );
-      }
+      final suppressSec = isEntry
+          ? (effectiveCamera?.gate?.entryRearSuppressSeconds ?? 60)
+          : (effectiveCamera?.gate?.exitRearSuppressSeconds ?? 60);
+
+      _plateSuppressions[plate] = PlateSuppression(
+        plate: plate,
+        suppressDirection: 'both',
+        suppressUntil: DateTime.now().add(Duration(seconds: suppressSec)),
+        gateId: effectiveDoorId,
+        reason: isEntry
+            ? 'Giriş yapan aracın aynı kapıdan ($suppressSec sn) veya çıkış kamerasından mükerrer tetiklemesi engellendi'
+            : 'Çıkış yapan aracın aynı kapıdan ($suppressSec sn) veya giriş kamerasından mükerrer tetiklemesi engellendi',
+      );
       await _triggerGate(effectiveCamera, decision);
     }
 

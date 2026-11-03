@@ -4714,3 +4714,9 @@ Güvenlik kulübesindeki kenar PC uygulaması artık sunucunun gerçek kenar sö
     2. **Kapatılamaz ve Talep Edilemez (Core / Temel Modül):** Bu 7 modülün kartlarında "Her sitede açık" rozeti yer alır; açma/kapatma anahtarı (toggle) ve "Talep Et" butonu bulunmaz. Süper kullanıcı onayına gerek olmadan tüm sitelerde her zaman aktiftir.
     3. **Geriye Dönük Doldurma (Backfill / Migration 126):** Canlı sistemdeki mevcut tüm siteler için bu 7 modülün `site_modules` satırları otomatik olarak `enabled = TRUE` yapılır; varsa bekleyen eski talepleri sistem tarafından otomatik onaylanır.
 
+- [ ] **165.19. Geçiş İzni Alan Aynı Aracın Mükerrer (Çift) Tetikleme Yapmasının Önlenmesi ve Sonraki Farklı Araç Akışı:**
+  - **Nasıl Test Edilir:** Giriş kamerasından onaylı bir aracın (`35 EA 8875`) geçişini sağlayın. Kapı açıldıktan sonra aracın kamera açısından hemen çıkmayıp yavaş geçmesi (10-15 sn aralığında kameranın önünde durması veya arka plakasının okunması) durumunu simüle edin. Ardından 10 sn sonra arkadan gelen farklı bir plakalı aracın (`06 TEST 001`) geçişini deneyin.
+  - **Beklenen Sonuç:**
+    1. **Aynı Aracın Çift Tetikleme Yapmaması:** Kapıyı açan aynı araç (`35 EA 8875`), belirlenen koruma süresi (varsayılan 60 sn) boyunca hem giriş kamerasından (geçerken tekrar okunma) hem de çıkış kamerasından (arka plaka) engellenir; 10 sn'lik kapı mola süresi bittiğinde araç henüz kameranın önündeyse kapı ASLA 2. kez tetiklenmez.
+    2. **Farklı Aracın Beklememesi:** Öndeki araç geçtikten sonra belirlenen bekleme süresi (10 sn) dolduğunda, arkadan gelen farklı bir araç (`06 TEST 001`) hemen okunup kapıyı açabilir; sistem 60 sn kilitlenmez.
+

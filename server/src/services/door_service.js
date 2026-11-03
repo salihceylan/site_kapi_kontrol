@@ -99,9 +99,10 @@ export async function recordDoorAccessLog({
           apartment_label,
           trigger_type,
           opened_at,
-          ip_address
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          ip_address,
+          device_uid
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       `,
       [
         Number(siteCode),

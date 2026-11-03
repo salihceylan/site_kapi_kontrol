@@ -210,12 +210,18 @@ class SimplePlateDetector:
 
     def _trigger_instant_gate(self, plate):
         now = time.time()
+        norm = plate.replace(" ", "").upper()
+        # 1) Bu araç koruma süresinde mi? (60 sn geçiş ve arka plaka engellemesi)
+        if now < self.plate_suppressions.get(plate, 0.0) or now < self.plate_suppressions.get(norm, 0.0):
+            return
+        # 2) Kapı sonraki araç için beklemede mi? (10 sn)
         if now < self.next_vehicle_cooldown_until:
             return
-        # 1) Bir sonraki araç için bekleme süresini başlat (10 sn)
+        # Bir sonraki farklı araç için kapı bekleme süresini başlat (10 sn)
         self.next_vehicle_cooldown_until = now + self.consecutive_delay_sec
-        # 2 & 3) Arka plaka engellemesini başlat (60 sn)
+        # Geçiş yapan aynı aracın 60 sn boyunca mükerrer okumasını ve arka plakasını engelle
         self.plate_suppressions[plate] = now + self.rear_suppress_sec
+        self.plate_suppressions[norm] = now + self.rear_suppress_sec
         self.last_gate_trigger_at = now
         self.last_opened_plate = plate
         try:
@@ -293,10 +299,10 @@ class SimplePlateDetector:
                         if preds and preds[0].plate:
                             fp = self.format_tr_plate(preds[0].plate)
                             if fp:
-                                # Arka plaka engellemesi kontrolü (Giren/çıkan aracın 60 sn okunmaması)
-                                supp_until = self.plate_suppressions.get(fp, 0.0)
+                                # Arka plaka ve mükerrer geçiş engellemesi kontrolü (60 sn okunmaması)
+                                supp_until = max(self.plate_suppressions.get(fp, 0.0), self.plate_suppressions.get(fp.replace(' ', ''), 0.0))
                                 if now < supp_until:
-                                    pass  # Arka plaka engellendi
+                                    pass  # Araç geçiş veya arka plaka korumasında, engellendi
                                 else:
                                     det_box = [bx1, by1, bw, bh]
                                     det_plate = fp
