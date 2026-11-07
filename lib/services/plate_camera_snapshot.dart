@@ -113,7 +113,6 @@ class PlateCameraSnapshot {
     final port = camera.port;
     // 554 RTSP portudur; HTTP anlık kare orada sunulmaz -> standart web portu 80'e düş.
     final httpPort = (port == null || port == 554) ? 80 : port;
-    final loopbackPort = (port != null && port != 554 && port != 80) ? port : 8080;
 
     final out = <Uri>[];
     void addUnique(Uri u) {
@@ -125,12 +124,6 @@ class PlateCameraSnapshot {
     if (cached != null) {
       addUnique(cached);
     }
-
-    // 2. Yerel RTSP AI Köprüsü (127.0.0.1:8080 / localhost:8080):
-    // RTSP kamerayı bellekte 25 FPS'te tutar, YOLOv9-t + FastPlateOCR ile plakayı okur (X-Plate)
-    // ve 1.5ms'de yanıt verir (kameranın 533ms süren dahili CGI uç noktasındaki donmaları tamamen önler).
-    addUnique(Uri.parse('http://127.0.0.1:$loopbackPort/snapshot.jpg'));
-    addUnique(Uri.parse('http://localhost:$loopbackPort/snapshot.jpg'));
 
     final custom = (camera.rtspUrl ?? '').trim();
     if (custom.startsWith('http://') || custom.startsWith('https://')) {
@@ -155,15 +148,6 @@ class PlateCameraSnapshot {
           addUnique(Uri.parse('http://$host:80$path'));
         }
       }
-      if (httpPort != 8080) {
-        addUnique(Uri.parse('http://$host:8080/snapshot.jpg'));
-      }
-    }
-
-    // Aynı bilgisayarda çalışan yerel kamera yayın sunucusu geri-düşüşü
-    if (host != '127.0.0.1' && host != 'localhost') {
-      addUnique(Uri.parse('http://127.0.0.1:$loopbackPort/snapshot.jpg'));
-      addUnique(Uri.parse('http://localhost:$loopbackPort/snapshot.jpg'));
     }
 
     return out;
@@ -311,10 +295,6 @@ class PlateCameraSnapshot {
           ? null
           : plate.trim();
 
-      if (cleanPlate == null && fetchPlateFallback && !res.headers.containsKey('x-plate')) {
-        cleanPlate = await _queryLastPlateApi(client, uri);
-      }
-
       _workingUriCache[key] = uri;
       if (camera.id > 0) {
         _workingUriCache['id_${camera.id}'] = uri;
@@ -333,21 +313,6 @@ class PlateCameraSnapshot {
       }
       return SnapshotResult.failure('Bağlanılamadı');
     }
-  }
-
-  static Future<String?> _queryLastPlateApi(http.Client client, Uri snapshotUri) async {
-    try {
-      final apiUri = snapshotUri.replace(path: '/api/last_plate', query: null);
-      final res = await client.get(apiUri).timeout(const Duration(milliseconds: 350));
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data is Map && data['plate'] != null) {
-          final p = data['plate'].toString().trim();
-          if (p.isNotEmpty && p.toLowerCase() != 'none') return p;
-        }
-      }
-    } catch (_) {}
-    return null;
   }
 
   /// Adayları sırayla dener; ilk çalışan adresi ve kareyi döndürür.

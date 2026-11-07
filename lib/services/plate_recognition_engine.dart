@@ -331,136 +331,12 @@ class PlateRecognitionEngine {
       return;
     }
 
-    unawaited(_ensureLocalRtspAiBridge());
-
     if (_isRunning) return;
     _isRunning = true;
 
     unawaited(_tick());
     _loopTimer = Timer.periodic(const Duration(milliseconds: 900), (_) => unawaited(_tick()));
     debugPrint('[PlateRecognitionEngine] Motor başlatıldı (Site: $siteCode, ${_activeCameras.length} aktif kamera)');
-  }
-
-  bool _bridgeSyncInProgress = false;
-
-  /// Windows masaüstünde yerel RTSP + YOLOv9-t + FastPlateOCR köprüsünün (127.0.0.1:8080)
-  /// çalıştığından emin olur ve aktif kameranın RTSP adresini köprüye bağlar.
-  Future<void> _ensureLocalRtspAiBridge() async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows || _bridgeSyncInProgress) {
-      return;
-    }
-    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
-    _bridgeSyncInProgress = true;
-    try {
-      bool bridgeOnline = false;
-      try {
-        final statusRes = await _http
-            .get(Uri.parse('http://127.0.0.1:8080/status'))
-            .timeout(const Duration(milliseconds: 450));
-        bridgeOnline = statusRes.statusCode == 200;
-      } catch (_) {
-        bridgeOnline = false;
-      }
-
-      if (!bridgeOnline) {
-        final scriptCandidates = <String>[
-          '${Directory.current.path}\\tools\\sanal_kamera\\sanal_kamera.py',
-          r'G:\site\site_kapi_kontrol\tools\sanal_kamera\sanal_kamera.py',
-        ];
-        String? scriptPath;
-        for (final s in scriptCandidates) {
-          if (File(s).existsSync()) {
-            scriptPath = s;
-            break;
-          }
-        }
-
-        if (scriptPath != null) {
-          final pyCandidates = <String>[
-            r'C:\Users\fingonancalime\AppData\Local\Programs\Python\Python310\pythonw.exe',
-            r'C:\Users\fingonancalime\AppData\Local\Programs\Python\Python310\python.exe',
-            'pythonw',
-            'python',
-          ];
-          for (final py in pyCandidates) {
-            if (py.contains(r'\') && !File(py).existsSync()) continue;
-            try {
-              await Process.start(
-                py,
-                <String>[scriptPath],
-                workingDirectory: File(scriptPath).parent.path,
-                mode: ProcessStartMode.detached,
-              );
-              await Future<void>.delayed(const Duration(milliseconds: 2200));
-              break;
-            } catch (_) {}
-          }
-        }
-      }
-
-      // Aktif gerçek kameranın RTSP URL'sini oluştur ve yerel AI köprüsüne ilet
-      for (final cam in _activeCameras) {
-        final host = cam.host.trim();
-        if (host.isEmpty || host == '127.0.0.1' || host == 'localhost') continue;
-        final cred = PlateCameraSnapshot.resolveCredentials(cam);
-        final user = (cred?.user ?? cam.username ?? 'admin').trim();
-        final pass = cred?.pass ?? (host == '192.168.1.64' ? 'gude2134' : '');
-        String rtsp = (cam.rtspUrl ?? '').trim();
-        if (rtsp.isEmpty || !rtsp.toLowerCase().startsWith('rtsp://')) {
-          rtsp = 'rtsp://$host:554/Streaming/Channels/101';
-        }
-        if (user.isNotEmpty && pass.isNotEmpty && !rtsp.contains('@')) {
-          rtsp = rtsp.replaceFirst('rtsp://', 'rtsp://$user:$pass@');
-        }
-        try {
-          await _http
-              .post(
-                Uri.parse('http://127.0.0.1:8080/api/source'),
-                headers: const <String, String>{'Content-Type': 'application/json'},
-                body: jsonEncode(<String, dynamic>{'source': rtsp}),
-              )
-              .timeout(const Duration(milliseconds: 800));
-        } catch (_) {}
-        break;
-      }
-
-      // Site araç, misafir ve kara liste bilgilerini köprü HUD çubuğuna eşitle
-      final vehiclePayload = <String, Map<String, dynamic>>{};
-      _registeredVehicles.forEach((plate, info) {
-        vehiclePayload[plate] = <String, dynamic>{
-          'kind': 'resident',
-          'apt': info['apartment_label'] ?? 'Kayıtlı Daire',
-          'name': info['person_label'] ?? 'Sakin Aracı',
-        };
-      });
-      _guestPermits.forEach((plate, info) {
-        vehiclePayload[plate] = <String, dynamic>{
-          'kind': 'guest',
-          'apt': info['apartment_label'] ?? 'Misafir',
-          'name': info['note'] ?? 'Misafir Aracı',
-        };
-      });
-      for (final plate in _blacklist) {
-        vehiclePayload[plate] = <String, dynamic>{
-          'kind': 'blacklist',
-          'apt': 'Yönetim Kararı',
-          'name': _blacklistReasons[plate] ?? 'Kara Liste',
-        };
-      }
-      if (vehiclePayload.isNotEmpty) {
-        try {
-          await _http
-              .post(
-                Uri.parse('http://127.0.0.1:8080/api/vehicles'),
-                headers: const <String, String>{'Content-Type': 'application/json'},
-                body: jsonEncode(<String, dynamic>{'items': vehiclePayload}),
-              )
-              .timeout(const Duration(milliseconds: 600));
-        } catch (_) {}
-      }
-    } finally {
-      _bridgeSyncInProgress = false;
-    }
   }
 
   /// Motoru durdurur
@@ -513,9 +389,6 @@ class PlateRecognitionEngine {
     if (insideCounts != null) _apartmentInsideCount = insideCounts;
     if (parkingSlotsByLabel != null) _apartmentSlotsByLabel = parkingSlotsByLabel;
     if (insideCountsByLabel != null) _apartmentInsideByLabel = insideCountsByLabel;
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
-      unawaited(_ensureLocalRtspAiBridge());
-    }
   }
 
   /// Kapının geçiş ve güvenlik sürelerini bellek içinde anında günceller.

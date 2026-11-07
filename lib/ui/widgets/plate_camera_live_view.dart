@@ -61,7 +61,6 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
   String? _detectedPlate;
   String? _lastIngestedPlate;
   DateTime? _lastIngestedAt;
-  DateTime? _lastFrameAt;
   DateTime? _lastServerUploadAt;
   String? _lastEtag;
   PlateCameraRow? _resolvedCamera;
@@ -141,7 +140,6 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
         _decodedImage = newImage;
         _frameBytes = bytes;
         _detectedPlate = plate;
-        _lastFrameAt = DateTime.now();
       });
       oldImage?.dispose();
     } catch (_) {
@@ -224,8 +222,8 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
     try {
       final cam = _resolvedCamera ??
           _buildSyntheticRow(
-            host: (widget.host ?? '127.0.0.1').trim(),
-            port: widget.port ?? 8080,
+            host: (widget.host ?? '').trim(),
+            port: widget.port ?? 80,
             rtspUrl: widget.rtspUrl,
           );
 
@@ -279,14 +277,13 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
           etag: _lastEtag,
         );
         if (serverSnap.bytes != null && serverSnap.bytes!.isNotEmpty && mounted) {
-          setState(() {
-            _frameBytes = serverSnap.bytes;
-            _lastEtag = serverSnap.etag;
-            _lastFrameAt = serverSnap.capturedAt ?? DateTime.now();
-            _detectedPlate = (serverSnap.plate != null && serverSnap.plate!.isNotEmpty)
+          _lastEtag = serverSnap.etag;
+          await _decodeAndSetImage(
+            serverSnap.bytes!,
+            (serverSnap.plate != null && serverSnap.plate!.isNotEmpty)
                 ? serverSnap.plate
-                : null;
-          });
+                : null,
+          );
 
           // Plaka sunucudan geldiyse karar motoruna ilet
           if (serverSnap.plate != null && serverSnap.plate!.isNotEmpty) {

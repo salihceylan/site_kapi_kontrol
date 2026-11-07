@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -218,22 +217,19 @@ class _PlateCameraTileState extends State<PlateCameraTile> with WidgetsBindingOb
     final host = camera.host.trim();
     if (host.isEmpty) return null;
     try {
-      final (uri, res) = await PlateCameraSnapshot.discover(
+      final (_, res) = await PlateCameraSnapshot.discover(
         _httpClient,
         camera,
-        fetchPlateFallback: true,
       );
       if (res.ok && res.bytes != null && res.bytes!.length > 500) {
-        final effectiveHost = uri?.host ?? host;
-        final effectivePort = uri?.port ?? (camera.port ?? 8080);
-        _onDirectFrameReceived(res.bytes!, res.plate, effectiveHost, effectivePort);
+        _onDirectFrameReceived(res.bytes!, res.plate);
         return res.bytes;
       }
     } catch (_) {}
     return null;
   }
 
-  void _onDirectFrameReceived(Uint8List bytes, String? plateHeader, String host, int port) {
+  void _onDirectFrameReceived(Uint8List bytes, String? plateHeader) {
     if (plateHeader != null && plateHeader.isNotEmpty) {
       if (mounted && _detectedPlate != plateHeader) {
         setState(() {
@@ -241,30 +237,7 @@ class _PlateCameraTileState extends State<PlateCameraTile> with WidgetsBindingOb
           _detectedPlateAt = DateTime.now();
         });
       }
-    } else {
-      _checkApiLastPlate(host, port);
     }
-  }
-
-  void _checkApiLastPlate(String host, int port) {
-    unawaited(() async {
-      try {
-        final uri = Uri.parse('http://$host:$port/api/last_plate');
-        final res = await http.get(uri).timeout(const Duration(milliseconds: 350));
-        if (res.statusCode == 200) {
-          final data = jsonDecode(res.body);
-          if (data is Map && data['plate'] != null) {
-            final plate = data['plate'].toString();
-            if (mounted && plate.isNotEmpty && _detectedPlate != plate) {
-              setState(() {
-                _detectedPlate = plate;
-                _detectedPlateAt = DateTime.now();
-              });
-            }
-          }
-        }
-      } catch (_) {}
-    }());
   }
 
   Future<void> _fetch() async {

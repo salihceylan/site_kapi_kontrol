@@ -35,14 +35,6 @@ class LocalCameraDiscoveryService {
   }) async {
     final results = <String, DiscoveredDevice>{};
 
-    // 0. Bu bilgisayarda yerel çalışan kamera/yayın var mı (127.0.0.1)
-    try {
-      final localDev = await _checkLocalCamera('127.0.0.1');
-      if (localDev != null) {
-        results[localDev.ip] = localDev;
-      }
-    } catch (_) {}
-
     // 1. ONVIF WS-Discovery Taraması (UDP 3702)
     try {
       final onvifDevices = await _discoverOnvif(timeout: timeout);
@@ -251,28 +243,6 @@ class LocalCameraDiscoveryService {
     }
 
     return found;
-  }
-
-  Future<DiscoveredDevice?> _checkLocalCamera(String host) async {
-    final openPorts = <int>[];
-    for (final port in _cameraPorts) {
-      if (await _isPortOpen(host, port, timeout: const Duration(milliseconds: 150))) {
-        openPorts.add(port);
-      }
-    }
-    if (openPorts.isEmpty) return null;
-    final primaryPort = openPorts.contains(8080)
-        ? 8080
-        : (openPorts.contains(554) ? 554 : openPorts.first);
-    return DiscoveredDevice(
-      ip: host,
-      ports: openPorts,
-      name: 'Yerel Kamera / Yayın (Port $primaryPort)',
-      model: 'Yerel Akış',
-      source: 'yerel',
-      label: 'Yerel Kamera ($host:$primaryPort)',
-      rtspPort: primaryPort,
-    );
   }
 
   Future<bool> _isPortOpen(String host, int port, {required Duration timeout}) async {

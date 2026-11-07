@@ -1,20 +1,53 @@
 {
   "C_Cpp.default.configurationProvider": "platformio.platformio-ide",
-  "platformio-ide.autoRebuildAutocompleteIndex": true,
-  "python.defaultInterpreterPath": "${workspaceFolder}/company_qr_tool/.venv/Scripts/python.exe",
-  "python.analysis.extraPaths": [
-    "${workspaceFolder}/company_qr_tool"
-  ],
+  "C_Cpp.intelliSenseEngine": "disabled",
+  "platformio-ide.autoRebuildAutocompleteIndex": false,
+  "python.defaultInterpreterPath": "C:\\Users\\fingonancalime\\AppData\\Local\\Programs\\Python\\Python310\\python.exe",
   "python.analysis.typeCheckingMode": "off",
+  "dart.analysisExcludedFolders": [
+    "build",
+    ".dart_tool",
+    ".pio",
+    "android",
+    "ios",
+    "web",
+    "windows",
+    "macos",
+    "linux",
+    "server",
+    "tools",
+    "company_qr_tool",
+    "plaka_vidolar",
+    "cihaz_dene",
+    "cihaz_kontrol",
+    "ekran_yazilimi",
+    "deploy",
+    "docs"
+  ],
   "files.watcherExclude": {
     "**/.git/**": true,
     "**/node_modules/**": true,
     "**/.dart_tool/**": true,
     "**/build/**": true,
     "**/.pio/**": true,
-    "**/.gradle/**": true
+    "**/.gradle/**": true,
+    "**/plaka_vidolar/**": true,
+    "**/company_qr_tool/**": true,
+    "**/server/**": true,
+    "**/tools/**": true,
+    "**/cihaz_dene/**": true,
+    "**/cihaz_kontrol/**": true,
+    "**/ekran_yazilimi/**": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/build": true,
+    "**/.dart_tool": true,
+    "**/.pio": true,
+    "**/plaka_vidolar": true,
+    "**/company_qr_tool/.venv": true
   },
   "git.autorefresh": true,
-  "git.autoFetch": true,
-  "git.openRepositoryInParentFolders": "always"
+  "git.autoFetch": false,
+  "git.openRepositoryInParentFolders": "never"
 }
