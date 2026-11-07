@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
+import 'package:site_kapi_kontrol/services/plate_camera_snapshot.dart';
 import 'package:site_kapi_kontrol/services/plate_cameras_api.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/plate_discovery_dialog.dart' show InlineNoticeText;
@@ -127,6 +128,14 @@ class _PlateCameraFormDialogState extends State<PlateCameraFormDialog> {
       _error = null;
     });
     try {
+      if (_pass.text.isNotEmpty) {
+        PlateCameraSnapshot.recordCredentials(
+          host: _host.text,
+          username: _user.text,
+          password: _pass.text,
+          cameraId: widget.editing?.id,
+        );
+      }
       await widget.onSave(
         PlateCameraDraft(
           name: _name.text,

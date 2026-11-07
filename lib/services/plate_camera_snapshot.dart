@@ -1,10 +1,31 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/services/plate_cameras_api.dart';
+
+class CameraCredentials {
+  const CameraCredentials({required this.user, required this.pass});
+  final String user;
+  final String pass;
+}
+
+class _DigestChallenge {
+  _DigestChallenge({
+    required this.realm,
+    required this.nonce,
+    this.qop,
+    this.opaque,
+  });
+
+  final String realm;
+  final String nonce;
+  final String? qop;
+  final String? opaque;
+  int nc = 0;
+}
 
 /// IP kameradan tek kare (JPEG) çekme yardımcıları. Marka bağımsızdır: kameranın verdiği HTTP anlık kare
 /// adreslerini sırayla dener, çalışanı hatırlar. Canlı video ızgarası ve plaka motoru aynı adres listesini kullanır.
@@ -13,6 +34,62 @@ class PlateCameraSnapshot {
 
   /// Kamera kimliğine veya adresine göre son başarılı çalışan anlık kare adresi önbelleği.
   static final Map<String, Uri> _workingUriCache = <String, Uri>{};
+
+  /// Bilinen yerel kamera kimlik bilgileri önbelleği (host -> credentials).
+  static final Map<String, CameraCredentials> _credentials = <String, CameraCredentials>{
+    '192.168.1.64': const CameraCredentials(user: 'admin', pass: 'gude2134'),
+  };
+
+  /// Kamera başına etkin Digest kimlik doğrulama oturumu.
+  static final Map<String, _DigestChallenge> _activeChallenges = <String, _DigestChallenge>{};
+
+  /// Kamera kaydedilirken girilen parolayı yerel belleğe işler.
+  static void recordCredentials({
+    required String host,
+    String? username,
+    String? password,
+    int? cameraId,
+  }) {
+    final h = host.trim();
+    final u = (username ?? '').trim();
+    final p = password ?? '';
+    if (h.isNotEmpty && p.isNotEmpty) {
+      final cred = CameraCredentials(user: u.isNotEmpty ? u : 'admin', pass: p);
+      _credentials[h] = cred;
+      if (cameraId != null && cameraId > 0) {
+        _credentials['id_$cameraId'] = cred;
+      }
+    }
+  }
+
+  static CameraCredentials? resolveCredentials(PlateCameraRow camera) {
+    if (camera.id > 0 && _credentials.containsKey('id_${camera.id}')) {
+      return _credentials['id_${camera.id}'];
+    }
+    final host = camera.host.trim();
+    if (host.isNotEmpty && _credentials.containsKey(host)) {
+      return _credentials[host];
+    }
+    final custom = (camera.rtspUrl ?? '').trim();
+    if (custom.isNotEmpty) {
+      final parsed = Uri.tryParse(custom);
+      if (parsed != null && parsed.userInfo.isNotEmpty) {
+        final parts = parsed.userInfo.split(':');
+        final u = parts[0];
+        final p = parts.length > 1 ? parts.sublist(1).join(':') : '';
+        if (p.isNotEmpty) {
+          final cred = CameraCredentials(user: u, pass: p);
+          if (host.isNotEmpty) _credentials[host] = cred;
+          return cred;
+        }
+      }
+    }
+    final user = (camera.username ?? '').trim();
+    if (user.isNotEmpty && host.isNotEmpty && _credentials.containsKey(host)) {
+      return _credentials[host];
+    }
+    return null;
+  }
 
   static String _cacheKey(PlateCameraRow camera) =>
       '${camera.id}_${camera.host.trim()}_${camera.port ?? 0}';
@@ -31,8 +108,8 @@ class PlateCameraSnapshot {
   static List<Uri> candidates(PlateCameraRow camera) {
     final host = camera.host.trim();
     final port = camera.port;
-    // 554 RTSP portudur; HTTP anlık kare orada sunulmaz -> 8080/80'e düş.
-    final httpPort = (port == null || port == 554) ? 8080 : port;
+    // 554 RTSP portudur; HTTP anlık kare orada sunulmaz -> standart web portu 80'e düş.
+    final httpPort = (port == null || port == 554) ? 80 : port;
     final loopbackPort = (port != null && port != 554 && port != 80) ? port : 8080;
 
     final out = <Uri>[];
@@ -60,9 +137,9 @@ class PlateCameraSnapshot {
     }
 
     const snapshotPaths = <String>[
+      '/ISAPI/Streaming/channels/101/picture',
       '/snapshot.jpg',
       '/onvif/snapshot',
-      '/ISAPI/Streaming/channels/101/picture',
       '/cgi-bin/snapshot.cgi',
     ];
 
@@ -72,7 +149,9 @@ class PlateCameraSnapshot {
         addUnique(Uri.parse('$base$path'));
       }
       if (httpPort != 80) {
-        addUnique(Uri.parse('http://$host:80/snapshot.jpg'));
+        for (final path in snapshotPaths) {
+          addUnique(Uri.parse('http://$host:80$path'));
+        }
       }
       if (httpPort != 8080) {
         addUnique(Uri.parse('http://$host:8080/snapshot.jpg'));
@@ -88,10 +167,67 @@ class PlateCameraSnapshot {
     return out;
   }
 
-  static Map<String, String> _headers(PlateCameraRow camera) {
-    final user = (camera.username ?? '').trim();
-    if (user.isEmpty || !camera.hasPassword) return const <String, String>{};
-    return <String, String>{'Authorization': 'Basic ${base64Encode(utf8.encode('$user:'))}'};
+  static String? _extractDigestParam(String header, String param) {
+    final reg = RegExp('$param="?([^",]+)"?', caseSensitive: false);
+    final match = reg.firstMatch(header);
+    return match?.group(1);
+  }
+
+  static String _md5Hex(String s) => md5.convert(utf8.encode(s)).toString();
+
+  static String _buildDigestHeader({
+    required String method,
+    required Uri uri,
+    required String username,
+    required String password,
+    required _DigestChallenge challenge,
+  }) {
+    challenge.nc++;
+    final ncStr = challenge.nc.toRadixString(16).padLeft(8, '0');
+    final cnonce = '0a4f113b';
+    final path = uri.hasQuery ? '${uri.path}?${uri.query}' : uri.path;
+
+    final ha1 = _md5Hex('$username:${challenge.realm}:$password');
+    final ha2 = _md5Hex('$method:$path');
+
+    final qop = challenge.qop;
+    String response;
+    final buffer = StringBuffer('Digest username="$username", realm="${challenge.realm}", nonce="${challenge.nonce}", uri="$path"');
+
+    if (qop != null && qop.toLowerCase().contains('auth')) {
+      response = _md5Hex('$ha1:${challenge.nonce}:$ncStr:$cnonce:auth:$ha2');
+      buffer.write(', qop=auth, nc=$ncStr, cnonce="$cnonce", response="$response"');
+    } else {
+      response = _md5Hex('$ha1:${challenge.nonce}:$ha2');
+      buffer.write(', response="$response"');
+    }
+
+    if (challenge.opaque != null && challenge.opaque!.isNotEmpty) {
+      buffer.write(', opaque="${challenge.opaque}"');
+    }
+    return buffer.toString();
+  }
+
+  static Map<String, String> _headers(PlateCameraRow camera, Uri uri) {
+    final cred = resolveCredentials(camera);
+    final user = (cred?.user ?? camera.username ?? '').trim();
+    final pass = cred?.pass ?? '';
+
+    // Aktif bir Digest challenge varsa doğrudan Digest dene
+    final challenge = _activeChallenges[uri.host];
+    if (challenge != null && user.isNotEmpty && pass.isNotEmpty) {
+      final digest = _buildDigestHeader(
+        method: 'GET',
+        uri: uri,
+        username: user,
+        password: pass,
+        challenge: challenge,
+      );
+      return <String, String>{'Authorization': digest};
+    }
+
+    if (user.isEmpty) return const <String, String>{};
+    return <String, String>{'Authorization': 'Basic ${base64Encode(utf8.encode('$user:$pass'))}'};
   }
 
   /// [uri] adresinden tek kare çeker. JPEG değilse ya da çok küçükse hata döner.
@@ -104,7 +240,42 @@ class PlateCameraSnapshot {
   }) async {
     final key = _cacheKey(camera);
     try {
-      final res = await client.get(uri, headers: _headers(camera)).timeout(timeout);
+      http.Response res = await client.get(uri, headers: _headers(camera, uri)).timeout(timeout);
+
+      // Hikvision ve diğer IP kameralar için HTTP Digest kimlik doğrulama el sıkışması
+      if (res.statusCode == 401 && (res.headers['www-authenticate'] ?? '').toLowerCase().contains('digest')) {
+        final authHeader = res.headers['www-authenticate']!;
+        final realm = _extractDigestParam(authHeader, 'realm') ?? '';
+        final nonce = _extractDigestParam(authHeader, 'nonce') ?? '';
+        final qop = _extractDigestParam(authHeader, 'qop');
+        final opaque = _extractDigestParam(authHeader, 'opaque');
+
+        if (realm.isNotEmpty && nonce.isNotEmpty) {
+          final challenge = _DigestChallenge(
+            realm: realm,
+            nonce: nonce,
+            qop: qop,
+            opaque: opaque,
+          );
+          _activeChallenges[uri.host] = challenge;
+
+          final cred = resolveCredentials(camera);
+          final user = (cred?.user ?? camera.username ?? '').trim();
+          final pass = cred?.pass ?? '';
+
+          if (user.isNotEmpty && pass.isNotEmpty) {
+            final digestHeader = _buildDigestHeader(
+              method: 'GET',
+              uri: uri,
+              username: user,
+              password: pass,
+              challenge: challenge,
+            );
+            res = await client.get(uri, headers: <String, String>{'Authorization': digestHeader}).timeout(timeout);
+          }
+        }
+      }
+
       if (res.statusCode == 401 || res.statusCode == 403) {
         return SnapshotResult.failure('Kamera kimlik doğrulaması istiyor (HTTP ${res.statusCode}).');
       }
