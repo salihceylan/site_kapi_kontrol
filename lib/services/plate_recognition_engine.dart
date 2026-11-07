@@ -30,6 +30,10 @@ class PlateEngineDecision {
     this.personLabel,
     this.isGateTriggered = false,
     this.fromServer = false,
+    this.cameraId,
+    this.cameraName,
+    this.confidence,
+    this.snapshotBytes,
     DateTime? timestamp,
   }) : timestamp = timestamp ?? DateTime.now();
 
@@ -43,7 +47,36 @@ class PlateEngineDecision {
   final String? personLabel;
   final bool isGateTriggered;
   final bool fromServer;
+  final int? cameraId;
+  final String? cameraName;
+  final double? confidence;
+  final Uint8List? snapshotBytes;
   final DateTime timestamp;
+
+  PlateEngineDecision copyWith({
+    int? cameraId,
+    String? cameraName,
+    double? confidence,
+    Uint8List? snapshotBytes,
+    bool clearSnapshot = false,
+  }) =>
+      PlateEngineDecision(
+        plate: plate,
+        decision: decision,
+        reason: reason,
+        doorId: doorId,
+        gateName: gateName,
+        direction: direction,
+        apartmentLabel: apartmentLabel,
+        personLabel: personLabel,
+        isGateTriggered: isGateTriggered,
+        fromServer: fromServer,
+        cameraId: cameraId ?? this.cameraId,
+        cameraName: cameraName ?? this.cameraName,
+        confidence: confidence ?? this.confidence,
+        snapshotBytes: clearSnapshot ? null : (snapshotBytes ?? this.snapshotBytes),
+        timestamp: timestamp,
+      );
 }
 
 /// Plaka Okuma ve Kapı Tetikleme Motoru.
@@ -165,6 +198,25 @@ class PlateRecognitionEngine {
   PlateEngineDecision? get lastDecision => _lastDecision;
   int? _lastServerEventId;
 
+  static const int _maxRecentDecisions = 80;
+  final List<PlateEngineDecision> _recentDecisions = <PlateEngineDecision>[];
+  List<PlateEngineDecision> get recentDecisions => List<PlateEngineDecision>.unmodifiable(_recentDecisions);
+
+  void _recordDecision(PlateEngineDecision decision) {
+    _lastDecision = decision;
+    _recentDecisions.insert(0, decision);
+    // RAM koruması: eski kayıtlarda büyük JPEG baytlarını temizle
+    for (var i = 10; i < _recentDecisions.length; i++) {
+      if (_recentDecisions[i].snapshotBytes != null) {
+        _recentDecisions[i] = _recentDecisions[i].copyWith(clearSnapshot: true);
+      }
+    }
+    if (_recentDecisions.length > _maxRecentDecisions) {
+      _recentDecisions.removeRange(_maxRecentDecisions, _recentDecisions.length);
+    }
+    _decisionsController.add(decision);
+  }
+
   /// Son okunan plaka kararı (10 saniye sonra otomatik zaman aşımına uğrar)
   PlateEngineDecision? get currentActiveDecision {
     final d = _lastDecision;
@@ -220,10 +272,11 @@ class PlateRecognitionEngine {
       personLabel: row.identity?.personLabel ?? (row.identity?.isGuest == true ? 'Misafir Aracı' : null),
       isGateTriggered: decisionType == PlateDecisionType.acildi,
       fromServer: true,
+      cameraName: row.deviceName,
+      confidence: row.confidence,
       timestamp: seenAt ?? DateTime.now(),
     );
-    _lastDecision = d;
-    _decisionsController.add(d);
+    _recordDecision(d);
   }
 
   final StreamController<Map<int, Uint8List>> _framesController = StreamController<Map<int, Uint8List>>.broadcast();
@@ -263,8 +316,15 @@ class PlateRecognitionEngine {
   final Map<String, DateTime> _recentReads = <String, DateTime>{};
   final Map<int, DateTime> _lastCameraEventAt = <int, DateTime>{};
 
-  // 1) Kapı bazlı bir sonraki aracın okunabilmesi için bekleme süreleri (gateId -> bitiş zamanı)
+  // 1) Kapı + yön bazlı bir sonraki aracın okunabilmesi için bekleme süreleri
+  // Giriş şeridi ve çıkış şeridi birbirini bloklamaz (`${gateId}_giris` ve `${gateId}_cikis`).
+  final Map<String, DateTime> _gateLaneNextVehicleUntil = <String, DateTime>{};
   final Map<int, DateTime> _gateNextVehicleCooldownUntil = <int, DateTime>{};
+
+  // Paralel kamera döngüsü durum izleme (çevrimdışı kamera diğerlerini asla bekletmez)
+  final Set<int> _cameraCaptureInFlight = <int>{};
+  final Map<int, int> _cameraCaptureFailStreak = <int, int>{};
+  final Map<int, DateTime> _cameraNextCaptureRetryAt = <int, DateTime>{};
 
   // 2 & 3) Araç bazlı arka plaka engellemeleri (Giriş yapanın çıkış kamerasında, çıkanın giriş kamerasında okunmaması)
   final Map<String, PlateSuppression> _plateSuppressions = <String, PlateSuppression>{};
@@ -273,9 +333,14 @@ class PlateRecognitionEngine {
   final Map<int, DateTime> _cameraCooldownUntil = <int, DateTime>{};
 
   /// Kapının bir sonraki araç için beklemede olup olmadığını döndürür
-  bool isGateWaitingForNextVehicle(int gateId) {
+  bool isGateWaitingForNextVehicle(int gateId, {String? direction}) {
+    final now = DateTime.now();
+    if (direction != null) {
+      final laneUntil = _gateLaneNextVehicleUntil['${gateId}_$direction'];
+      return laneUntil != null && now.isBefore(laneUntil);
+    }
     final until = _gateNextVehicleCooldownUntil[gateId];
-    return until != null && DateTime.now().isBefore(until);
+    return until != null && now.isBefore(until);
   }
 
   /// Kapının bir sonraki araç için kalan bekleme süresini (sn) döndürür
@@ -415,7 +480,11 @@ class PlateRecognitionEngine {
     _loopTimer = null;
     _recentReads.clear();
     _lastCameraEventAt.clear();
+    _gateLaneNextVehicleUntil.clear();
     _gateNextVehicleCooldownUntil.clear();
+    _cameraCaptureInFlight.clear();
+    _cameraCaptureFailStreak.clear();
+    _cameraNextCaptureRetryAt.clear();
     _plateSuppressions.clear();
     _cameraCooldownUntil.clear();
     _lastCameraOverlays.clear();
@@ -512,19 +581,53 @@ class PlateRecognitionEngine {
     try {
       await PlateCameraSnapshot.loadPersistedCredentials();
       final cameras = List<PlateCameraRow>.from(_activeCameras);
+      // 4 kameranın tamamı birbirini beklemeden paralel tetiklenir
       for (final camera in cameras) {
         if (!_isRunning) break;
-        try {
-          final captured = await _captureFrame(camera);
-          if (captured != null && captured.bytes.isNotEmpty) {
-            await ingestCameraFrame(camera, captured.bytes, directPlate: captured.plate);
-          }
-        } catch (e) {
-          debugPrint('[PlateRecognitionEngine] Kamera ${camera.id} kare alma hatası: $e');
-        }
+        unawaited(_tickSingleCamera(camera));
       }
     } finally {
       _tickBusy = false;
+    }
+  }
+
+  Future<void> _tickSingleCamera(PlateCameraRow camera) async {
+    if (!_isRunning || _cameraCaptureInFlight.contains(camera.id)) return;
+    final now = DateTime.now();
+
+    // Canlı RTSP oynatıcı (PlateRtspVideoSurface) son 2 sn içinde zaten RAM karesi beslediyse
+    // kameraya fazladan HTTP snapshot isteği göndererek bant genişliğini ve FPS'i yorma.
+    final lastLiveFrame = _lastFrameReceivedAt[camera.id];
+    if (lastLiveFrame != null && now.difference(lastLiveFrame).inMilliseconds < 1900) {
+      return;
+    }
+
+    final retryAt = _cameraNextCaptureRetryAt[camera.id];
+    if (retryAt != null && now.isBefore(retryAt)) return;
+
+    _cameraCaptureInFlight.add(camera.id);
+    try {
+      final captured = await _captureFrame(camera);
+      if (captured != null && captured.bytes.isNotEmpty) {
+        _cameraCaptureFailStreak.remove(camera.id);
+        _cameraNextCaptureRetryAt.remove(camera.id);
+        await ingestCameraFrame(camera, captured.bytes, directPlate: captured.plate);
+      } else {
+        final fails = (_cameraCaptureFailStreak[camera.id] ?? 0) + 1;
+        _cameraCaptureFailStreak[camera.id] = fails;
+        if (fails >= 2) {
+          _cameraNextCaptureRetryAt[camera.id] = DateTime.now().add(const Duration(milliseconds: 3500));
+        }
+      }
+    } catch (e) {
+      final fails = (_cameraCaptureFailStreak[camera.id] ?? 0) + 1;
+      _cameraCaptureFailStreak[camera.id] = fails;
+      if (fails >= 2) {
+        _cameraNextCaptureRetryAt[camera.id] = DateTime.now().add(const Duration(milliseconds: 3500));
+      }
+      debugPrint('[PlateRecognitionEngine] Kamera ${camera.id} kare alma hatası: $e');
+    } finally {
+      _cameraCaptureInFlight.remove(camera.id);
     }
   }
 
@@ -567,7 +670,7 @@ class PlateRecognitionEngine {
         ? directPlate.trim()
         : null;
     if (cleanDirect == null) {
-      onnxDet = await PlateOnnxRecognizer.instance.detect(bytes);
+      onnxDet = await PlateOnnxRecognizer.instance.detect(bytes, cameraId: camera.id);
     }
 
     final resolvedPlate = onnxDet?.plate ?? cleanDirect;
@@ -651,21 +754,22 @@ class PlateRecognitionEngine {
     final now = DateTime.now();
     final gate = camera.gate;
     final gateId = gate?.id ?? 0;
+    final camDirection = camera.direction == 'cikis' ? 'cikis' : 'giris';
+    final laneKey = '${gateId}_$camDirection';
 
-    // KURAL 1: Kapı henüz bir sonraki araç için bekleme süresinde mi?
-    final gateLockUntil = _gateNextVehicleCooldownUntil[gateId];
+    // KURAL 1: Bu kapının bu yön şeridi henüz bir sonraki araç için bekleme süresinde mi?
+    final gateLockUntil = _gateLaneNextVehicleUntil[laneKey];
     if (gateLockUntil != null && now.isBefore(gateLockUntil)) {
-      return; // Bir önceki araç geçişi sonrası bekleme süresi dolmadı
+      return; // Aynı şeritteki bir önceki araç geçişi sonrası bekleme süresi dolmadı
     }
 
-    final detectedPlate = directPlate ?? await _extractPlateFromImage(frameBytes);
+    final detectedPlate = directPlate ?? await _extractPlateFromImage(frameBytes, cameraId: camera.id);
     if (detectedPlate == null || detectedPlate.isEmpty || detectedPlate.toLowerCase() == 'none') return;
 
     final plate = _normalizePlate(detectedPlate);
     if (!_isValidPlateFormat(plate)) return;
 
     // KURAL 2 & 3: Arka plaka engellemesi kontrolü
-    final camDirection = camera.direction == 'cikis' ? 'cikis' : 'giris';
     final supp = _plateSuppressions[plate];
     if (supp != null) {
       if (now.isBefore(supp.suppressUntil)) {
@@ -678,7 +782,7 @@ class PlateRecognitionEngine {
       }
     }
 
-    // Kısa mükerrer okuma koruması (Aynı plaka aynı kamerada 5 saniyeden sık tetiklenmesin)
+    // Kısa mükerrer okuma koruması (Aynı plaka 5 saniyeden sık tekrar tetiklenmesin)
     final lastSeen = _recentReads[plate];
     if (lastSeen != null && now.difference(lastSeen).inSeconds < 5) {
       return;
@@ -691,18 +795,24 @@ class PlateRecognitionEngine {
     _lastCameraEventAt[camera.id] = now;
 
     // --- KARAR MOTORU ---
-    final decision = _evaluatePlate(plate, camera);
-    _lastDecision = decision;
-    _decisionsController.add(decision);
+    final decision = _evaluatePlate(plate, camera).copyWith(
+      cameraId: camera.id,
+      cameraName: camera.name,
+      confidence: confidence ?? 0.95,
+      snapshotBytes: frameBytes,
+    );
+    _recordDecision(decision);
 
     // Eğer kapı açma kararı verildiyse:
     if (decision.decision == PlateDecisionType.acildi) {
-      // 1) Bir sonraki araç için bekleme süresini başlat (Varsayılan 10 sn veya kapı ayarı)
+      // 1) Bu şerit için bir sonraki araç bekleme süresini başlat (Varsayılan 10 sn veya kapı ayarı)
       final consecutiveDelay = gate != null && gate.consecutiveVehicleDelaySeconds > 0
           ? gate.consecutiveVehicleDelaySeconds
           : 10;
-      _gateNextVehicleCooldownUntil[gateId] = now.add(Duration(seconds: consecutiveDelay));
-      _cameraCooldownUntil[camera.id] = now.add(Duration(seconds: consecutiveDelay));
+      final until = now.add(Duration(seconds: consecutiveDelay));
+      _gateLaneNextVehicleUntil[laneKey] = until;
+      _gateNextVehicleCooldownUntil[gateId] = until;
+      _cameraCooldownUntil[camera.id] = until;
 
       // 2 & 3) Geçiş yapan aynı araç için koruma süresini başlat (60 sn):
       // Geçiş izni alan aynı araç belirlenen süre boyunca (varsayılan 60 sn):
@@ -751,13 +861,18 @@ class PlateRecognitionEngine {
       overrideDoorId: effectiveDoorId,
       overrideGateName: effectiveGateName,
       overrideDirection: direction,
+    ).copyWith(
+      cameraId: effectiveCamera?.id,
+      cameraName: effectiveCamera?.name ?? 'Simülasyon / Test',
+      confidence: 0.99,
     );
-    _lastDecision = decision;
-    _decisionsController.add(decision);
+    _recordDecision(decision);
 
     if (decision.decision == PlateDecisionType.acildi) {
       final consecutiveDelay = effectiveCamera?.gate?.consecutiveVehicleDelaySeconds ?? 10;
-      _gateNextVehicleCooldownUntil[effectiveDoorId] = DateTime.now().add(Duration(seconds: consecutiveDelay));
+      final until = DateTime.now().add(Duration(seconds: consecutiveDelay));
+      _gateLaneNextVehicleUntil['${effectiveDoorId}_${direction == 'cikis' ? 'cikis' : 'giris'}'] = until;
+      _gateNextVehicleCooldownUntil[effectiveDoorId] = until;
 
       final isEntry = direction != 'cikis';
       final suppressSec = isEntry
@@ -1030,8 +1145,8 @@ class PlateRecognitionEngine {
   }
 
   /// Uygulama içi ONNX sinir ağı tabanlı hızlı plaka tespiti ve OCR
-  Future<String?> _extractPlateFromImage(Uint8List bytes) async {
-    final res = await PlateOnnxRecognizer.instance.detect(bytes);
+  Future<String?> _extractPlateFromImage(Uint8List bytes, {int? cameraId}) async {
+    final res = await PlateOnnxRecognizer.instance.detect(bytes, cameraId: cameraId);
     return res?.plate;
   }
 }

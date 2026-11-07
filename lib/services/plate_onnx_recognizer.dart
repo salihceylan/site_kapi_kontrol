@@ -55,14 +55,18 @@ class PlateOnnxRecognizer {
   static const int _ocrHeight = 64;
   static const int _ocrMaxSlots = 10;
   static const int _ocrVocabSize = 37;
+  static const int _workerCount = 2;
 
   OrtSession? _detSession;
   OrtSession? _ocrSession;
   Future<bool>? _initFuture;
   bool _permanentlyDisabled = false;
-  bool _detectBusy = false;
 
-  _PlateImageWorker? _worker;
+  final List<_PlateImageWorker> _workers = <_PlateImageWorker>[];
+  final List<_AsyncMutex> _workerLocks = <_AsyncMutex>[];
+  final _AsyncMutex _ortSessionLock = _AsyncMutex();
+  final Set<int> _inFlightCameras = <int>{};
+  int _nextWorkerSlot = 0;
 
   static bool get isSupported {
     if (kIsWeb) return false;
@@ -74,10 +78,10 @@ class PlateOnnxRecognizer {
         Platform.isIOS;
   }
 
-  /// Modelleri ve arka plan piksel işleme izolatını hazırlar.
+  /// Modelleri ve paralel arka plan piksel işleme izolat havuzunu hazırlar.
   Future<bool> ensureInitialized() {
     if (!isSupported || _permanentlyDisabled) return Future<bool>.value(false);
-    if (_detSession != null && _ocrSession != null && _worker != null) {
+    if (_detSession != null && _ocrSession != null && _workers.length == _workerCount) {
       return Future<bool>.value(true);
     }
     return _initFuture ??= _doInitialize();
@@ -93,8 +97,16 @@ class PlateOnnxRecognizer {
       );
       _detSession ??= await ort.createSessionFromAsset(_detectorAsset, options: options);
       _ocrSession ??= await ort.createSessionFromAsset(_ocrAsset, options: options);
-      _worker ??= await _PlateImageWorker.spawn();
-      debugPrint('[PlateOnnxRecognizer] Yerel ONNX plaka tespit ve OCR modelleri hazır.');
+      while (_workers.length < _workerCount) {
+        final idx = _workers.length;
+        final w = await _PlateImageWorker.spawn(slotIndex: idx);
+        _workers.add(w);
+        _workerLocks.add(_AsyncMutex());
+      }
+      debugPrint(
+        '[PlateOnnxRecognizer] Yerel ONNX plaka tespit ve OCR modelleri hazır '
+        '(${_workers.length} paralel izolat aktif).',
+      );
       return true;
     } catch (e) {
       debugPrint('[PlateOnnxRecognizer] ONNX başlatma hatası: $e');
@@ -108,106 +120,134 @@ class PlateOnnxRecognizer {
   }
 
   /// Verilen JPEG karesi içinde plaka arar; geçerli bir Türk plakası bulursa kutu ve metni döndürür.
-  Future<PlateDetectionResult?> detect(Uint8List jpegBytes) async {
-    if (_detectBusy || jpegBytes.length < 512) return null;
+  ///
+  /// 4 kameranın tamamı aynı anda çağrıldığında hiçbir kamera diğerini düşürmez:
+  /// - Yalnızca **aynı** [cameraId] için halihazırda devam eden bir analiz varsa eski kare atlanır.
+  /// - Farklı kameralar 2 paralel arka plan `Isolate` işçisi ve adil C++ `OrtSession` kuyruğu üzerinden
+  ///   UI/RTSP FPS'ini sıfır etkileyerek eşzamanlı işlenir.
+  Future<PlateDetectionResult?> detect(Uint8List jpegBytes, {int? cameraId}) async {
+    if (jpegBytes.length < 512) return null;
+    if (cameraId != null && _inFlightCameras.contains(cameraId)) {
+      return null;
+    }
+
     final ready = await ensureInitialized();
     if (!ready) return null;
 
     final detSession = _detSession;
     final ocrSession = _ocrSession;
-    final worker = _worker;
-    if (detSession == null || ocrSession == null || worker == null) return null;
+    if (detSession == null || ocrSession == null || _workers.isEmpty) return null;
 
-    _detectBusy = true;
+    if (cameraId != null) {
+      _inFlightCameras.add(cameraId);
+    }
+
+    final slot = cameraId != null
+        ? (cameraId.abs() % _workers.length)
+        : ((_nextWorkerSlot++) % _workers.length);
+    final worker = _workers[slot];
+    final workerLock = _workerLocks[slot];
+
     try {
-      final prep = await worker.prepareDetectorInput(jpegBytes);
-      if (prep == null) return null;
+      return await workerLock.synchronized<PlateDetectionResult?>(() async {
+        try {
+          final prep = await worker.prepareDetectorInput(jpegBytes);
+          if (prep == null) return null;
 
-      final imgW = prep.width;
-      final imgH = prep.height;
-      if (imgW <= 0 || imgH <= 0) return null;
+          final imgW = prep.width;
+          final imgH = prep.height;
+          if (imgW <= 0 || imgH <= 0) return null;
 
-      final boxes = await _runDetector(detSession, prep.nchwFloat32, imgW, imgH);
-      if (boxes.isEmpty) return null;
-
-      PlateDetectionResult? bestResult;
-      double bestScore = -1.0;
-
-      // En yüksek güvenli ilk 3 plaka adayını incele
-      final limit = math.min(boxes.length, 3);
-      for (var i = 0; i < limit; i++) {
-        final box = boxes[i];
-        final bw = box.x2 - box.x1;
-        final bh = box.y2 - box.y1;
-        final isTiltedCandidate = bw > 0 && (bh / bw) > 0.36;
-
-        // Önce standart kırpma; başarısızsa genişletilmiş ve eğim düzeltmeli (deskew) adaylar
-        final attempts = <(double pad, double angle)>[
-          (0.06, 0.0),
-          (0.15, 0.0),
-          if (isTiltedCandidate) (0.10, 24.0),
-          if (isTiltedCandidate) (0.10, -24.0),
-        ];
-
-        for (final (padRatio, angleDeg) in attempts) {
-          final cropRgb = await worker.cropForOcr(
-            x1: box.x1,
-            y1: box.y1,
-            x2: box.x2,
-            y2: box.y2,
-            padRatio: padRatio,
-            angleDeg: angleDeg,
+          final boxes = await _ortSessionLock.synchronized(
+            () => _runDetector(detSession, prep.nchwFloat32, imgW, imgH),
           );
-          if (cropRgb == null || cropRgb.length != _ocrWidth * _ocrHeight * 3) {
-            continue;
+          if (boxes.isEmpty) return null;
+
+          PlateDetectionResult? bestResult;
+          double bestScore = -1.0;
+
+          // En yüksek güvenli ilk 3 plaka adayını incele
+          final limit = math.min(boxes.length, 3);
+          for (var i = 0; i < limit; i++) {
+            final box = boxes[i];
+            final bw = box.x2 - box.x1;
+            final bh = box.y2 - box.y1;
+            final isTiltedCandidate = bw > 0 && (bh / bw) > 0.36;
+
+            // Önce standart kırpma; başarısızsa genişletilmiş ve eğim düzeltmeli (deskew) adaylar
+            final attempts = <(double pad, double angle)>[
+              (0.06, 0.0),
+              (0.15, 0.0),
+              if (isTiltedCandidate) (0.10, 24.0),
+              if (isTiltedCandidate) (0.10, -24.0),
+            ];
+
+            for (final (padRatio, angleDeg) in attempts) {
+              final cropRgb = await worker.cropForOcr(
+                x1: box.x1,
+                y1: box.y1,
+                x2: box.x2,
+                y2: box.y2,
+                padRatio: padRatio,
+                angleDeg: angleDeg,
+              );
+              if (cropRgb == null || cropRgb.length != _ocrWidth * _ocrHeight * 3) {
+                continue;
+              }
+
+              final (rawPlate, ocrProb) = await _ortSessionLock.synchronized(
+                () => _runOcr(ocrSession, cropRgb),
+              );
+              if (rawPlate.isEmpty) continue;
+
+              final formatted = formatTrPlate(rawPlate);
+              if (formatted == null) continue;
+
+              final combinedConf = ((box.confidence * 0.45) + (ocrProb * 0.55)).clamp(0.0, 1.0);
+              final canonical = formatted.replaceAll(' ', '');
+              final normRect = Rect.fromLTRB(
+                (box.x1 / imgW).clamp(0.0, 1.0),
+                (box.y1 / imgH).clamp(0.0, 1.0),
+                (box.x2 / imgW).clamp(0.0, 1.0),
+                (box.y2 / imgH).clamp(0.0, 1.0),
+              );
+
+              final candidate = PlateDetectionResult(
+                plate: formatted,
+                canonicalPlate: canonical,
+                confidence: combinedConf,
+                normalizedBox: normRect,
+                sourceAspectRatio: imgW / imgH,
+              );
+
+              // İlk denemede yüksek güvenle geçerli Türk plakası okunduysa anında dön
+              if (ocrProb >= 0.72 && angleDeg == 0.0) {
+                return candidate;
+              }
+
+              if (combinedConf > bestScore) {
+                bestScore = combinedConf;
+                bestResult = candidate;
+              }
+              // Bu kutu için geçerli plaka bulundu, aynı kutuda diğer açıları denemeye gerek yok
+              break;
+            }
           }
 
-          final (rawPlate, ocrProb) = await _runOcr(ocrSession, cropRgb);
-          if (rawPlate.isEmpty) continue;
-
-          final formatted = formatTrPlate(rawPlate);
-          if (formatted == null) continue;
-
-          final combinedConf = ((box.confidence * 0.45) + (ocrProb * 0.55)).clamp(0.0, 1.0);
-          final canonical = formatted.replaceAll(' ', '');
-          final normRect = Rect.fromLTRB(
-            (box.x1 / imgW).clamp(0.0, 1.0),
-            (box.y1 / imgH).clamp(0.0, 1.0),
-            (box.x2 / imgW).clamp(0.0, 1.0),
-            (box.y2 / imgH).clamp(0.0, 1.0),
-          );
-
-          final candidate = PlateDetectionResult(
-            plate: formatted,
-            canonicalPlate: canonical,
-            confidence: combinedConf,
-            normalizedBox: normRect,
-            sourceAspectRatio: imgW / imgH,
-          );
-
-          // İlk denemede yüksek güvenle geçerli Türk plakası okunduysa anında dön
-          if (ocrProb >= 0.72 && angleDeg == 0.0) {
-            return candidate;
-          }
-
-          if (combinedConf > bestScore) {
-            bestScore = combinedConf;
-            bestResult = candidate;
-          }
-          // Bu kutu için geçerli plaka bulundu, aynı kutuda diğer açıları denemeye gerek yok
-          break;
+          return bestResult;
+        } finally {
+          try {
+            await worker.clearActiveFrame();
+          } catch (_) {}
         }
-      }
-
-      return bestResult;
+      });
     } catch (e) {
       debugPrint('[PlateOnnxRecognizer] Kare analiz hatası: $e');
       return null;
     } finally {
-      try {
-        await worker.clearActiveFrame();
-      } catch (_) {}
-      _detectBusy = false;
+      if (cameraId != null) {
+        _inFlightCameras.remove(cameraId);
+      }
     }
   }
 
@@ -503,6 +543,21 @@ class PlateRawBox {
   final double confidence;
 }
 
+class _AsyncMutex {
+  Future<void> _tail = Future<void>.value();
+
+  Future<T> synchronized<T>(Future<T> Function() action) {
+    final prev = _tail;
+    final completer = Completer<void>();
+    _tail = completer.future;
+    return prev.then((_) => action()).whenComplete(() {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    });
+  }
+}
+
 class _DetectorPrepOutput {
   const _DetectorPrepOutput({
     required this.width,
@@ -527,12 +582,12 @@ class _PlateImageWorker {
   final Map<int, Completer<List<dynamic>?>> _pending = <int, Completer<List<dynamic>?>>{};
   int _nextId = 1;
 
-  static Future<_PlateImageWorker> spawn() async {
+  static Future<_PlateImageWorker> spawn({int slotIndex = 0}) async {
     final readyPort = ReceivePort();
     final isolate = await Isolate.spawn<_WorkerBootstrap>(
       _workerEntryPoint,
       _WorkerBootstrap(readyPort.sendPort),
-      debugName: 'PlateOnnxImageWorker',
+      debugName: 'PlateOnnxImageWorker_$slotIndex',
     );
     final sendPort = await readyPort.first as SendPort;
     readyPort.close();

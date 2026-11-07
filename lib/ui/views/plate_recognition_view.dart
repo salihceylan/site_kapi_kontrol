@@ -18,6 +18,7 @@ import 'package:site_kapi_kontrol/ui/design/license_plate.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/plate_camera_form_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/plate_discovery_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/plate_live_command_center.dart';
 import 'package:site_kapi_kontrol/ui/helpers/plate_input.dart';
 import 'package:site_kapi_kontrol/ui/widgets/plate_camera_live_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/plate_gates_panel.dart';
@@ -55,6 +56,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
   int _tab = 0;
   int _settingsSubTab = 0;
   bool _loading = true;
+  bool _commandCenterOpen = false;
   String? _error;
   int _loadToken = 0;
   List<PlateDecisionRow> _events = const <PlateDecisionRow>[];
@@ -513,7 +515,19 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
         watermarkIcon: Icons.camera_alt_outlined,
         accentColor: const Color(0xFF10B981),
         actions: <Widget>[
+          FilledButton.icon(
+            key: const ValueKey<String>('gates_header_live_wall_btn'),
+            onPressed: () => unawaited(_openLiveCommandCenter(site)),
+            icon: const Icon(Icons.fullscreen_rounded, size: 16),
+            label: const Text('Tam Ekran Canlı Akış'),
+            style: FilledButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              backgroundColor: const Color(0xFF8B5CF6),
+              foregroundColor: Colors.white,
+            ),
+          ),
           if (site.canWrite) ...<Widget>[
+            const SizedBox(width: AppSpace.xs),
             OutlinedButton.icon(
               onPressed: () => _showDiscoveryDialog(site),
               icon: const Icon(Icons.wifi_find_rounded, size: 16),
@@ -536,17 +550,19 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
         ],
       ),
       const SizedBox(height: AppSpace.md),
-      PlateGatesPanel(
-        service: _service,
-        camerasService: _cameras,
-        siteCode: site.code,
-        canWrite: site.canWrite,
-        overview: gates,
-        inside: inside,
-        onChanged: () => unawaited(reload()),
-        onAddCamera: (gate) => unawaited(_addCameraForGate(site, gate)),
-        onDiscoverCameras: () => unawaited(_showDiscoveryDialog(site)),
-      ),
+      if (!_commandCenterOpen)
+        PlateGatesPanel(
+          service: _service,
+          camerasService: _cameras,
+          siteCode: site.code,
+          canWrite: site.canWrite,
+          overview: gates,
+          inside: inside,
+          onChanged: () => unawaited(reload()),
+          onAddCamera: (gate) => unawaited(_addCameraForGate(site, gate)),
+          onDiscoverCameras: () => unawaited(_showDiscoveryDialog(site)),
+          onOpenLiveWall: (gate) => unawaited(_openLiveCommandCenter(site, initialGateId: gate.id)),
+        ),
     ];
   }
 
@@ -604,21 +620,57 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
     }
   }
 
+  Future<void> _openLiveCommandCenter(PlateSite site, {int? initialGateId}) async {
+    if (_commandCenterOpen) return;
+    setState(() => _commandCenterOpen = true);
+    try {
+      await showPlateLiveCommandCenter(
+        context,
+        authService: widget.authService,
+        initialSite: site,
+        sites: widget.sites,
+        service: _service,
+        camerasService: _cameras,
+        initialGateId: initialGateId ?? (_gates?.gates.isNotEmpty == true ? _gates!.gates.first.id : null),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _commandCenterOpen = false);
+        unawaited(reload(silent: true));
+      }
+    }
+  }
+
   List<Widget> _liveFeedTab(PlateSite site) => <Widget>[
     _buildTabHeader(
       title: 'Canlı Kamera Akışları',
-      subtitle: 'Tüm kapılara bağlı IP kameraların gerçek zamanlı RTSP video yayınları.',
+      subtitle: 'Tüm kapılara bağlı IP kameraların gerçek zamanlı 4 kameralı (2 Giriş + 2 Çıkış) RTSP izleme merkezi.',
       icon: Icons.videocam_rounded,
       watermarkIcon: Icons.smart_display_outlined,
       accentColor: const Color(0xFF8B5CF6),
+      actions: <Widget>[
+        FilledButton.icon(
+          key: const ValueKey<String>('open_fullscreen_live_wall_btn'),
+          onPressed: () => unawaited(_openLiveCommandCenter(site)),
+          icon: const Icon(Icons.fullscreen_rounded, size: 18),
+          label: const Text('Tam Ekran 4 Kameralı Canlı Akışı Aç'),
+          style: FilledButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            backgroundColor: const Color(0xFF8B5CF6),
+            foregroundColor: Colors.white,
+          ),
+        ),
+      ],
     ),
     const SizedBox(height: AppSpace.md),
-    PlateLiveCamerasSection(
-      key: ValueKey<String>('live_cams_${site.code}'),
-      camerasService: _cameras,
-      siteCode: site.code,
-    ),
-    PlateLiveFeedPanel(key: ValueKey<int>(site.code), service: _service, siteCode: site.code),
+    if (!_commandCenterOpen) ...<Widget>[
+      PlateLiveCamerasSection(
+        key: ValueKey<String>('live_cams_${site.code}'),
+        camerasService: _cameras,
+        siteCode: site.code,
+      ),
+      PlateLiveFeedPanel(key: ValueKey<int>(site.code), service: _service, siteCode: site.code),
+    ],
   ];
 
   List<Widget> _settingsTab(PlateSite site) {
@@ -856,14 +908,32 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
                   ),
                 ),
                 const SizedBox(width: AppSpace.sm),
-                OutlinedButton.icon(
-                  onPressed: () => _showPlateSimulationDialog(site),
-                  icon: const Icon(Icons.speed_rounded, size: 18),
-                  label: const Text('Plaka Test Et'),
-                  style: OutlinedButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: AppSpace.xs),
-                  ),
+                Wrap(
+                  spacing: AppSpace.xs,
+                  runSpacing: AppSpace.xs,
+                  children: <Widget>[
+                    FilledButton.icon(
+                      key: const ValueKey<String>('windows_banner_live_wall_btn'),
+                      onPressed: () => unawaited(_openLiveCommandCenter(site)),
+                      icon: const Icon(Icons.videocam_rounded, size: 17),
+                      label: const Text('Canlı Akış'),
+                      style: FilledButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        backgroundColor: const Color(0xFF8B5CF6),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: AppSpace.xs),
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => _showPlateSimulationDialog(site),
+                      icon: const Icon(Icons.speed_rounded, size: 18),
+                      label: const Text('Plaka Test Et'),
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: AppSpace.xs),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1161,7 +1231,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
     );
   }
 
-  Widget _buildColoredTabs() {
+  Widget _buildColoredTabs(PlateSite site) {
     final tabConfigs = [
       (
         label: _tabs[0],
@@ -1199,6 +1269,13 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
           InkWell(
             key: ValueKey<String>('plate_tab_$i'),
             onTap: () {
+              if (i == 2) {
+                if (_tab != 2) {
+                  setState(() => _tab = 2);
+                }
+                unawaited(_openLiveCommandCenter(site));
+                return;
+              }
               if (_tab == i) return;
               setState(() => _tab = i);
               unawaited(reload());
@@ -1246,7 +1323,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
       _buildWindowsEngineBanner(site)
     else
       _buildNonWindowsInfoBanner(site),
-    _buildColoredTabs(),
+    _buildColoredTabs(site),
     const SizedBox(height: AppSpace.md),
     if (_loading)
       const Center(child: Padding(padding: EdgeInsets.all(AppSpace.lg), child: CircularProgressIndicator()))

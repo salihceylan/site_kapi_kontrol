@@ -225,7 +225,7 @@ class _PlateRtspVideoSurfaceState extends State<PlateRtspVideoSurface> {
               muted: true,
               osc: false,
               libass: false,
-              bufferSize: 2 * 1024 * 1024,
+              bufferSize: 1024 * 1024,
               logLevel: MPVLogLevel.error,
               protocolWhitelist: _rtspWhitelist,
             ),
@@ -384,10 +384,18 @@ class _PlateRtspVideoSurfaceState extends State<PlateRtspVideoSurface> {
 
   /// Canlı RTSP akışı oynatılırken kameraya fazladan HTTP isteği atmadan doğrudan RAM'deki
   /// çözülmüş video karesinden plaka motorunu ve uzak sunucu önizlemesini besler.
+  /// 4 kamera aynı anda çalışırken kare yakalama zamanları kademelendirilir (`staggerMs`),
+  /// böylece 30/60 FPS video akışında hiçbir anlık yük sıçraması yaşanmaz.
   void _startEngineFrameFeeder() {
     _frameFeederTimer?.cancel();
     if (!widget.feedEngine) return;
-    _frameFeederTimer = Timer.periodic(const Duration(milliseconds: 1400), (_) {
+    final staggerMs = (widget.camera.id.abs() % 4) * 140;
+    Future<void>.delayed(Duration(milliseconds: 300 + staggerMs), () {
+      if (!_disposed && mounted) {
+        unawaited(_captureFrameForEngine());
+      }
+    });
+    _frameFeederTimer = Timer.periodic(Duration(milliseconds: 920 + staggerMs), (_) {
       unawaited(_captureFrameForEngine());
     });
   }

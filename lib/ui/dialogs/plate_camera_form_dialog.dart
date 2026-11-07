@@ -25,10 +25,20 @@ Future<bool?> showPlateCameraForm(
   PlateCameraRow? editing,
   DiscoveredDevice? prefill,
   int? initialGateId,
+  String? initialDirection,
+  String? initialName,
 }) {
   return showDialog<bool>(
     context: context,
-    builder: (context) => PlateCameraFormDialog(overview: overview, onSave: onSave, editing: editing, prefill: prefill, initialGateId: initialGateId),
+    builder: (context) => PlateCameraFormDialog(
+      overview: overview,
+      onSave: onSave,
+      editing: editing,
+      prefill: prefill,
+      initialGateId: initialGateId,
+      initialDirection: initialDirection,
+      initialName: initialName,
+    ),
   );
 }
 
@@ -41,7 +51,16 @@ String plateCameraSavedMessage(int? probeId, PlateCamerasOverview overview) {
 }
 
 class PlateCameraFormDialog extends StatefulWidget {
-  const PlateCameraFormDialog({super.key, required this.overview, required this.onSave, this.editing, this.prefill, this.initialGateId});
+  const PlateCameraFormDialog({
+    super.key,
+    required this.overview,
+    required this.onSave,
+    this.editing,
+    this.prefill,
+    this.initialGateId,
+    this.initialDirection,
+    this.initialName,
+  });
 
   final PlateCamerasOverview overview;
   final Future<void> Function(PlateCameraDraft draft) onSave;
@@ -50,6 +69,12 @@ class PlateCameraFormDialog extends StatefulWidget {
 
   /// Yeni kamera için ön seçili kapı (kapı satırındaki "Kamera ekle"); düzenlemede yok sayılır. Kapı listede yoksa "Kapı yok" kalır.
   final int? initialGateId;
+
+  /// Yeni kamera için ön seçili yön (`giris` | `cikis` | `auto`); örn. 4'lü canlı akışta Giriş 2 veya Çıkış 1 yuvasından eklerken.
+  final String? initialDirection;
+
+  /// Yeni kamera için önerilen başlangıç adı (örn. `Ana Kapı - Giriş 2`).
+  final String? initialName;
 
   @override
   State<PlateCameraFormDialog> createState() => _PlateCameraFormDialogState();
@@ -76,7 +101,8 @@ class _PlateCameraFormDialogState extends State<PlateCameraFormDialog> {
     final c = widget.editing;
     final d = widget.prefill;
     _brand = c?.brand ?? 'onvif';
-    _name = TextEditingController(text: c?.name ?? d?.name ?? '');
+    final suggestedName = (c?.name ?? d?.name ?? widget.initialName ?? '').trim();
+    _name = TextEditingController(text: suggestedName);
     _host = TextEditingController(text: c?.host ?? d?.ip ?? '');
     final port = c?.port ?? d?.rtspPort;
     _port = TextEditingController(text: port?.toString() ?? '');
@@ -88,6 +114,11 @@ class _PlateCameraFormDialogState extends State<PlateCameraFormDialog> {
       _direction = c?.direction ?? 'auto';
     } else if (c == null && widget.initialGateId != null && widget.overview.gates.any((g) => g.id == widget.initialGateId)) {
       _gateId = widget.initialGateId;
+      if (widget.initialDirection != null && widget.initialDirection!.isNotEmpty) {
+        _direction = widget.initialDirection!;
+      }
+    } else if (c == null && widget.initialDirection != null && widget.initialDirection!.isNotEmpty) {
+      _direction = widget.initialDirection!;
     }
   }
 

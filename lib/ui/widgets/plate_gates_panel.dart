@@ -50,6 +50,7 @@ class PlateGatesPanel extends StatefulWidget {
     this.camerasService,
     this.onAddCamera,
     this.onDiscoverCameras,
+    this.onOpenLiveWall,
   });
 
   final PlateRecognitionService service;
@@ -65,6 +66,9 @@ class PlateGatesPanel extends StatefulWidget {
 
   /// Ağda kamera ara (otomatik ONVIF keşfi).
   final VoidCallback? onDiscoverCameras;
+
+  /// Bu kapı için tam ekran 4 kameralı Canlı Akış penceresini açar.
+  final void Function(PlateGate gate)? onOpenLiveWall;
 
   @override
   State<PlateGatesPanel> createState() => _PlateGatesPanelState();
@@ -879,20 +883,41 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
                 ],
               ),
 
-            // Kapı Alt Eylemi: Kamera Ekle
-            if (widget.canWrite && widget.onAddCamera != null) ...<Widget>[
+            // Kapı Alt Eylemleri: Canlı Akış & Kamera Ekle
+            if (widget.onOpenLiveWall != null || (widget.canWrite && widget.onAddCamera != null)) ...<Widget>[
               const SizedBox(height: AppSpace.sm),
               Align(
                 alignment: Alignment.centerRight,
-                child: FilledButton.tonalIcon(
-                  key: ValueKey<String>('gate_add_camera_${gate.id}'),
-                  onPressed: () => widget.onAddCamera!(gate),
-                  icon: const Icon(Icons.add_a_photo_outlined, size: 16),
-                  label: const Text('Bu Kapıya Kamera Ekle / Ata'),
-                  style: FilledButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.xs),
-                  ),
+                child: Wrap(
+                  spacing: AppSpace.xs,
+                  runSpacing: AppSpace.xs,
+                  alignment: WrapAlignment.end,
+                  children: <Widget>[
+                    if (widget.onOpenLiveWall != null)
+                      FilledButton.icon(
+                        key: ValueKey<String>('gate_live_wall_btn_${gate.id}'),
+                        onPressed: () => widget.onOpenLiveWall!(gate),
+                        icon: const Icon(Icons.fullscreen_rounded, size: 17),
+                        label: const Text('Canlı Akış (4 Kamera)'),
+                        style: FilledButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          backgroundColor: const Color(0xFF8B5CF6),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.xs),
+                        ),
+                      ),
+                    if (widget.canWrite && widget.onAddCamera != null)
+                      FilledButton.tonalIcon(
+                        key: ValueKey<String>('gate_add_camera_${gate.id}'),
+                        onPressed: () => widget.onAddCamera!(gate),
+                        icon: const Icon(Icons.add_a_photo_outlined, size: 16),
+                        label: const Text('Bu Kapıya Kamera Ekle / Ata'),
+                        style: FilledButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.xs),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ],
@@ -1046,7 +1071,6 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
 }
 
 /// Kapı ekle / düzenle penceresi.
-@visibleForTesting
 class GateEditDialog extends StatefulWidget {
   const GateEditDialog({super.key, required this.overview, this.gate});
 
@@ -1268,7 +1292,6 @@ class GateTimingsDraft {
 }
 
 /// Sadece geçiş ve güvenlik sürelerini hızlıca düzenleme penceresi.
-@visibleForTesting
 class GateTimingsDialog extends StatefulWidget {
   const GateTimingsDialog({super.key, required this.gate});
 
