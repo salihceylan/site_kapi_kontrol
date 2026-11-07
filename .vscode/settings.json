@@ -5,6 +5,7 @@
   "python.defaultInterpreterPath": "C:\\Users\\fingonancalime\\AppData\\Local\\Programs\\Python\\Python310\\python.exe",
   "python.analysis.typeCheckingMode": "off",
   "dart.analysisExcludedFolders": [
+    ".claude",
     "build",
     ".dart_tool",
     ".pio",
@@ -26,6 +27,7 @@
   ],
   "files.watcherExclude": {
     "**/.git/**": true,
+    "**/.claude/**": true,
     "**/node_modules/**": true,
     "**/.dart_tool/**": true,
     "**/build/**": true,
