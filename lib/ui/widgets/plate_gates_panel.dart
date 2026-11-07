@@ -136,6 +136,43 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
     );
   }
 
+  Future<void> _createGate() async {
+    final draft = await showDialog<GateDraft>(
+      context: context,
+      builder: (_) => GateEditDialog(overview: _o),
+    );
+    if (draft == null || !mounted) return;
+    await _run(
+      () => widget.service.createGatePoint(widget.siteCode, draft),
+      'Yeni geçiş noktası başarıyla eklendi.',
+    );
+  }
+
+  Future<void> _editGate(PlateGate gate) async {
+    final draft = await showDialog<GateDraft>(
+      context: context,
+      builder: (_) => GateEditDialog(overview: _o, gate: gate),
+    );
+    if (draft == null || !mounted) return;
+    await _run(
+      () => widget.service.updateGatePoint(widget.siteCode, gate.id, draft),
+      '${gate.name} geçiş noktası güncellendi.',
+    );
+  }
+
+  Future<void> _deleteGate(PlateGate gate) async {
+    final ok = await _confirm(
+      'Geçiş Noktası Silinsin mi?',
+      '${gate.name} geçiş noktası silinecektir. Varsa bağlı kameralar atanmamış duruma geçecektir. Onaylıyor musunuz?',
+      'Sil',
+    );
+    if (!ok || !mounted) return;
+    await _run(
+      () => widget.service.deleteGatePoint(widget.siteCode, gate.id),
+      '${gate.name} geçiş noktası silindi.',
+    );
+  }
+
   Future<void> _probeCamera(int cameraId) async {
     final cs = widget.camerasService;
     if (cs == null) return;
@@ -724,12 +761,30 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
                 if (widget.canWrite) ...<Widget>[
                   const SizedBox(width: AppSpace.xs),
                   IconButton(
+                    key: ValueKey<String>('gate_edit_btn_${gate.id}'),
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    tooltip: 'Kapı Adı ve Cihazını Düzenle',
+                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    padding: EdgeInsets.zero,
+                    onPressed: () => _editGate(gate),
+                  ),
+                  const SizedBox(width: 2),
+                  IconButton(
                     key: ValueKey<String>('gate_timings_edit_btn_${gate.id}'),
                     icon: const Icon(Icons.tune_rounded, size: 20),
                     tooltip: 'Geçiş ve Güvenlik Sürelerini Ayarla',
                     constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                     padding: EdgeInsets.zero,
                     onPressed: () => _editGateTimings(gate),
+                  ),
+                  const SizedBox(width: 2),
+                  IconButton(
+                    key: ValueKey<String>('gate_delete_btn_${gate.id}'),
+                    icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                    tooltip: 'Geçiş Noktasını Sil',
+                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    padding: EdgeInsets.zero,
+                    onPressed: () => _deleteGate(gate),
                   ),
                 ],
               ],
@@ -983,12 +1038,47 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
 
         _section(
           'Geçiş noktaları',
-          actions: const <Widget>[],
+          actions: <Widget>[
+            if (widget.canWrite)
+              FilledButton.icon(
+                key: const ValueKey<String>('add_gate_point_btn'),
+                onPressed: _createGate,
+                icon: const Icon(Icons.add_rounded, size: 16),
+                label: const Text('Yeni Geçiş Noktası Ekle'),
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  backgroundColor: const Color(0xFF10B981),
+                  foregroundColor: Colors.white,
+                ),
+              ),
+          ],
         ),
         if (o.gates.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: AppSpace.md),
-            child: Text('SmartKeyPass üzerinde kayıtlı kapı bulunamadı. Önce Geçiş Kontrol modülünden kapı ekleyiniz.'),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpace.md),
+            child: AppCard(
+              padding: const EdgeInsets.all(AppSpace.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text('Bu sitede henüz kayıtlı bir geçiş noktası bulunamadı. Kameraları ve SmartKeyPass rölelerini bağlamak için yeni bir geçiş noktası ekleyin.'),
+                  if (widget.canWrite) ...<Widget>[
+                    const SizedBox(height: AppSpace.sm),
+                    FilledButton.icon(
+                      key: const ValueKey<String>('empty_add_gate_point_btn'),
+                      onPressed: _createGate,
+                      icon: const Icon(Icons.add_rounded, size: 16),
+                      label: const Text('Geçiş Noktası Ekle'),
+                      style: FilledButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         for (final gate in o.gates) _gateCard(gate),
 
