@@ -49,6 +49,7 @@ dependencies:
   media_kit: ^1.2.6
   media_kit_video: ^2.0.1
   media_kit_libs_video: ^1.0.7
+  flutter_onnxruntime: ^1.9.0
 
 dev_dependencies:
   flutter_test:
@@ -64,3 +65,5 @@ flutter:
     - assets/fonts/Roboto-Regular.ttf
     - assets/fonts/Roboto-Bold.ttf
     - assets/fonts/LICENSE_Roboto.txt
+    - assets/models/plate_detector_yolov9t_384.onnx
+    - assets/models/plate_ocr_cct_s_v2.onnx

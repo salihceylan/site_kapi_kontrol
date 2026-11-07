@@ -681,23 +681,39 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
   Future<void> _syncWindowsEngine(PlateSite site) async {
     if (site.isResident) return;
     try {
-      final camerasOverview = await _cameras.overview(site.code);
-      final blacklist = await _service.blacklist(site.code);
-      final permits = await _service.permits(site.code);
-      final inside = await _service.inside(site.code);
+      List<PlateCameraRow> cameras = <PlateCameraRow>[];
+      try {
+        final camerasOverview = await _cameras.overview(site.code);
+        cameras = camerasOverview.cameras;
+      } catch (_) {
+        cameras = PlateRecognitionEngine.instance.activeCameras;
+      }
+
+      List<PlateBlacklistItem> blacklist = _blacklist;
+      try {
+        blacklist = await _service.blacklist(site.code);
+      } catch (_) {}
+
+      List<PlatePermit> permits = _permits;
+      try {
+        permits = await _service.permits(site.code);
+      } catch (_) {}
 
       final parkingSlots = <int, int>{};
       final insideCounts = <int, int>{};
       final slotsByLabel = <String, int>{};
       final insideByLabel = <String, int>{};
-      for (final apt in inside.apartments) {
-        if (apt.id != null) {
-          parkingSlots[apt.id!] = apt.parkingSlots;
-          insideCounts[apt.id!] = apt.insideCount;
+      try {
+        final inside = _inside ?? await _service.inside(site.code);
+        for (final apt in inside.apartments) {
+          if (apt.id != null) {
+            parkingSlots[apt.id!] = apt.parkingSlots;
+            insideCounts[apt.id!] = apt.insideCount;
+          }
+          slotsByLabel[apt.label] = apt.parkingSlots;
+          insideByLabel[apt.label] = apt.insideCount;
         }
-        slotsByLabel[apt.label] = apt.parkingSlots;
-        insideByLabel[apt.label] = apt.insideCount;
-      }
+      } catch (_) {}
 
       final vehiclesMap = <String, Map<String, dynamic>>{};
       try {
@@ -725,7 +741,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
         siteCode: site.code,
         baseUrl: widget.authService.api.baseUrl,
         token: widget.authService.session?.token,
-        cameras: camerasOverview.cameras,
+        cameras: cameras,
         blacklist: blacklist,
         guestPermits: permits,
         vehicles: vehiclesMap,

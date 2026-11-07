@@ -10,6 +10,7 @@ import 'package:site_kapi_kontrol/services/plate_cameras_api.dart';
 import 'package:site_kapi_kontrol/services/plate_recognition_engine.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/widgets/plate_live_box_overlay.dart';
 import 'package:site_kapi_kontrol/ui/widgets/plate_rtsp_video_surface.dart';
 
 /// Karo menüsü eylemleri.
@@ -115,8 +116,11 @@ class _PlateCameraTileState extends State<PlateCameraTile> with WidgetsBindingOb
   bool _rtspPlaying = false;
   Timer? _timer;
   StreamSubscription? _localFramesSub;
+  StreamSubscription<Map<int, PlateLiveOverlay>>? _overlaysSub;
   StreamSubscription? _decisionsSub;
+  StreamSubscription<void>? _clearSub;
   String? _detectedPlate;
+  PlateLiveOverlay? _liveOverlay;
   PlateEngineDecision? _detectedDecision;
   DateTime? _detectedPlateAt;
 
@@ -128,22 +132,60 @@ class _PlateCameraTileState extends State<PlateCameraTile> with WidgetsBindingOb
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      if (_wantsImage) {
+        PlateRecognitionEngine.instance.ensureCameraMonitored(
+          widget.camera,
+          siteCode: widget.siteCode,
+        );
+      }
       final initialFrame = PlateRecognitionEngine.instance.lastFrames[widget.camera.id];
       if (initialFrame != null) {
         _bytes = initialFrame;
         _capturedAt = DateTime.now();
       }
-      final initialPlate = PlateRecognitionEngine.instance.lastCameraPlates[widget.camera.id];
+      final initialOverlay = PlateRecognitionEngine.instance.lastCameraOverlays[widget.camera.id];
+      final initialPlate = initialOverlay?.plate ?? PlateRecognitionEngine.instance.lastCameraPlates[widget.camera.id];
       if (initialPlate != null) {
+        _liveOverlay = initialOverlay;
         _detectedPlate = initialPlate;
-        _detectedPlateAt = DateTime.now();
+        _detectedDecision = PlateRecognitionEngine.instance.evaluatePlatePreview(
+          initialPlate,
+          camera: widget.camera,
+        );
+        _detectedPlateAt = initialOverlay?.detectedAt ?? DateTime.now();
       }
       final initialDec = PlateRecognitionEngine.instance.lastDecision;
-      if (initialDec != null) {
+      if (initialDec != null && initialPlate == null) {
         _detectedPlate = initialDec.plate;
         _detectedDecision = initialDec;
         _detectedPlateAt = initialDec.timestamp;
       }
+      _overlaysSub = PlateRecognitionEngine.instance.overlaysStream.listen((overlays) {
+        if (!mounted) return;
+        final ov = overlays[widget.camera.id];
+        if (ov != null) {
+          setState(() {
+            _liveOverlay = ov;
+            _detectedPlate = ov.plate;
+            _detectedDecision = PlateRecognitionEngine.instance.evaluatePlatePreview(
+              ov.plate,
+              camera: widget.camera,
+            );
+            _detectedPlateAt = ov.detectedAt;
+          });
+        } else if (_liveOverlay != null) {
+          setState(() => _liveOverlay = null);
+        }
+      });
+      _clearSub = PlateRecognitionEngine.instance.clearStream.listen((_) {
+        if (!mounted) return;
+        setState(() {
+          _liveOverlay = null;
+          _detectedPlate = null;
+          _detectedDecision = null;
+          _detectedPlateAt = null;
+        });
+      });
       _localFramesSub = PlateRecognitionEngine.instance.framesStream.listen((frames) {
         final frame = frames[widget.camera.id];
         if (frame != null && mounted) {
@@ -152,6 +194,10 @@ class _PlateCameraTileState extends State<PlateCameraTile> with WidgetsBindingOb
             if (cameraPlate != null && cameraPlate.isNotEmpty && _detectedPlate != cameraPlate) {
               setState(() {
                 _detectedPlate = cameraPlate;
+                _detectedDecision = PlateRecognitionEngine.instance.evaluatePlatePreview(
+                  cameraPlate,
+                  camera: widget.camera,
+                );
                 _detectedPlateAt = DateTime.now();
               });
             }
@@ -163,6 +209,10 @@ class _PlateCameraTileState extends State<PlateCameraTile> with WidgetsBindingOb
             _stale = false;
             if (cameraPlate != null && cameraPlate.isNotEmpty) {
               _detectedPlate = cameraPlate;
+              _detectedDecision = PlateRecognitionEngine.instance.evaluatePlatePreview(
+                cameraPlate,
+                camera: widget.camera,
+              );
               _detectedPlateAt = DateTime.now();
             }
           });
@@ -218,7 +268,9 @@ class _PlateCameraTileState extends State<PlateCameraTile> with WidgetsBindingOb
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _localFramesSub?.cancel();
+    _overlaysSub?.cancel();
     _decisionsSub?.cancel();
+    _clearSub?.cancel();
     _timer?.cancel();
     _httpClient.close();
     super.dispose();
@@ -493,6 +545,14 @@ class _PlateCameraTileState extends State<PlateCameraTile> with WidgetsBindingOb
   }
 
   Widget _buildDetectionReticle() {
+    if (_liveOverlay != null) {
+      return Positioned.fill(
+        child: PlateLiveBoxOverlay(
+          overlay: _liveOverlay!,
+          decisionType: _detectedDecision?.decision,
+        ),
+      );
+    }
     final plate = _detectedPlate;
     final at = _detectedPlateAt;
     if (plate == null || at == null || DateTime.now().difference(at).inSeconds > 15) {

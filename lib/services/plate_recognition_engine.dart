@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' show Rect;
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/services/plate_camera_snapshot.dart';
 import 'package:site_kapi_kontrol/services/plate_cameras_api.dart';
+import 'package:site_kapi_kontrol/services/plate_onnx_recognizer.dart';
 import 'package:site_kapi_kontrol/services/plate_recognition_api.dart';
 
 /// Plaka okuma ve otopark araç kabul kararı
@@ -70,6 +72,25 @@ class PlateSuppression {
   final DateTime suppressUntil;
   final int? gateId;
   final String? reason;
+}
+
+/// Kamera üzerindeki gerçek zamanlı plaka sınırlayıcı kutu ve okuma bilgisi.
+class PlateLiveOverlay {
+  const PlateLiveOverlay({
+    required this.cameraId,
+    required this.plate,
+    required this.normalizedBox,
+    required this.confidence,
+    required this.sourceAspectRatio,
+    required this.detectedAt,
+  });
+
+  final int cameraId;
+  final String plate;
+  final Rect normalizedBox;
+  final double confidence;
+  final double sourceAspectRatio;
+  final DateTime detectedAt;
 }
 
 class PlateRecognitionEngine {
@@ -158,6 +179,8 @@ class PlateRecognitionEngine {
   void clearDecision() {
     _lastDecision = null;
     _lastCameraPlates.clear();
+    _lastCameraOverlays.clear();
+    _overlaysController.add(const <int, PlateLiveOverlay>{});
     _clearController.add(null);
   }
 
@@ -211,6 +234,14 @@ class PlateRecognitionEngine {
 
   final Map<int, String> _lastCameraPlates = <int, String>{};
   Map<int, String> get lastCameraPlates => Map<int, String>.unmodifiable(_lastCameraPlates);
+
+  final StreamController<Map<int, PlateLiveOverlay>> _overlaysController =
+      StreamController<Map<int, PlateLiveOverlay>>.broadcast();
+  Stream<Map<int, PlateLiveOverlay>> get overlaysStream => _overlaysController.stream;
+
+  final Map<int, PlateLiveOverlay> _lastCameraOverlays = <int, PlateLiveOverlay>{};
+  Map<int, PlateLiveOverlay> get lastCameraOverlays =>
+      Map<int, PlateLiveOverlay>.unmodifiable(_lastCameraOverlays);
 
   final Map<int, DateTime> _lastSnapshotUploadAt = <int, DateTime>{};
   final Map<int, DateTime> _lastFrameReceivedAt = <int, DateTime>{};
@@ -285,6 +316,14 @@ class PlateRecognitionEngine {
     return diff > 0 ? diff : 0;
   }
 
+  static bool _hasCameraEndpoint(PlateCameraRow c) =>
+      c.isActive && (c.host.trim().isNotEmpty || (c.rtspUrl ?? '').trim().isNotEmpty);
+
+  static bool get _canRunNativeLoop =>
+      !kIsWeb &&
+      !Platform.environment.containsKey('FLUTTER_TEST') &&
+      defaultTargetPlatform == TargetPlatform.windows;
+
   /// Motoru başlatır
   void start({
     required int siteCode,
@@ -305,7 +344,7 @@ class PlateRecognitionEngine {
     _token = token;
     _edgeKey = edgeKey;
 
-    _activeCameras = cameras.where((c) => c.isActive && c.host.isNotEmpty).toList();
+    _activeCameras = cameras.where(_hasCameraEndpoint).toList();
     _blacklist = blacklist.map((b) => _normalizePlate(b.plate)).toSet();
     _blacklistReasons = {
       for (final b in blacklist)
@@ -327,16 +366,46 @@ class PlateRecognitionEngine {
     if (parkingSlotsByLabel != null) _apartmentSlotsByLabel = parkingSlotsByLabel;
     if (insideCountsByLabel != null) _apartmentInsideByLabel = insideCountsByLabel;
 
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) {
+    if (!_canRunNativeLoop) {
       return;
     }
 
-    if (_isRunning) return;
+    unawaited(PlateOnnxRecognizer.instance.ensureInitialized());
+
+    if (_isRunning) {
+      unawaited(_tick());
+      return;
+    }
     _isRunning = true;
 
     unawaited(_tick());
-    _loopTimer = Timer.periodic(const Duration(seconds: 4), (_) => unawaited(_tick()));
+    _loopTimer = Timer.periodic(const Duration(milliseconds: 380), (_) => unawaited(_tick()));
     debugPrint('[PlateRecognitionEngine] Motor başlatıldı (Site: $siteCode, ${_activeCameras.length} aktif kamera)');
+  }
+
+  /// Canlı kamera bileşeni açıldığında kameranın plaka tanıma döngüsünde mutlaka izlenmesini garanti eder.
+  void ensureCameraMonitored(PlateCameraRow camera, {int? siteCode}) {
+    if (!_canRunNativeLoop || !_hasCameraEndpoint(camera)) return;
+    if (siteCode != null && _siteCode == null) {
+      _siteCode = siteCode;
+    }
+    final idx = _activeCameras.indexWhere(
+      (c) => (camera.id > 0 && c.id == camera.id) || (camera.host.isNotEmpty && c.host == camera.host),
+    );
+    if (idx >= 0) {
+      _activeCameras[idx] = camera;
+    } else {
+      _activeCameras = <PlateCameraRow>[..._activeCameras, camera];
+    }
+
+    unawaited(PlateOnnxRecognizer.instance.ensureInitialized());
+
+    if (!_isRunning) {
+      _isRunning = true;
+      unawaited(_tick());
+      _loopTimer = Timer.periodic(const Duration(milliseconds: 380), (_) => unawaited(_tick()));
+      debugPrint('[PlateRecognitionEngine] Kamera izleme otomatik başlatıldı (Kamera #${camera.id})');
+    }
   }
 
   /// Motoru durdurur
@@ -349,6 +418,7 @@ class PlateRecognitionEngine {
     _gateNextVehicleCooldownUntil.clear();
     _plateSuppressions.clear();
     _cameraCooldownUntil.clear();
+    _lastCameraOverlays.clear();
     debugPrint('[PlateRecognitionEngine] Motor durduruldu');
   }
 
@@ -363,7 +433,7 @@ class PlateRecognitionEngine {
     Map<String, int>? insideCountsByLabel,
   }) {
     if (cameras != null) {
-      _activeCameras = cameras.where((c) => c.isActive && c.host.isNotEmpty).toList();
+      _activeCameras = cameras.where(_hasCameraEndpoint).toList();
     }
     if (blacklist != null) {
       _blacklist = blacklist.map((b) => _normalizePlate(b.plate)).toSet();
@@ -440,17 +510,11 @@ class PlateRecognitionEngine {
     if (!_isRunning || _activeCameras.isEmpty || _tickBusy) return;
     _tickBusy = true;
     try {
-      for (final camera in _activeCameras) {
+      await PlateCameraSnapshot.loadPersistedCredentials();
+      final cameras = List<PlateCameraRow>.from(_activeCameras);
+      for (final camera in cameras) {
+        if (!_isRunning) break;
         try {
-          final gateId = camera.gate?.id ?? 0;
-          final gateLock = _gateNextVehicleCooldownUntil[gateId];
-          if (gateLock != null && DateTime.now().isBefore(gateLock)) {
-            continue; // Kapı henüz bir sonraki araç için beklemede
-          }
-          final lastRx = _lastFrameReceivedAt[camera.id];
-          if (lastRx != null && DateTime.now().difference(lastRx).inMilliseconds < 2500) {
-            continue;
-          }
           final captured = await _captureFrame(camera);
           if (captured != null && captured.bytes.isNotEmpty) {
             await ingestCameraFrame(camera, captured.bytes, directPlate: captured.plate);
@@ -464,7 +528,7 @@ class PlateRecognitionEngine {
     }
   }
 
-  /// Canlı önizleme bileşeninin aldığı son kareyi önbelleğe yazar (motorun aynı kamerayı paralel sorgulamasını önler).
+  /// Canlı önizleme bileşeninin aldığı son kareyi önbelleğe yazar.
   void recordPreviewFrame(int cameraId, Uint8List bytes, {String? plate}) {
     final now = DateTime.now();
     _lastFrames[cameraId] = bytes;
@@ -479,7 +543,10 @@ class PlateRecognitionEngine {
         _lastCameraPlates.remove(cameraId);
       }
     } else {
-      _lastCameraPlates.remove(cameraId);
+      final overlay = _lastCameraOverlays[cameraId];
+      if (overlay == null || now.difference(overlay.detectedAt).inMilliseconds > 1800) {
+        _lastCameraPlates.remove(cameraId);
+      }
     }
   }
 
@@ -489,32 +556,68 @@ class PlateRecognitionEngine {
     Uint8List bytes, {
     String? directPlate,
   }) async {
+    final now = DateTime.now();
     _lastFrames[camera.id] = bytes;
-    if (directPlate != null && directPlate.isNotEmpty && directPlate.toLowerCase() != 'none') {
-      _lastCameraPlates[camera.id] = directPlate;
+    _lastFrameReceivedAt[camera.id] = now;
+
+    PlateDetectionResult? onnxDet;
+    final cleanDirect = (directPlate != null &&
+            directPlate.trim().isNotEmpty &&
+            directPlate.trim().toLowerCase() != 'none')
+        ? directPlate.trim()
+        : null;
+    if (cleanDirect == null) {
+      onnxDet = await PlateOnnxRecognizer.instance.detect(bytes);
+    }
+
+    final resolvedPlate = onnxDet?.plate ?? cleanDirect;
+    if (resolvedPlate != null && resolvedPlate.isNotEmpty) {
+      _lastCameraPlates[camera.id] = resolvedPlate;
+      _lastCameraOverlays[camera.id] = PlateLiveOverlay(
+        cameraId: camera.id,
+        plate: resolvedPlate,
+        normalizedBox: onnxDet?.normalizedBox ?? const Rect.fromLTWH(0.32, 0.42, 0.36, 0.20),
+        confidence: onnxDet?.confidence ?? 0.95,
+        sourceAspectRatio: onnxDet?.sourceAspectRatio ?? (16.0 / 9.0),
+        detectedAt: now,
+      );
+      _overlaysController.add(_lastCameraOverlays);
     } else {
-      _lastCameraPlates.remove(camera.id);
+      final prev = _lastCameraOverlays[camera.id];
+      if (prev != null && now.difference(prev.detectedAt).inMilliseconds > 1800) {
+        _lastCameraOverlays.remove(camera.id);
+        _lastCameraPlates.remove(camera.id);
+        _overlaysController.add(_lastCameraOverlays);
+      } else if (prev == null) {
+        _lastCameraPlates.remove(camera.id);
+      }
     }
     _framesController.add(_lastFrames);
 
     // Sunucuya periyodik son kare yükle (4 saniyede bir)
-    final now = DateTime.now();
     final lastUp = _lastSnapshotUploadAt[camera.id];
     if (camera.id > 0 && (lastUp == null || now.difference(lastUp).inSeconds >= 4)) {
       _lastSnapshotUploadAt[camera.id] = now;
       unawaited(_uploadSnapshotToServer(camera.id, bytes));
     }
 
-    await _processFrame(camera, bytes, directPlate: directPlate);
+    if (resolvedPlate != null && resolvedPlate.isNotEmpty) {
+      await _processFrame(
+        camera,
+        bytes,
+        directPlate: resolvedPlate,
+        confidence: onnxDet?.confidence,
+      );
+    }
   }
 
   /// Kameradan anlık kare (snapshot) ve varsa plaka bilgisini alır
   Future<_CapturedFrame?> _captureFrame(PlateCameraRow camera) async {
-    if (camera.host.trim().isEmpty) return null;
+    if (!_hasCameraEndpoint(camera)) return null;
     final (_, res) = await PlateCameraSnapshot.discover(
       _http,
       camera,
-      fetchPlateFallback: true,
+      fetchPlateFallback: false,
     );
     if (res.ok && res.bytes != null) {
       return _CapturedFrame(res.bytes!, plate: res.plate);
@@ -539,7 +642,12 @@ class PlateRecognitionEngine {
   }
 
   /// Kareyi işler, plaka arar ve karar verir
-  Future<void> _processFrame(PlateCameraRow camera, Uint8List frameBytes, {String? directPlate}) async {
+  Future<void> _processFrame(
+    PlateCameraRow camera,
+    Uint8List frameBytes, {
+    String? directPlate,
+    double? confidence,
+  }) async {
     final now = DateTime.now();
     final gate = camera.gate;
     final gateId = gate?.id ?? 0;
@@ -621,7 +729,7 @@ class PlateRecognitionEngine {
     }
 
     // Olayı sunucuya bildir (sunucu aynı zamanda kapı açıksa MQTT üzerinden de tetikler)
-    unawaited(_notifyServer(camera, decision));
+    unawaited(_notifyServer(camera, decision, confidence: confidence));
   }
 
   /// Test veya simülasyon amaçlı plaka işleme (arayüzden doğrudan tetikleme)
@@ -676,8 +784,8 @@ class PlateRecognitionEngine {
   /// Türkiye plaka format kontrolü: 34 ABC 123
   bool _isValidPlateFormat(String plate) {
     final clean = plate.replaceAll(' ', '').toUpperCase();
-    final regex = RegExp(r'^(0[1-9]|[1-7][0-9]|8[01])[A-Z]{1,3}\d{2,4}$');
-    return regex.hasMatch(clean);
+    final regex = RegExp(r'^(0[1-9]|[1-7][0-9]|8[01])[A-Z]{1,3}\d{2,5}$');
+    return regex.hasMatch(clean) && clean.length >= 6 && clean.length <= 8;
   }
 
   String _normalizePlate(String plate) {
@@ -869,7 +977,11 @@ class PlateRecognitionEngine {
   }
 
   /// Olayı sunucuya bildirir (Web ve Mobil kullanıcıların anında görmesi ve kapının MQTT ile açılması için)
-  Future<void> _notifyServer(PlateCameraRow? camera, PlateEngineDecision decision) async {
+  Future<void> _notifyServer(
+    PlateCameraRow? camera,
+    PlateEngineDecision decision, {
+    double? confidence,
+  }) async {
     final baseUrl = _baseUrl;
     final siteCode = _siteCode;
     if (baseUrl == null || siteCode == null) return;
@@ -890,7 +1002,7 @@ class PlateRecognitionEngine {
       'direction': decision.direction,
       'seen_at': decision.timestamp.toUtc().toIso8601String(),
       'reason': decision.reason,
-      'confidence': 0.95,
+      'confidence': double.parse((confidence ?? 0.95).clamp(0.01, 1.0).toStringAsFixed(3)),
       'gate_id': camera?.gate?.id,
       'gate_command': decision.isGateTriggered ? 'sent' : 'not_sent',
     });
@@ -917,9 +1029,10 @@ class PlateRecognitionEngine {
     }
   }
 
-  /// Basit ve hızlı görüntü içi plaka tespiti (OCR)
+  /// Uygulama içi ONNX sinir ağı tabanlı hızlı plaka tespiti ve OCR
   Future<String?> _extractPlateFromImage(Uint8List bytes) async {
-    return null;
+    final res = await PlateOnnxRecognizer.instance.detect(bytes);
+    return res?.plate;
   }
 }
 

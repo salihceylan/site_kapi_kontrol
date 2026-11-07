@@ -11,6 +11,7 @@ import 'package:site_kapi_kontrol/services/plate_recognition_engine.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/license_plate.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/widgets/plate_live_box_overlay.dart';
 import 'package:site_kapi_kontrol/ui/widgets/plate_rtsp_video_surface.dart';
 
 /// Tek bir IP kameranın canlı akışını (yerel ağda donanım hızlandırmalı 20-30 FPS RTSP,
@@ -56,6 +57,8 @@ class PlateCameraLivePreview extends StatefulWidget {
 class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
   final http.Client _client = http.Client();
   StreamSubscription<Map<int, Uint8List>>? _engineSub;
+  StreamSubscription<Map<int, PlateLiveOverlay>>? _overlaySub;
+  StreamSubscription<void>? _clearSub;
   Timer? _pollTimer;
   bool _inFlight = false;
   ui.Image? _decodedImage;
@@ -63,6 +66,7 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
 
   Uint8List? _frameBytes;
   String? _detectedPlate;
+  PlateLiveOverlay? _liveOverlay;
   String? _lastIngestedPlate;
   DateTime? _lastIngestedAt;
   DateTime? _lastServerUploadAt;
@@ -75,6 +79,14 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
     super.initState();
     _initFromEngineCache();
     _engineSub = PlateRecognitionEngine.instance.framesStream.listen(_onEngineFrames);
+    _overlaySub = PlateRecognitionEngine.instance.overlaysStream.listen(_onEngineOverlays);
+    _clearSub = PlateRecognitionEngine.instance.clearStream.listen((_) {
+      if (!mounted) return;
+      setState(() {
+        _detectedPlate = null;
+        _liveOverlay = null;
+      });
+    });
     _resolveCameraAndStart();
   }
 
@@ -98,10 +110,12 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
     _resolveCameraAndStart();
   }
 
-    @override
+  @override
   void dispose() {
     _pollTimer?.cancel();
     _engineSub?.cancel();
+    _overlaySub?.cancel();
+    _clearSub?.cancel();
     _decodedImage?.dispose();
     _decodedImage = null;
     _client.close();
@@ -124,10 +138,11 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
   }
 
   Future<void> _decodeAndSetImage(Uint8List bytes, String? plate) async {
+    final effectivePlate = plate ?? _liveOverlay?.plate;
     if (_isDecoding) return;
     if (_decodedImage != null && _isSameFrame(bytes, _frameBytes)) {
-      if (_detectedPlate != plate && mounted) {
-        setState(() => _detectedPlate = plate);
+      if (_detectedPlate != effectivePlate && mounted) {
+        setState(() => _detectedPlate = effectivePlate);
       }
       return;
     }
@@ -144,7 +159,7 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
       setState(() {
         _decodedImage = newImage;
         _frameBytes = bytes;
-        _detectedPlate = plate;
+        _detectedPlate = effectivePlate;
       });
       oldImage?.dispose();
     } catch (_) {
@@ -154,23 +169,43 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
   }
 
   void _initFromEngineCache() {
+    final overlay = PlateRecognitionEngine.instance.lastCameraOverlays[widget.cameraId];
     final cached = PlateRecognitionEngine.instance.lastFrames[widget.cameraId];
-    final plate = PlateRecognitionEngine.instance.lastCameraPlates[widget.cameraId];
+    final plate = overlay?.plate ?? PlateRecognitionEngine.instance.lastCameraPlates[widget.cameraId];
+    _liveOverlay = overlay;
+    _detectedPlate = plate;
     if (cached != null && cached.isNotEmpty) {
       _decodeAndSetImage(cached, plate);
     }
   }
 
+  void _onEngineOverlays(Map<int, PlateLiveOverlay> overlays) {
+    if (!mounted) return;
+    final overlay = overlays[widget.cameraId];
+    final nextPlate = overlay?.plate ?? PlateRecognitionEngine.instance.lastCameraPlates[widget.cameraId];
+    if (_liveOverlay != overlay || _detectedPlate != nextPlate) {
+      setState(() {
+        _liveOverlay = overlay;
+        _detectedPlate = nextPlate;
+      });
+    }
+  }
+
   void _onEngineFrames(Map<int, Uint8List> frames) {
-    final plate = PlateRecognitionEngine.instance.lastCameraPlates[widget.cameraId];
+    final overlay = PlateRecognitionEngine.instance.lastCameraOverlays[widget.cameraId];
+    final plate = overlay?.plate ?? PlateRecognitionEngine.instance.lastCameraPlates[widget.cameraId];
     if (_rtspPlaying) {
-      if (mounted && _detectedPlate != plate) {
-        setState(() => _detectedPlate = plate);
+      if (mounted && (_detectedPlate != plate || _liveOverlay != overlay)) {
+        setState(() {
+          _liveOverlay = overlay;
+          _detectedPlate = plate;
+        });
       }
       return;
     }
     final bytes = frames[widget.cameraId];
     if (bytes != null && bytes.isNotEmpty && mounted && !identical(bytes, _frameBytes)) {
+      _liveOverlay = overlay;
       _decodeAndSetImage(bytes, plate);
     }
   }
@@ -203,6 +238,12 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
     }
 
     if (!mounted) return;
+    if (_resolvedCamera != null) {
+      PlateRecognitionEngine.instance.ensureCameraMonitored(
+        _resolvedCamera!,
+        siteCode: widget.siteCode,
+      );
+    }
     setState(() {});
     if (!_rtspPlaying) {
       unawaited(_fetchNextFrame());
@@ -473,12 +514,30 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
                 setState(() => _rtspPlaying = playing);
                 if (playing) {
                   _pollTimer?.cancel();
+                  PlateRecognitionEngine.instance.ensureCameraMonitored(
+                    rtspCamera,
+                    siteCode: widget.siteCode,
+                  );
                 } else if (widget.isActive) {
                   _pollTimer?.cancel();
                   unawaited(_fetchNextFrame());
                   _pollTimer = Timer.periodic(widget.pollInterval, (_) => unawaited(_fetchNextFrame()));
                 }
               },
+            ),
+
+          // Canlı ONNX plaka sınırlayıcı kutu ve etiket katmanı
+          if (_liveOverlay != null)
+            Positioned.fill(
+              child: PlateLiveBoxOverlay(
+                overlay: _liveOverlay!,
+                decisionType: PlateRecognitionEngine.instance
+                    .evaluatePlatePreview(
+                      _liveOverlay!.plate,
+                      camera: _resolvedCamera ?? widget.camera,
+                    )
+                    .decision,
+              ),
             ),
 
           // Okunan plaka ve karar HUD çubuğu (alt bant)

@@ -147,7 +147,11 @@ class PlateCameraSnapshot {
 
   /// Kamera için denenecek anlık kare adresleri (öncelik sırasıyla).
   static List<Uri> candidates(PlateCameraRow camera) {
-    final host = camera.host.trim();
+    final custom = (camera.rtspUrl ?? '').trim();
+    var host = camera.host.trim();
+    if (host.isEmpty && custom.isNotEmpty) {
+      host = Uri.tryParse(custom)?.host.trim() ?? '';
+    }
     final port = camera.port;
     // 554 RTSP portudur; HTTP anlık kare orada sunulmaz -> standart web portu 80'e düş.
     final httpPort = (port == null || port == 554) ? 80 : port;
@@ -163,7 +167,6 @@ class PlateCameraSnapshot {
       addUnique(cached);
     }
 
-    final custom = (camera.rtspUrl ?? '').trim();
     if (custom.startsWith('http://') || custom.startsWith('https://')) {
       final u = Uri.tryParse(custom);
       if (u != null && !_isStreamPath(u.path)) addUnique(u);
@@ -366,7 +369,7 @@ class PlateCameraSnapshot {
         client,
         camera,
         cached,
-        timeout: const Duration(milliseconds: 650),
+        timeout: const Duration(milliseconds: 850),
         fetchPlateFallback: fetchPlateFallback,
       );
       if (fast.ok) return (cached, fast);
