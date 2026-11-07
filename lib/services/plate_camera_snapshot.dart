@@ -43,6 +43,9 @@ class PlateCameraSnapshot {
   /// Kamera başına etkin Digest kimlik doğrulama oturumu.
   static final Map<String, _DigestChallenge> _activeChallenges = <String, _DigestChallenge>{};
 
+  /// Aynı anda aynı adrese atılan mükerrer HTTP isteklerini tekilleştirir (25 FPS akıcılık için).
+  static final Map<Uri, Future<SnapshotResult>> _inFlightFetches = <Uri, Future<SnapshotResult>>{};
+
   /// Kamera kaydedilirken girilen parolayı yerel belleğe işler.
   static void recordCredentials({
     required String host,
@@ -123,12 +126,11 @@ class PlateCameraSnapshot {
       addUnique(cached);
     }
 
-    // 2. HTTPS Web tarayıcısında (kIsWeb) 192.168.x.x adresleri Mixed-Content nedeniyle engellenir;
-    // W3C Secure Context olan 127.0.0.1 / localhost adreslerini en başa koy ki 0ms gecikmeyle bağlansın.
-    if (kIsWeb) {
-      addUnique(Uri.parse('http://127.0.0.1:$loopbackPort/snapshot.jpg'));
-      addUnique(Uri.parse('http://localhost:$loopbackPort/snapshot.jpg'));
-    }
+    // 2. Yerel RTSP AI Köprüsü (127.0.0.1:8080 / localhost:8080):
+    // RTSP kamerayı bellekte 25 FPS'te tutar, YOLOv9-t + FastPlateOCR ile plakayı okur (X-Plate)
+    // ve 1.5ms'de yanıt verir (kameranın 533ms süren dahili CGI uç noktasındaki donmaları tamamen önler).
+    addUnique(Uri.parse('http://127.0.0.1:$loopbackPort/snapshot.jpg'));
+    addUnique(Uri.parse('http://localhost:$loopbackPort/snapshot.jpg'));
 
     final custom = (camera.rtspUrl ?? '').trim();
     if (custom.startsWith('http://') || custom.startsWith('https://')) {
@@ -237,6 +239,26 @@ class PlateCameraSnapshot {
     Uri uri, {
     Duration timeout = const Duration(milliseconds: 900),
     bool fetchPlateFallback = false,
+  }) {
+    final existing = _inFlightFetches[uri];
+    if (existing != null) return existing;
+    final fut = _doFetch(
+      client,
+      camera,
+      uri,
+      timeout: timeout,
+      fetchPlateFallback: fetchPlateFallback,
+    );
+    _inFlightFetches[uri] = fut;
+    return fut.whenComplete(() => _inFlightFetches.remove(uri));
+  }
+
+  static Future<SnapshotResult> _doFetch(
+    http.Client client,
+    PlateCameraRow camera,
+    Uri uri, {
+    required Duration timeout,
+    required bool fetchPlateFallback,
   }) async {
     final key = _cacheKey(camera);
     try {

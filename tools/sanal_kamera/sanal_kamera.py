@@ -57,8 +57,12 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger("SanalKamera")
 
-# Video klasörü
+# Video klasörü ve Varsayılan Gerçek Kamera RTSP Adresi
 VIDEOS_DIR = r"G:\site\site_kapi_kontrol\plaka_vidolar"
+DEFAULT_RTSP_URL = "rtsp://admin:gude2134@192.168.1.64:554/Streaming/Channels/101"
+
+# FFmpeg RTSP düşük gecikme (zero-buffer) ayarları
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|fflags;nobuffer|flags;low_delay|max_delay;200000"
 
 
 def get_local_ip():
@@ -185,10 +189,95 @@ class SimplePlateDetector:
     @staticmethod
     def format_tr_plate(raw):
         clean = re.sub(r'[^A-Z0-9]', '', raw.upper())
-        m = re.match(r'^(0[1-9]|[1-7][0-9]|8[01])([A-Z]{1,3})(\d{2,4})$', clean)
+        if len(clean) < 5 or len(clean) > 9:
+            return None
+        m = re.match(r'^(0[1-9]|[1-7][0-9]|8[01])([A-Z]{1,3})(\d{2,5})$', clean)
         if m:
-            return f"{m.group(1)} {m.group(2)} {m.group(3)}"
+            p1, p2, p3 = m.group(1), m.group(2), m.group(3)
+            if len(p2) + len(p3) <= 6:
+                return f"{p1} {p2} {p3}"
+
+        # OCR karakter karışıklığı düzeltmesi (O<->0, I<->1, S<->5, B<->8, Z<->2, G<->6)
+        to_digit = {'O': '0', 'Q': '0', 'D': '0', 'I': '1', 'L': '1', 'Z': '2', 'S': '5', 'G': '6', 'B': '8'}
+        to_alpha = {'0': 'O', '1': 'I', '2': 'Z', '5': 'S', '6': 'G', '8': 'B'}
+        if 6 <= len(clean) <= 8:
+            c_list = list(clean)
+            c_list[0] = to_digit.get(c_list[0], c_list[0])
+            c_list[1] = to_digit.get(c_list[1], c_list[1])
+            city = "".join(c_list[:2])
+            if re.match(r'^(0[1-9]|[1-7][0-9]|8[01])$', city):
+                rest = c_list[2:]
+                for split_idx in (1, 2, 3):
+                    if split_idx >= len(rest):
+                        continue
+                    letters = "".join(to_alpha.get(ch, ch) for ch in rest[:split_idx])
+                    digits = "".join(to_digit.get(ch, ch) for ch in rest[split_idx:])
+                    if re.match(r'^[A-Z]{1,3}$', letters) and re.match(r'^\d{2,4}$', digits):
+                        if len(letters) + len(digits) <= 6:
+                            return f"{city} {letters} {digits}"
         return None
+
+    @staticmethod
+    def _find_contour_plate_boxes(frame):
+        """YOLOv9-t'nin kaçırdığı yakın plan / ekran / elde tutulan plakalar için hızlı dikdörtgen ve Sobel aday bulucu."""
+        h, w = frame.shape[:2]
+        scale_w, scale_h = 640, 360
+        small = cv2.resize(frame, (scale_w, scale_h), interpolation=cv2.INTER_AREA)
+        gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+
+        candidates = []
+        # 1) Sobel-X dikey kenar yoğunluğu (plaka karakterleri yüksek dikey geçiş üretir)
+        sobelx = cv2.Sobel(gray, cv2.CV_8U, 1, 0, ksize=3)
+        _, thresh = cv2.threshold(sobelx, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (17, 5))
+        morph = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+        cnts, _ = cv2.findContours(morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # 2) Parlak beyaz zemin / ekran dikdörtgenleri (Canny + Eşikleme)
+        edges = cv2.Canny(gray, 60, 180)
+        kernel2 = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 3))
+        edges_closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel2)
+        cnts2, _ = cv2.findContours(edges_closed, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+        sx = w / float(scale_w)
+        sy = h / float(scale_h)
+
+        for c in list(cnts) + list(cnts2):
+            rx, ry, rw, rh = cv2.boundingRect(c)
+            if rw < 42 or rh < 11 or rw > scale_w * 0.92 or rh > scale_h * 0.65:
+                continue
+            aspect = rw / float(max(1, rh))
+            if 1.8 <= aspect <= 7.2:
+                area = rw * rh
+                # Merkeze yakınlık puanı
+                cx = (rx + rw * 0.5) / scale_w
+                cy = (ry + rh * 0.5) / scale_h
+                center_weight = 1.0 - 0.5 * (abs(cx - 0.5) + abs(cy - 0.55))
+                score = area * center_weight
+                bx1 = max(0, int(rx * sx))
+                by1 = max(0, int(ry * sy))
+                bx2 = min(w, int((rx + rw) * sx))
+                by2 = min(h, int((ry + rh) * sy))
+                candidates.append((score, bx1, by1, bx2, by2))
+
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        # Çakışan kutuları ele
+        unique = []
+        for _, x1, y1, x2, y2 in candidates:
+            overlap = False
+            for ux1, uy1, ux2, uy2 in unique:
+                ix1, iy1 = max(x1, ux1), max(y1, uy1)
+                ix2, iy2 = min(x2, ux2), min(y2, uy2)
+                if ix2 > ix1 and iy2 > iy1:
+                    inter = (ix2 - ix1) * (iy2 - iy1)
+                    if inter > 0.45 * ((x2 - x1) * (y2 - y1)):
+                        overlap = True
+                        break
+            if not overlap:
+                unique.append((x1, y1, x2, y2))
+            if len(unique) >= 4:
+                break
+        return unique
 
     def push_frame(self, frame):
         try:
@@ -239,22 +328,34 @@ class SimplePlateDetector:
         except Exception as e:
             logger.debug("Yerel kapı tetikleme hatası: %s", e)
 
+    def _try_ocr_box(self, frame, bx1, by1, bx2, by2, pad_ratio=0.05):
+        h, w = frame.shape[:2]
+        bw = bx2 - bx1
+        bh = by2 - by1
+        if bw < 24 or bh < 9:
+            return None
+        pad_x = int(bw * pad_ratio)
+        pad_y = int(bh * pad_ratio)
+        crop_x1 = max(0, bx1 - pad_x)
+        crop_y1 = max(0, by1 - pad_y)
+        crop_x2 = min(w, bx2 + pad_x)
+        crop_y2 = min(h, by2 + pad_y)
+        crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+        if crop.shape[0] < 10 or crop.shape[1] < 24:
+            return None
+        try:
+            preds = self.ocr.run(crop)
+            if preds and preds[0].plate:
+                return self.format_tr_plate(preds[0].plate)
+        except Exception:
+            pass
+        return None
+
     def _ai_worker_loop(self):
         while self.running:
             try:
                 frame = self.in_queue.get(timeout=0.1)
             except queue.Empty:
-                continue
-
-            now = time.time()
-            if now < self.next_vehicle_cooldown_until:
-                # Bir sonraki araç bekleme süresindeyiz
-                with self.lock:
-                    self.smoothed_box = None
-                    self.active_plate = None
-                    self.active_conf = 0.0
-                    self.box_ttl = 0
-                time.sleep(0.08)
                 continue
 
             if self.detector is None or self.ocr is None:
@@ -266,49 +367,47 @@ class SimplePlateDetector:
             in_img = cv2.cvtColor(in_img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
             in_img = np.transpose(in_img, (2, 0, 1))[np.newaxis, ...]
 
-            try:
-                outs = self.detector.run(None, {'images': in_img})[0]
-            except Exception:
-                continue
-
-            valid = [d for d in outs if d[6] >= 0.38]
             det_box = None
             det_plate = None
             det_conf = 0.0
+            from_yolo = False
 
-            if valid:
-                best = max(valid, key=lambda x: x[6])
-                bx1 = max(0, int(best[1] * w / 384.0))
-                by1 = max(0, int(best[2] * h / 384.0))
-                bx2 = min(w, int(best[3] * w / 384.0))
-                by2 = min(h, int(best[4] * h / 384.0))
-                bw = bx2 - bx1
-                bh = by2 - by1
+            # AŞAMA 1: YOLOv9-t ONNX Plaka Tespiti (En yüksek güvenilirlikli ilk 3 kutuyu dene)
+            try:
+                outs = self.detector.run(None, {'images': in_img})[0]
+                valid = sorted([d for d in outs if d[6] >= 0.14], key=lambda x: x[6], reverse=True)[:3]
+                for cand in valid:
+                    bx1 = max(0, int(cand[1] * w / 384.0))
+                    by1 = max(0, int(cand[2] * h / 384.0))
+                    bx2 = min(w, int(cand[3] * w / 384.0))
+                    by2 = min(h, int(cand[4] * h / 384.0))
+                    bw = bx2 - bx1
+                    bh = by2 - by1
+                    fp = self._try_ocr_box(frame, bx1, by1, bx2, by2, pad_ratio=0.04)
+                    if not fp:
+                        fp = self._try_ocr_box(frame, bx1, by1, bx2, by2, pad_ratio=0.14)
+                    if fp:
+                        det_box = [bx1, by1, bw, bh]
+                        det_plate = fp
+                        det_conf = float(cand[6])
+                        from_yolo = True
+                        break
+            except Exception:
+                pass
 
-                pad_x = int(bw * 0.04)
-                pad_y = int(bh * 0.04)
-                crop_x1 = max(0, bx1 - pad_x)
-                crop_y1 = max(0, by1 - pad_y)
-                crop_x2 = min(w, bx2 + pad_x)
-                crop_y2 = min(h, by2 + pad_y)
-
-                crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]
-                if crop.shape[0] >= 10 and crop.shape[1] >= 25:
-                    try:
-                        preds = self.ocr.run(crop)
-                        if preds and preds[0].plate:
-                            fp = self.format_tr_plate(preds[0].plate)
-                            if fp:
-                                # Arka plaka ve mükerrer geçiş engellemesi kontrolü (60 sn okunmaması)
-                                supp_until = max(self.plate_suppressions.get(fp, 0.0), self.plate_suppressions.get(fp.replace(' ', ''), 0.0))
-                                if now < supp_until:
-                                    pass  # Araç geçiş veya arka plaka korumasında, engellendi
-                                else:
-                                    det_box = [bx1, by1, bw, bh]
-                                    det_plate = fp
-                                    det_conf = float(best[6])
-                    except Exception:
-                        pass
+            # AŞAMA 2: Yakın plan / Masaüstü / Telefon ekranı / Elde tutulan plaka için Dikdörtgen-Sobel Aday Bulucu
+            if det_plate is None:
+                try:
+                    contour_boxes = self._find_contour_plate_boxes(frame)
+                    for (bx1, by1, bx2, by2) in contour_boxes:
+                        fp = self._try_ocr_box(frame, bx1, by1, bx2, by2, pad_ratio=0.06)
+                        if fp:
+                            det_box = [bx1, by1, bx2 - bx1, by2 - by1]
+                            det_plate = fp
+                            det_conf = 0.88
+                            break
+                except Exception:
+                    pass
 
             now = time.time()
             with self.lock:
@@ -322,14 +421,16 @@ class SimplePlateDetector:
                         self.smoothed_box[2] = alpha * det_box[2] + (1 - alpha) * self.smoothed_box[2]
                         self.smoothed_box[3] = alpha * det_box[3] + (1 - alpha) * self.smoothed_box[3]
 
-                    self.recent_reads.append((now, det_plate, det_conf))
-                    self.recent_reads = [r for r in self.recent_reads if now - r[0] < 1.5]
+                    self.recent_reads.append((now, det_plate, det_conf, from_yolo))
+                    self.recent_reads = [r for r in self.recent_reads if now - r[0] < 2.0]
 
                     counter = Counter([r[1] for r in self.recent_reads])
                     best_plate, count = counter.most_common(1)[0]
-                    self.active_plate = best_plate
-                    self.active_conf = det_conf
-                    self.box_ttl = 8
+                    # Kontur geri-düşüşünde gürültüyü önlemek için en az 2 ardışık okuma veya YOLO tespiti şartı
+                    if from_yolo or count >= 2:
+                        self.active_plate = best_plate
+                        self.active_conf = det_conf
+                        self.box_ttl = 10
 
                     if count >= 2:
                         self._trigger_instant_gate(best_plate)
@@ -342,12 +443,6 @@ class SimplePlateDetector:
                         self.active_conf = 0.0
 
     def update_and_draw(self, frame, fallback_plate=None, frame_idx=0, active_video="1"):
-        now = time.time()
-        if now < self.next_vehicle_cooldown_until:
-            rem = int(math.ceil(self.next_vehicle_cooldown_until - now))
-            self._draw_cooldown_banner(frame, rem, self.last_opened_plate)
-            return frame, self.last_opened_plate
-
         self.push_frame(frame)
         box, plate, conf = self.get_current_state()
 
@@ -357,6 +452,12 @@ class SimplePlateDetector:
             self.draw_plate_box(frame, bx, by, bw, bh, plate, conf_pct)
             self._draw_hud_banner(frame, plate)
             return frame, plate
+
+        now = time.time()
+        if now < self.next_vehicle_cooldown_until:
+            rem = int(math.ceil(self.next_vehicle_cooldown_until - now))
+            self._draw_cooldown_banner(frame, rem, self.last_opened_plate)
+            return frame, self.last_opened_plate
 
         return frame, None
 
@@ -443,9 +544,10 @@ class SimplePlateDetector:
 
 # --- VİDEO YAYIN KAYNAĞI YÖNETİCİSİ ---
 class CameraSource:
-    def __init__(self, source_path="2", target_fps=20):
+    def __init__(self, source_path=DEFAULT_RTSP_URL, target_fps=25):
         self.source_path = source_path
-        self.active_source_type = "2"
+        self.active_source_type = "rtsp"
+        self.is_rtsp = False
         self.target_fps = target_fps
         self.cap = None
         self.current_frame = None
@@ -458,6 +560,7 @@ class CameraSource:
         self.frame_count = 0
         self.video_frame_pos = 0
         self.fps_measured = target_fps
+        self.consecutive_read_failures = 0
 
         self.anim_x = 100
         self.anim_plate_idx = 0
@@ -475,11 +578,20 @@ class CameraSource:
 
     def _resolve_and_open(self, src):
         src_str = str(src).strip()
-        if src_str in ("1", "1.mp4"):
+        self.is_rtsp = False
+        if src_str.lower() in ("rtsp", "hikvision", "192.168.1.64", ""):
+            self.active_source_type = "rtsp"
+            self.source_path = DEFAULT_RTSP_URL
+            self.is_rtsp = True
+        elif src_str.lower().startswith(("rtsp://", "rtsps://", "http://", "https://")):
+            self.active_source_type = "rtsp"
+            self.source_path = src_str
+            self.is_rtsp = True
+        elif src_str in ("1", "1.mp4"):
             self.active_source_type = "1"
             v1 = os.path.join(VIDEOS_DIR, "1.mp4")
             self.source_path = v1 if os.path.exists(v1) else "1"
-        elif src_str in ("2", "2.mp4", ""):
+        elif src_str in ("2", "2.mp4"):
             self.active_source_type = "2"
             v2 = os.path.join(VIDEOS_DIR, "2.mp4")
             self.source_path = v2 if os.path.exists(v2) else "2"
@@ -497,16 +609,46 @@ class CameraSource:
         self._open_source()
 
     def set_source(self, new_source):
+        new_str = str(new_source or "").strip()
+        if new_str and new_str == self.source_path and self.cap is not None and self.cap.isOpened():
+            return
         with self.lock:
             if self.cap is not None:
                 self.cap.release()
                 self.cap = None
             self.detector.tracked_boxes = []
             self.video_frame_pos = 0
+            self.consecutive_read_failures = 0
             self._resolve_and_open(new_source)
         logger.info(f"Video kaynağı güncellendi: {self.source_path} ({self.active_source_type})")
 
     def _open_source(self):
+        if self.is_rtsp:
+            try:
+                logger.info(f"RTSP Canlı Kamera Akışına bağlanılıyor: {self.source_path}")
+                cap = cv2.VideoCapture(self.source_path, cv2.CAP_FFMPEG)
+                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                if cap.isOpened():
+                    ret, test_frame = cap.read()
+                    if ret and test_frame is not None:
+                        self.cap = cap
+                        fps = cap.get(cv2.CAP_PROP_FPS)
+                        self.target_fps = int(fps) if (fps and 5 < fps < 60) else 25
+                        logger.info(f"RTSP Kamera Akışı AKTİF ({self.target_fps} FPS, {test_frame.shape[1]}x{test_frame.shape[0]}): {self.source_path}")
+                        return
+                    cap.release()
+            except Exception as e:
+                logger.warning(f"RTSP bağlantısı kurulamadı ({e})")
+            # RTSP kamera kapalıysa 2.mp4 yedek kaynağa düş
+            v2 = os.path.join(VIDEOS_DIR, "2.mp4")
+            if os.path.exists(v2):
+                logger.warning("RTSP kameraya ulaşılamadı, yedek video (2.mp4) açılıyor.")
+                self.is_rtsp = False
+                self.active_source_type = "2"
+                self.source_path = v2
+                self.cap = cv2.VideoCapture(v2)
+                return
+
         if self.source_path and self.source_path != "sentetik":
             try:
                 cam_idx = int(self.source_path)
@@ -538,17 +680,36 @@ class CameraSource:
             if self.cap is not None and self.cap.isOpened():
                 ret, raw_frame = self.cap.read()
                 if not ret:
-                    self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                    self.video_frame_pos = 0
-                    self.detector.tracked_boxes = []
-                    ret, raw_frame = self.cap.read()
-                if ret:
+                    if self.is_rtsp:
+                        self.consecutive_read_failures += 1
+                        if self.consecutive_read_failures >= 15:
+                            logger.warning("RTSP akışı koptu, yeniden bağlanılıyor...")
+                            self.consecutive_read_failures = 0
+                            try:
+                                self.cap.release()
+                            except Exception:
+                                pass
+                            self._open_source()
+                        time.sleep(0.02)
+                        continue
+                    else:
+                        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                        self.video_frame_pos = 0
+                        self.detector.tracked_boxes = []
+                        ret, raw_frame = self.cap.read()
+                if ret and raw_frame is not None:
+                    self.consecutive_read_failures = 0
                     frame = raw_frame
                     self.video_frame_pos += 1
 
             if frame is None:
                 frame = self._generate_synthetic_frame()
             elif self.cap is not None:
+                # Yüksek çözünürlüklü RTSP (1920x1080) karelerini çizim ve AI öncesi 1280x720'ye indir (CPU %60 tasarruf + 0 gecikme)
+                H, W = frame.shape[:2]
+                if W != 1280 or H != 720:
+                    frame = cv2.resize(frame, (1280, 720), interpolation=cv2.INTER_LINEAR)
+
                 frame, detected = self.detector.update_and_draw(
                     frame,
                     frame_idx=self.video_frame_pos,
@@ -565,7 +726,7 @@ class CameraSource:
             if W != 1280 or H != 720:
                 frame = cv2.resize(frame, (1280, 720), interpolation=cv2.INTER_LINEAR)
 
-            _, jpeg = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 78])
+            _, jpeg = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
             jpeg_bytes = jpeg.tobytes()
 
             with self.lock:
@@ -580,10 +741,13 @@ class CameraSource:
                 frames_this_sec = 0
                 last_calc_time = now
 
-            elapsed = time.time() - start_time
-            sleep_time = frame_interval - elapsed
-            if sleep_time > 0:
-                time.sleep(sleep_time)
+            # RTSP canlı akışta kamera kendi donanım saatinde (25 FPS) kare gönderir;
+            # burada sleep yapmak TCP tamponunun şişmesine ve takılmalara yol açar!
+            if not self.is_rtsp:
+                elapsed = time.time() - start_time
+                sleep_time = frame_interval - elapsed
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
 
     def _generate_synthetic_frame(self):
         w, h = 1280, 720
@@ -843,8 +1007,42 @@ class CameraHTTPHandler(BaseHTTPRequestHandler):
                     source.set_source(new_source)
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
+                self._send_cors_headers()
                 self.end_headers()
                 self.wfile.write(json.dumps({"ok": True, "source": new_source}).encode('utf-8'))
+            except Exception as e:
+                self.send_error(400, f"Gecersiz istek: {e}")
+            return
+        if self.path == '/api/vehicles':
+            length = int(self.headers.get('content-length', 0))
+            body = self.rfile.read(length).decode('utf-8')
+            try:
+                data = json.loads(body)
+                items = data.get('items', {})
+                if isinstance(items, dict):
+                    for raw_plate, info in items.items():
+                        formatted = SimplePlateDetector.format_tr_plate(str(raw_plate)) or str(raw_plate).strip().upper()
+                        kind = info.get('kind', 'resident')
+                        if kind == 'blacklist':
+                            status = "KARA LİSTE - ENGELLİ (AÇILMADI ✕)"
+                            color = (0, 40, 255)
+                        elif kind == 'guest':
+                            status = "MİSAFİR İZNİ (AÇILIYOR ✓)"
+                            color = (0, 255, 90)
+                        else:
+                            status = "KAYITLI SAKİN (AÇILIYOR ✓)"
+                            color = (0, 255, 90)
+                        SimplePlateDetector.PLATE_INFO_MAP[formatted] = {
+                            "apt": info.get('apt') or "Kayıtlı Daire",
+                            "name": info.get('name') or "Kayıtlı Araç",
+                            "status": status,
+                            "color": color,
+                        }
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self._send_cors_headers()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": True, "count": len(items)}).encode('utf-8'))
             except Exception as e:
                 self.send_error(400, f"Gecersiz istek: {e}")
             return
@@ -1003,20 +1201,20 @@ def start_vps_snapshot_pusher(source, site_code="6070832089", camera_id="9", int
 def main():
     parser = argparse.ArgumentParser(description="IP Kamera Yayın Sunucusu")
     parser.add_argument("--port", type=int, default=8080, help="HTTP/MJPEG Portu (varsayılan: 8080)")
-    parser.add_argument("--video", type=str, default="2", help="Video kaynağı (1, 2, 3 veya dosya yolu; varsayılan: 2)")
+    parser.add_argument("--video", type=str, default=DEFAULT_RTSP_URL, help="Video/RTSP kaynağı (varsayılan: Gerçek Hikvision RTSP)")
     parser.add_argument("--webcam", type=int, default=None, help="Web kamera aygıt indeksi (örn: 0)")
-    parser.add_argument("--fps", type=int, default=20, help="Yayın kare hızı (FPS)")
+    parser.add_argument("--fps", type=int, default=25, help="Yayın kare hızı (FPS)")
     args = parser.parse_args()
 
     local_ip = get_local_ip()
     source_arg = str(args.webcam) if args.webcam is not None else args.video
 
     logger.info("=" * 68)
-    logger.info("  IP KAMERA YAYIN SUNUCUSU (ANPR & VIRTUAL IP CAM)")
+    logger.info("  IP KAMERA YAYIN SUNUCUSU (RTSP AI ANPR BRIDGE)")
     logger.info("=" * 68)
     logger.info(f"Yerel IP Adresi : {local_ip}")
     logger.info(f"Yayın Portu     : {args.port}")
-    logger.info(f"Aktif Video     : Video {source_arg} (2.mp4 LPR & İzmir)")
+    logger.info(f"Aktif Kaynak    : {source_arg}")
     logger.info(f"MJPEG Canlı Akış: http://{local_ip}:{args.port}/mjpeg")
     logger.info(f"Snapshot JPEG   : http://{local_ip}:{args.port}/snapshot.jpg")
     logger.info(f"Web Arayüzü     : http://{local_ip}:{args.port}/")

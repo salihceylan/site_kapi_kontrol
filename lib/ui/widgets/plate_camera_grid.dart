@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/models/plate_gates.dart' show GateColor;
 import 'package:site_kapi_kontrol/services/api_exception.dart';
+import 'package:site_kapi_kontrol/services/plate_camera_snapshot.dart';
 import 'package:site_kapi_kontrol/services/plate_cameras_api.dart';
 import 'package:site_kapi_kontrol/services/plate_recognition_engine.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
@@ -201,89 +202,34 @@ class _PlateCameraTileState extends State<PlateCameraTile> with WidgetsBindingOb
     }
   }
 
+  final http.Client _httpClient = http.Client();
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _localFramesSub?.cancel();
     _decisionsSub?.cancel();
     _timer?.cancel();
+    _httpClient.close();
     super.dispose();
   }
 
-  String? _workingDirectUrl;
-
   Future<Uint8List?> _fetchDirect(PlateCameraRow camera) async {
-    final host = camera.host;
+    final host = camera.host.trim();
     if (host.isEmpty) return null;
-    final user = camera.username ?? '';
-    final authHeader = user.isNotEmpty ? 'Basic ${base64Encode(utf8.encode('$user:'))}' : null;
-
-    final client = http.Client();
     try {
-      // 1. Daha önce çalışan URL varsa doğrudan onu dene (anında ~10ms yanıt)
-      if (_workingDirectUrl != null) {
-        try {
-          final req = http.Request('GET', Uri.parse(_workingDirectUrl!));
-          if (authHeader != null) req.headers['Authorization'] = authHeader;
-          final streamed = await client.send(req).timeout(const Duration(milliseconds: 600));
-          if (streamed.statusCode == 200) {
-            final plateHeader = streamed.headers['x-plate'];
-            final bytes = await streamed.stream.toBytes();
-            if (bytes.length > 500) {
-              _onDirectFrameReceived(bytes, plateHeader, host, camera.port ?? 8080);
-              return bytes;
-            }
-          }
-        } catch (_) {
-          _workingDirectUrl = null;
-        }
+      final (uri, res) = await PlateCameraSnapshot.discover(
+        _httpClient,
+        camera,
+        fetchPlateFallback: true,
+      );
+      if (res.ok && res.bytes != null && res.bytes!.length > 500) {
+        final effectiveHost = uri?.host ?? host;
+        final effectivePort = uri?.port ?? (camera.port ?? 8080);
+        _onDirectFrameReceived(res.bytes!, res.plate, effectiveHost, effectivePort);
+        return res.bytes;
       }
-
-      final candidateHosts = <String>[host];
-      if (host == '127.0.0.1' || host == 'localhost') {
-        candidateHosts.add('192.168.1.20');
-      } else if (host == '192.168.1.20') {
-        candidateHosts.add('127.0.0.1');
-        candidateHosts.add('localhost');
-      }
-
-      final candidatePorts = <int>{
-        if (camera.port != null && camera.port! > 0) camera.port!,
-        8080,
-        80,
-      }.toList();
-
-      final endpoints = <String>[
-        '/snapshot.jpg',
-        '/onvif/snapshot',
-        '/cgi-bin/snapshot.cgi',
-        '/ISAPI/Streaming/channels/101/picture',
-      ];
-
-      for (final h in candidateHosts) {
-        for (final port in candidatePorts) {
-          for (final ep in endpoints) {
-            final url = 'http://$h:$port$ep';
-            try {
-              final req = http.Request('GET', Uri.parse(url));
-              if (authHeader != null) req.headers['Authorization'] = authHeader;
-              final streamed = await client.send(req).timeout(const Duration(milliseconds: 400));
-              if (streamed.statusCode == 200) {
-                final plateHeader = streamed.headers['x-plate'];
-                final bytes = await streamed.stream.toBytes();
-                if (bytes.length > 500) {
-                  _workingDirectUrl = url;
-                  _onDirectFrameReceived(bytes, plateHeader, h, port);
-                  return bytes;
-                }
-              }
-            } catch (_) {}
-          }
-        }
-      }
-    } finally {
-      client.close();
-    }
+    } catch (_) {}
     return null;
   }
 
@@ -373,7 +319,7 @@ class _PlateCameraTileState extends State<PlateCameraTile> with WidgetsBindingOb
     } finally {
       _busy = false;
       if (mounted && !_paused && _wantsImage) {
-        final nextDelay = fromDirect ? const Duration(milliseconds: 500) : widget.refresh;
+        final nextDelay = fromDirect ? const Duration(milliseconds: 45) : widget.refresh;
         _timer = Timer(nextDelay, () => unawaited(_fetch()));
       }
     }

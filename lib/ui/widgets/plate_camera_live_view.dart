@@ -104,8 +104,29 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
     super.dispose();
   }
 
-    Future<void> _decodeAndSetImage(Uint8List bytes, String? plate) async {
+  bool _isSameFrame(Uint8List a, Uint8List? b) {
+    if (b == null || a.length != b.length) return false;
+    if (identical(a, b)) return true;
+    final len = a.length;
+    if (len < 64) return false;
+    final mid = len >> 1;
+    final q1 = len >> 2;
+    final q3 = mid + q1;
+    return a[16] == b[16] &&
+        a[q1] == b[q1] &&
+        a[mid] == b[mid] &&
+        a[q3] == b[q3] &&
+        a[len - 16] == b[len - 16];
+  }
+
+  Future<void> _decodeAndSetImage(Uint8List bytes, String? plate) async {
     if (_isDecoding) return;
+    if (_decodedImage != null && _isSameFrame(bytes, _frameBytes)) {
+      if (_detectedPlate != plate && mounted) {
+        setState(() => _detectedPlate = plate);
+      }
+      return;
+    }
     _isDecoding = true;
     try {
       final codec = await ui.instantiateImageCodec(bytes);
@@ -198,12 +219,6 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
 
   Future<void> _fetchNextFrame() async {
     if (_inFlight || !mounted || !widget.isActive) return;
-    // Motor zaten son 300ms içinde kare verdiyse fazladan istek atma
-    if (_lastFrameAt != null &&
-        DateTime.now().difference(_lastFrameAt!).inMilliseconds < 25 &&
-        false && PlateRecognitionEngine.instance.isRunning) {
-      return;
-    }
 
     _inFlight = true;
     try {
@@ -221,7 +236,7 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
       );
 
       if (res.ok && res.bytes != null && mounted) {
-        unawaited(_decodeAndSetImage(res.bytes!, (res.plate != null && res.plate!.isNotEmpty) ? res.plate : null));
+        await _decodeAndSetImage(res.bytes!, (res.plate != null && res.plate!.isNotEmpty) ? res.plate : null);
 
         // Plaka okunduysa karar motoruna ilet (aynı plaka için gereksiz tekrarları önle)
         final now = DateTime.now();
