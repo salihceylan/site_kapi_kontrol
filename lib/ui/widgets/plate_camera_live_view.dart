@@ -11,8 +11,10 @@ import 'package:site_kapi_kontrol/services/plate_recognition_engine.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/license_plate.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/widgets/plate_rtsp_video_surface.dart';
 
-/// Tek bir IP kameranın canlı JPEG akışını kesintisiz (gapless) olarak gösteren bileşen.
+/// Tek bir IP kameranın canlı akışını (yerel ağda donanım hızlandırmalı 20-30 FPS RTSP,
+/// uzaktan erişimde kesintisiz JPEG yedeklemesi) gösteren bileşen.
 /// Hem "Geçiş noktaları"ndaki küçük kamera kartlarında hem de "Canlı akış" sekmesindeki
 /// büyük monitör kartlarında kullanılır.
 class PlateCameraLivePreview extends StatefulWidget {
@@ -29,7 +31,8 @@ class PlateCameraLivePreview extends StatefulWidget {
     this.camerasService,
     this.borderRadius,
     this.showControls = false,
-    this.pollInterval = const Duration(milliseconds: 38),
+    this.preferSubStream = true,
+    this.pollInterval = const Duration(milliseconds: 250),
   });
 
   final int cameraId;
@@ -43,6 +46,7 @@ class PlateCameraLivePreview extends StatefulWidget {
   final PlateCamerasService? camerasService;
   final BorderRadius? borderRadius;
   final bool showControls;
+  final bool preferSubStream;
   final Duration pollInterval;
 
   @override
@@ -64,6 +68,7 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
   DateTime? _lastServerUploadAt;
   String? _lastEtag;
   PlateCameraRow? _resolvedCamera;
+  bool _rtspPlaying = false;
 
   @override
   void initState() {
@@ -157,9 +162,16 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
   }
 
   void _onEngineFrames(Map<int, Uint8List> frames) {
+    final plate = PlateRecognitionEngine.instance.lastCameraPlates[widget.cameraId];
+    if (_rtspPlaying) {
+      if (mounted && _detectedPlate != plate) {
+        setState(() => _detectedPlate = plate);
+      }
+      return;
+    }
     final bytes = frames[widget.cameraId];
     if (bytes != null && bytes.isNotEmpty && mounted && !identical(bytes, _frameBytes)) {
-      _decodeAndSetImage(bytes, PlateRecognitionEngine.instance.lastCameraPlates[widget.cameraId]);
+      _decodeAndSetImage(bytes, plate);
     }
   }
 
@@ -191,8 +203,11 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
     }
 
     if (!mounted) return;
-    unawaited(_fetchNextFrame());
-    _pollTimer = Timer.periodic(widget.pollInterval, (_) => unawaited(_fetchNextFrame()));
+    setState(() {});
+    if (!_rtspPlaying) {
+      unawaited(_fetchNextFrame());
+      _pollTimer = Timer.periodic(widget.pollInterval, (_) => unawaited(_fetchNextFrame()));
+    }
   }
 
   PlateCameraRow _buildSyntheticRow({
@@ -216,7 +231,7 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
       );
 
   Future<void> _fetchNextFrame() async {
-    if (_inFlight || !mounted || !widget.isActive) return;
+    if (_inFlight || _rtspPlaying || !mounted || !widget.isActive) return;
 
     _inFlight = true;
     try {
@@ -361,7 +376,8 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
                     isActive: widget.isActive,
                     siteCode: widget.siteCode,
                     camerasService: widget.camerasService,
-                    pollInterval: const Duration(milliseconds: 35),
+                    preferSubStream: false,
+                    pollInterval: const Duration(milliseconds: 250),
                   ),
                 ),
               ),
@@ -375,8 +391,17 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
   @override
   Widget build(BuildContext context) {
     final bytes = _frameBytes;
-    final hasLiveFrame = bytes != null && bytes.isNotEmpty;
+    final hasSnapshotBytes = bytes != null && bytes.isNotEmpty;
+    final hasLiveFrame = _rtspPlaying || hasSnapshotBytes;
     final plate = _detectedPlate;
+    final rtspCamera = _resolvedCamera ??
+        (((widget.host ?? '').trim().isNotEmpty || (widget.rtspUrl ?? '').trim().isNotEmpty)
+            ? _buildSyntheticRow(
+                host: (widget.host ?? '').trim(),
+                port: widget.port,
+                rtspUrl: widget.rtspUrl,
+              )
+            : null);
 
     final content = SizedBox.expand(
       child: Stack(
@@ -393,21 +418,21 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
             ),
           ),
 
-                    // Canlı video karesi (RawImage ile yerel bellek anında serbest bırakılır)
-          if (_decodedImage != null)
+          // Yedek canlı kare (RTSP ilk karesi gelene kadar veya uzaktan izlemede)
+          if (!_rtspPlaying && _decodedImage != null)
             RawImage(
               image: _decodedImage,
               fit: BoxFit.cover,
               filterQuality: FilterQuality.low,
             )
-          else if (hasLiveFrame)
+          else if (!_rtspPlaying && hasSnapshotBytes)
             Image.memory(
               bytes,
               fit: BoxFit.cover,
               gaplessPlayback: true,
               filterQuality: FilterQuality.low,
             )
-          else
+          else if (!_rtspPlaying)
             Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -434,6 +459,26 @@ class _PlateCameraLivePreviewState extends State<PlateCameraLivePreview> {
                   ],
                 ],
               ),
+            ),
+
+          // Donanım hızlandırmalı gerçek zamanlı 20-30 FPS RTSP akışı
+          if (PlateRtspVideoSurface.isSupported && widget.isActive && rtspCamera != null)
+            PlateRtspVideoSurface(
+              camera: rtspCamera,
+              preferSubStream: widget.preferSubStream,
+              camerasService: widget.camerasService,
+              siteCode: widget.siteCode,
+              onPlayingChanged: (playing) {
+                if (!mounted) return;
+                setState(() => _rtspPlaying = playing);
+                if (playing) {
+                  _pollTimer?.cancel();
+                } else if (widget.isActive) {
+                  _pollTimer?.cancel();
+                  unawaited(_fetchNextFrame());
+                  _pollTimer = Timer.periodic(widget.pollInterval, (_) => unawaited(_fetchNextFrame()));
+                }
+              },
             ),
 
           // Okunan plaka ve karar HUD çubuğu (alt bant)

@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/services/plate_cameras_api.dart';
 
@@ -35,10 +36,46 @@ class PlateCameraSnapshot {
   /// Kamera kimliğine veya adresine göre son başarılı çalışan anlık kare adresi önbelleği.
   static final Map<String, Uri> _workingUriCache = <String, Uri>{};
 
+  static const String _secureCredsKey = 'plate_camera_local_creds_v1';
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  static bool _credsLoaded = false;
+
   /// Bilinen yerel kamera kimlik bilgileri önbelleği (host -> credentials).
   static final Map<String, CameraCredentials> _credentials = <String, CameraCredentials>{
     '192.168.1.64': const CameraCredentials(user: 'admin', pass: 'gude2134'),
   };
+
+  /// Kayıtlı kamera kimlik bilgilerini güvenli depolamadan belleğe yükler.
+  static Future<void> loadPersistedCredentials() async {
+    if (_credsLoaded) return;
+    _credsLoaded = true;
+    try {
+      final raw = await _secureStorage.read(key: _secureCredsKey);
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        for (final entry in decoded.entries) {
+          final v = entry.value;
+          if (v is Map && v['u'] is String && v['p'] is String) {
+            _credentials[entry.key.toString()] = CameraCredentials(
+              user: v['u'] as String,
+              pass: v['p'] as String,
+            );
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  static Future<void> _savePersistedCredentials() async {
+    try {
+      final map = <String, Map<String, String>>{
+        for (final e in _credentials.entries)
+          e.key: <String, String>{'u': e.value.user, 'p': e.value.pass},
+      };
+      await _secureStorage.write(key: _secureCredsKey, value: jsonEncode(map));
+    } catch (_) {}
+  }
 
   /// Kamera başına etkin Digest kimlik doğrulama oturumu.
   static final Map<String, _DigestChallenge> _activeChallenges = <String, _DigestChallenge>{};
@@ -46,7 +83,7 @@ class PlateCameraSnapshot {
   /// Aynı anda aynı adrese atılan mükerrer HTTP isteklerini tekilleştirir (25 FPS akıcılık için).
   static final Map<Uri, Future<SnapshotResult>> _inFlightFetches = <Uri, Future<SnapshotResult>>{};
 
-  /// Kamera kaydedilirken girilen parolayı yerel belleğe işler.
+  /// Kamera kaydedilirken girilen parolayı yerel belleğe ve güvenli depolamaya işler.
   static void recordCredentials({
     required String host,
     String? username,
@@ -62,6 +99,7 @@ class PlateCameraSnapshot {
       if (cameraId != null && cameraId > 0) {
         _credentials['id_$cameraId'] = cred;
       }
+      unawaited(_savePersistedCredentials());
     }
   }
 
@@ -132,6 +170,7 @@ class PlateCameraSnapshot {
     }
 
     const snapshotPaths = <String>[
+      '/ISAPI/Streaming/channels/102/picture',
       '/ISAPI/Streaming/channels/101/picture',
       '/snapshot.jpg',
       '/onvif/snapshot',

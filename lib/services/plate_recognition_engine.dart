@@ -448,7 +448,7 @@ class PlateRecognitionEngine {
             continue; // Kapı henüz bir sonraki araç için beklemede
           }
           final lastRx = _lastFrameReceivedAt[camera.id];
-          if (lastRx != null && DateTime.now().difference(lastRx).inMilliseconds < 1500) {
+          if (lastRx != null && DateTime.now().difference(lastRx).inMilliseconds < 2500) {
             continue;
           }
           final captured = await _captureFrame(camera);

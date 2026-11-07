@@ -5,15 +5,19 @@ import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/app.dart';
 import 'package:site_kapi_kontrol/services/crash_reporter.dart';
 import 'package:site_kapi_kontrol/services/easy_view_service.dart';
+import 'package:site_kapi_kontrol/services/plate_camera_snapshot.dart';
 import 'package:site_kapi_kontrol/services/push_firebase_gateway.dart';
 import 'package:site_kapi_kontrol/services/theme_service.dart';
 import 'package:site_kapi_kontrol/services/view_mode_service.dart';
 import 'package:site_kapi_kontrol/ui/views/app_gate_view.dart';
+import 'package:site_kapi_kontrol/ui/widgets/plate_rtsp_video_surface.dart';
 
 export 'package:site_kapi_kontrol/app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  PlateRtspVideoSurface.ensureMediaKitInitialized();
+  unawaited(PlateCameraSnapshot.loadPersistedCredentials());
   // Canli kamera ve goruntu akislarinda bellek sizintisini onlemek icin ImageCache sinirlandirilir (OOM korumasi)
   PaintingBinding.instance.imageCache.maximumSize = 30;
   PaintingBinding.instance.imageCache.maximumSizeBytes = 30 * 1024 * 1024; // 30 MB

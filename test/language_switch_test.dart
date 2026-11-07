@@ -5,9 +5,7 @@ import 'package:site_kapi_kontrol/l10n/gen/app_localizations.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/locale_service.dart';
-import 'package:site_kapi_kontrol/ui/helpers/resident_tabs.dart';
 import 'package:site_kapi_kontrol/ui/views/profile_view.dart';
-import 'package:site_kapi_kontrol/ui/widgets/language_picker.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 void main() {

@@ -4720,3 +4720,9 @@ Güvenlik kulübesindeki kenar PC uygulaması artık sunucunun gerçek kenar sö
     1. **Aynı Aracın Çift Tetikleme Yapmaması:** Kapıyı açan aynı araç (`35 EA 8875`), belirlenen koruma süresi (varsayılan 60 sn) boyunca hem giriş kamerasından (geçerken tekrar okunma) hem de çıkış kamerasından (arka plaka) engellenir; 10 sn'lik kapı mola süresi bittiğinde araç henüz kameranın önündeyse kapı ASLA 2. kez tetiklenmez.
     2. **Farklı Aracın Beklememesi:** Öndeki araç geçtikten sonra belirlenen bekleme süresi (10 sn) dolduğunda, arkadan gelen farklı bir araç (`06 TEST 001`) hemen okunup kapıyı açabilir; sistem 60 sn kilitlenmez.
 
+- [ ] **165.20. Donanım Hızlandırmalı Gerçek Zamanlı RTSP Kamera Akışı (20–30 FPS, Düşük Gecikmeli H.264/TCP):**
+  - **Nasıl Test Edilir:** Yerel ağda gerçek bir IP kamera (örn. Hikvision `192.168.1.64`, RTSP `554`, kullanıcı adı ve şifre tanımlı) ekliyken Plaka Tanıma ekranındaki "Canlı akış", "Geçiş noktaları" ve kamera ızgarasını açın; ardından sağ üstteki büyütme ikonuyla tam ekran görünümüne geçin.
+  - **Beklenen Sonuç:**
+    1. **Akıcı 20–30 FPS Canlı Akış:** HTTP anlık kare (snapshot) sınırına (~3.7 FPS) takılmadan, doğrudan RTSP/TCP üzerinden donanım hızlandırmalı (GPU D3D11VA / MediaCodec / VideoToolbox) gerçek zamanlı 20–30 FPS pürüzsüz video oynatılır.
+    2. **Akıllı Alt/Ana Akış Seçimi:** Küçük kart ve ızgara görünümlerinde düşük bant genişlikli alt akış (`102` - 640x360), tam ekran görünümünde ise yüksek çözünürlüklü ana akış (`101` - 1080p Full HD) otomatik seçilir; formda ayrı girilen kullanıcı adı ve şifre RTSP adresine otomatik enjekte edilir.
+    3. **Uzaktan Erişim Yedeklemesi:** Kamera ile aynı yerel ağda olunmadığında (mobil veri / Web) sistem hata vermeden otomatik olarak sunucu üzerindeki son kare (snapshot) akışına düşer.

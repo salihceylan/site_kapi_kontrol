@@ -10,6 +10,7 @@ import 'package:site_kapi_kontrol/services/plate_cameras_api.dart';
 import 'package:site_kapi_kontrol/services/plate_recognition_engine.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/widgets/plate_rtsp_video_surface.dart';
 
 /// Karo menüsü eylemleri.
 enum PlateCameraMenuAction { edit, probe, toggleActive, rotateToken }
@@ -111,6 +112,7 @@ class _PlateCameraTileState extends State<PlateCameraTile> with WidgetsBindingOb
   bool _busy = false;
   bool _paused = false;
   bool _stale = false;
+  bool _rtspPlaying = false;
   Timer? _timer;
   StreamSubscription? _localFramesSub;
   StreamSubscription? _decisionsSub;
@@ -146,6 +148,15 @@ class _PlateCameraTileState extends State<PlateCameraTile> with WidgetsBindingOb
         final frame = frames[widget.camera.id];
         if (frame != null && mounted) {
           final cameraPlate = PlateRecognitionEngine.instance.lastCameraPlates[widget.camera.id];
+          if (_rtspPlaying) {
+            if (cameraPlate != null && cameraPlate.isNotEmpty && _detectedPlate != cameraPlate) {
+              setState(() {
+                _detectedPlate = cameraPlate;
+                _detectedPlateAt = DateTime.now();
+              });
+            }
+            return;
+          }
           setState(() {
             _bytes = frame;
             _capturedAt = DateTime.now();
@@ -241,7 +252,7 @@ class _PlateCameraTileState extends State<PlateCameraTile> with WidgetsBindingOb
   }
 
   Future<void> _fetch() async {
-    if (_busy || !mounted || _paused || !_wantsImage) return;
+    if (_busy || _rtspPlaying || !mounted || _paused || !_wantsImage) return;
     _busy = true;
     _timer?.cancel();
     bool fromDirect = false;
@@ -291,8 +302,8 @@ class _PlateCameraTileState extends State<PlateCameraTile> with WidgetsBindingOb
       if (mounted && !_stale) setState(() => _stale = true);
     } finally {
       _busy = false;
-      if (mounted && !_paused && _wantsImage) {
-        final nextDelay = fromDirect ? const Duration(milliseconds: 45) : widget.refresh;
+      if (mounted && !_paused && _wantsImage && !_rtspPlaying) {
+        final nextDelay = fromDirect ? const Duration(milliseconds: 250) : widget.refresh;
         _timer = Timer(nextDelay, () => unawaited(_fetch()));
       }
     }
@@ -361,17 +372,43 @@ class _PlateCameraTileState extends State<PlateCameraTile> with WidgetsBindingOb
                     fit: StackFit.loose,
                     children: <Widget>[
                       ColoredBox(color: p.surfaceMuted),
-                      if (_bytes != null)
-                        Image.memory(
-                          _bytes!,
-                          key: const ValueKey<String>('tile_image'),
-                          fit: BoxFit.cover,
-                          gaplessPlayback: true,
-                          semanticLabel: 'Kamera görüntüsü, ${camera.name}',
-                          errorBuilder: (context, error, stack) => _Placeholder(text: 'Görüntü çözülemedi', color: p.textSecondary),
+                      if (!_rtspPlaying && _bytes != null)
+                        Positioned.fill(
+                          child: Image.memory(
+                            _bytes!,
+                            key: const ValueKey<String>('tile_image'),
+                            fit: BoxFit.cover,
+                            gaplessPlayback: true,
+                            semanticLabel: 'Kamera görüntüsü, ${camera.name}',
+                            errorBuilder: (context, error, stack) => _Placeholder(text: 'Görüntü çözülemedi', color: p.textSecondary),
+                          ),
                         )
-                      else
+                      else if (!_rtspPlaying)
                         _Placeholder(key: const ValueKey<String>('tile_placeholder'), text: _placeholder, color: p.textSecondary),
+                      if (PlateRtspVideoSurface.isSupported && _wantsImage)
+                        Positioned.fill(
+                          child: PlateRtspVideoSurface(
+                            camera: camera,
+                            preferSubStream: true,
+                            camerasService: widget.service,
+                            siteCode: widget.siteCode,
+                            onPlayingChanged: (playing) {
+                              if (!mounted) return;
+                              setState(() {
+                                _rtspPlaying = playing;
+                                if (playing) {
+                                  _stale = false;
+                                  _capturedAt = DateTime.now();
+                                }
+                              });
+                              if (playing) {
+                                _timer?.cancel();
+                              } else if (!_paused && _wantsImage) {
+                                unawaited(_fetch());
+                              }
+                            },
+                          ),
+                        ),
                       Positioned(
                         left: AppSpace.sm,
                         top: AppSpace.sm,
