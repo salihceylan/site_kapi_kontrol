@@ -24,7 +24,7 @@ class PlateRtspVideoSurface extends StatefulWidget {
     required this.camera,
     this.preferSubStream = true,
     this.fit = BoxFit.cover,
-    this.feedEngine = true,
+    this.feedEngine = false,
     this.camerasService,
     this.siteCode,
     this.onPlayingChanged,
@@ -169,6 +169,7 @@ class _PlateRtspVideoSurfaceState extends State<PlateRtspVideoSurface> {
   Future<void> _configureLowLatency(Player player) async {
     final platform = player.platform;
     if (platform is NativePlayer) {
+      await _trySetProperty(platform, 'hwdec', 'auto-safe');
       await _trySetProperty(platform, 'ao', 'null');
       await _trySetProperty(platform, 'aid', 'no');
       await _trySetProperty(platform, 'sid', 'no');

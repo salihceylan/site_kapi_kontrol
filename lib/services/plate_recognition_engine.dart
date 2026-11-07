@@ -335,7 +335,7 @@ class PlateRecognitionEngine {
     _isRunning = true;
 
     unawaited(_tick());
-    _loopTimer = Timer.periodic(const Duration(milliseconds: 900), (_) => unawaited(_tick()));
+    _loopTimer = Timer.periodic(const Duration(seconds: 4), (_) => unawaited(_tick()));
     debugPrint('[PlateRecognitionEngine] Motor başlatıldı (Site: $siteCode, ${_activeCameras.length} aktif kamera)');
   }
 
