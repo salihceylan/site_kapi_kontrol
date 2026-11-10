@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/models/apartment_member_record.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/models/join_request_record.dart';
@@ -137,6 +138,7 @@ Future<void> _pumpHome(
   bool dark = false,
   bool doors = false,
 }) async {
+  SharedPreferences.setMockInitialValues(<String, Object>{});
   t.view.physicalSize = Size(width, height);
   t.view.devicePixelRatio = 1.0;
   addTearDown(t.view.reset);

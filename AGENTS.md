@@ -230,3 +230,19 @@ Bu kurallar projede geliştirme yapılırken MUTLAKA ve İSTİSNASIZ olarak uygu
       - Daireden ayrılmış kişilerin eski katılım başvurularını listelerde tekrar gösteren sorgular yazma.
       - Katılım ve site başvurularından "Anladım" / kapatma mekanizmasını (JoinRequestTracker, SiteApplicationTracker.consumeApproval, dismissJoinRequest) kaldırma.
       - Onaylanan veya reddedilen başvuruların ekranda asılı kalarak kullanıcıyı rahatsız etmesine izin verme.
+
+
+32. **Bağsız / Abonesiz Kullanıcı Arayüzü Sadeleştirmesi (İlişkisiz Kartların ve Menülerin Gizlenmesi):**
+    - **Neden Yapıldı:**
+      - Hiçbir siteye veya daireye aboneliği, üyeliği ya da daire adminliği/site yöneticiliği bulunmayan (`sites.length == 0` ve `myApartments.length == 0` ve süper kullanıcı olmayan) yeni veya bireysel kullanıcıların ana ekranda (Dashboard) yetkileri ve ilişkileri olmayan `Kapılar`, `Acil durum` ve `Dairem` kartlarını görmesi anlamsızdı.
+      - Ayrıca henüz hiçbir siteye dahil olmayan bu kullanıcıların sol çekmece menüsünü (hamburger menü) ve sağ ayarlar menüsünü (dişli çark / `endDrawer`) görmesi kafa karışıklığı yaratıyordu.
+      - Yapılan geliştirmeyle bağsız (unaffiliated) kullanıcılar için:
+        - `Kapılar`, `Acil durum` ve `Dairem` kartları panodan tamamen kaldırılmıştır.
+        - Sol çekmece (`drawer: YanMenu`) ve sağ ayarlar çekmecesi (`endDrawer: YanMenuAyarlar`) ile bunlara ait AppBar butonları gizlenmiştir.
+        - Ana ekranda kullanıcıyı doğrudan yönlendiren "Daireye Katıl ve Kurulum" (`JoinAndSetupView`) görünümü sunulur (Site Sakini Girişi, Katılım Başvurularım, Site Kurulum Başvurusu).
+        - Üst barda (AppBar) tema değiştirme ve yenileme butonlarının yanında sade bir Hesap menüsü (`Profilim` ve `Çıkış Yap`) sağlanır.
+        - Kullanıcı bir daireye katıldığında, başvurusu onaylandığında veya site kurduğunda arayüz dinamik olarak tazelemeyle (`_loadApartments` / `_loadSites`) tüm kartları ve menüleri otomatik açar (Kural 7).
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - Bağsız kullanıcılar için `_isUnaffiliated` kontrolünü kaldırma veya bypass etme.
+      - Yetkisi ve dairesi olmayan kullanıcılara `Kapılar`, `Acil durum` veya `Dairem` kartlarını tekrar gösterme.
+      - Bağsız kullanıcıların ekranına gereksiz sol ve sağ çekmeceleri geri koyma.
