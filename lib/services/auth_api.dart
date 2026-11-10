@@ -1769,6 +1769,61 @@ class AuthApi {
     return _parsePayload('Kişi', () => PersonDetail.fromJson(payload));
   }
 
+  /// 360° Ayrılma ve İlişik Kesme Önizlemesi
+  Future<Map<String, dynamic>> getTerminationPreview({
+    required String token,
+    required int siteCode,
+    required int apartmentId,
+    required int residencyId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: _peoplePath(
+        siteCode,
+        'apartments/$apartmentId/residencies/$residencyId/termination-preview',
+      ),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+  }
+
+  /// 360° Ayrılma ve İlişik Kesme İcrası
+  Future<Map<String, dynamic>> executeResidencyTermination({
+    required String token,
+    required int siteCode,
+    required int apartmentId,
+    required int residencyId,
+    DateTime? moveOutDate,
+    int? successorUserCode,
+    bool terminateSiteRoles = false,
+    String debtDisposition = 'KEEP_ON_DEBTOR',
+    List<Map<String, dynamic>>? finalMeterReadings,
+    String? reason,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _peoplePath(
+        siteCode,
+        'apartments/$apartmentId/residencies/$residencyId/terminate',
+      ),
+      token: token,
+      body: {
+        if (moveOutDate != null) 'move_out_date': crmDateParam(moveOutDate),
+        if (successorUserCode != null) 'successor_user_code': successorUserCode,
+        'terminate_site_roles': terminateSiteRoles,
+        'debt_disposition': debtDisposition,
+        if (finalMeterReadings != null && finalMeterReadings.isNotEmpty)
+          'final_meter_readings': finalMeterReadings,
+        if (reason != null && reason.isNotEmpty) 'reason': reason,
+      },
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+  }
+
   Future<ApartmentPage> listApartments({
     required String token,
     required int siteCode,
@@ -4583,6 +4638,18 @@ class AuthApi {
     final data = _decodePayload(response);
     final list = data['requests'] as List<dynamic>? ?? [];
     return list.map((item) => JoinRequestRecord.fromJson(item as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> dismissJoinRequest({
+    required String token,
+    required int requestId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/membership/my-join-requests/$requestId/dismiss',
+      token: token,
+    );
+    _ensureStatus(response, 200);
   }
 
   Future<List<JoinRequestRecord>> getSiteJoinRequests({

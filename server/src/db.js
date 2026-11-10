@@ -1099,6 +1099,8 @@ export async function ensureDbSchema() {
       CREATE INDEX IF NOT EXISTS idx_join_requests_user ON join_requests(user_code);
       CREATE INDEX IF NOT EXISTS idx_join_requests_apartment ON join_requests(apartment_id);
       ALTER TABLE join_requests ADD COLUMN IF NOT EXISTS notes TEXT;
+      ALTER TABLE join_requests ADD COLUMN IF NOT EXISTS dismissed_at TIMESTAMPTZ;
+      CREATE INDEX IF NOT EXISTS idx_join_requests_user_dismissed ON join_requests(user_code) WHERE dismissed_at IS NULL;
 
       ALTER TABLE site_doors
       ADD COLUMN IF NOT EXISTS access_scope TEXT NOT NULL DEFAULT 'SITE_COMMON';

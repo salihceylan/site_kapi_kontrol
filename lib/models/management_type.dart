@@ -20,6 +20,13 @@ enum ManagementType {
   /// üye payı vb.) sonraki aşamadadır. Sunucu `selectable:false` bir türü hâlâ MANAGEMENT_TYPE_COMING_SOON ile reddeder.
   bool get selectable => true;
 
+  /// Standart site oluşturma akışında gösterilen varsayılan türler.
+  /// Kullanıcı kararıyla İş Merkezi, Kooperatif ve Alışveriş Merkezi arayüzde gizlenmiştir.
+  static const List<ManagementType> defaultCreationTypes = [
+    ManagementType.apartmentSite,
+    ManagementType.residence,
+  ];
+
   /// Sunucu değerinden tür. Alan yoksa, boşsa ya da bilinmiyorsa (eski sunucu / yeni tür)
   /// `apartment_site` (geriye dönük uyum: mevcut tüm siteler bu türdedir).
   static ManagementType fromApi(Object? value) {

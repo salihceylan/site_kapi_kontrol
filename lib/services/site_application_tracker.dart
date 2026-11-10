@@ -89,6 +89,7 @@ class SiteApplicationTracker extends ChangeNotifier {
   final Set<int> _consumedCancelled = <int>{};
   final Future<SharedPreferences> Function()? _prefsLoader;
   static const String _consumedRejectedPrefsKey = 'site_application_consumed_rejected_ids';
+  static const String _consumedApprovedPrefsKey = 'site_application_consumed_approved_ids';
   int _seq = 0;
   int _epoch = 0;
   bool _disposed = false;
@@ -263,6 +264,7 @@ class SiteApplicationTracker extends ChangeNotifier {
   /// Onay kartını kaldırır (yenileme sonrası rol hâlâ değişmediyse); olay tüketilmiş sayılır.
   void consumeApproval(int id) {
     if (_disposed || !_consumed.add(id)) return;
+    _persistConsumedApproved();
     notifyListeners();
   }
 
@@ -282,13 +284,22 @@ class SiteApplicationTracker extends ChangeNotifier {
   void _loadConsumedRejected() async {
     try {
       final prefs = _prefsLoader != null ? await _prefsLoader() : await SharedPreferences.getInstance();
-      final list = prefs.getStringList(_consumedRejectedPrefsKey);
-      if (list != null && list.isNotEmpty) {
-        for (final item in list) {
+      final rejectedList = prefs.getStringList(_consumedRejectedPrefsKey);
+      if (rejectedList != null && rejectedList.isNotEmpty) {
+        for (final item in rejectedList) {
           final id = int.tryParse(item);
           if (id != null) _consumedRejected.add(id);
         }
-        if (!_disposed) notifyListeners();
+      }
+      final approvedList = prefs.getStringList(_consumedApprovedPrefsKey);
+      if (approvedList != null && approvedList.isNotEmpty) {
+        for (final item in approvedList) {
+          final id = int.tryParse(item);
+          if (id != null) _consumed.add(id);
+        }
+      }
+      if (!_disposed && ((rejectedList?.isNotEmpty == true) || (approvedList?.isNotEmpty == true))) {
+        notifyListeners();
       }
     } catch (_) {
       // SharedPreferences erişilemediğinde (örn. birim testleri) sessizce geçilir
@@ -300,6 +311,16 @@ class SiteApplicationTracker extends ChangeNotifier {
       final prefs = _prefsLoader != null ? await _prefsLoader() : await SharedPreferences.getInstance();
       final list = _consumedRejected.map((id) => id.toString()).toList();
       await prefs.setStringList(_consumedRejectedPrefsKey, list);
+    } catch (_) {
+      // SharedPreferences erişilemediğinde sessizce geçilir
+    }
+  }
+
+  void _persistConsumedApproved() async {
+    try {
+      final prefs = _prefsLoader != null ? await _prefsLoader() : await SharedPreferences.getInstance();
+      final list = _consumed.map((id) => id.toString()).toList();
+      await prefs.setStringList(_consumedApprovedPrefsKey, list);
     } catch (_) {
       // SharedPreferences erişilemediğinde sessizce geçilir
     }

@@ -210,3 +210,23 @@ Bu kurallar projede geliştirme yapılırken MUTLAKA ve İSTİSNASIZ olarak uygu
       - `cihaz_kontrol/include/ota_public_key.h` yer tutucuyken (`OTA-PUBLIC-KEY-NOT-SET-REPLACE!!`) köprü ya da üretim firmware'i yayınlama: yer tutuculu sürümü kuran cihaz bir daha OTA ile güncellenemez. Yayın öncesi `node cihaz_kontrol/tools/ota_anahtar.mjs kontrol <firmware.bin> <genel_anahtar>` çıkış kodu 0 olmalı (yayın derlemesi `SKP_OTA_ANAHTAR_ZORUNLU=1` ile yapılır).
       - Yeni firmware paketlerini sunucunun yükleme ucuyla (`POST /admin/firmware/<hedef>/releases`) yayınla; `server/firmware/<hedef>/` içine elle dosya kopyalama ve `manifest.json` düzenleme yalnız köprü öncesi imzasız eski akış içindir. `OTA_SERVE_UNSIGNED=0` ancak köprü sürüm sahaya yayıldıktan sonra yapılır; iki donanım hedefinin (C3 / WROOM) paketleri ve imzaları yine asla karışmaz (kural 4).
       - Cihaz yalnız ARTAN sürümü kurar; sürüm düşürme yetkisi YALNIZ imzadaki `rollback_max` ile verilir (sunucu ya da manifest tek başına açamaz). Geri dönüş için tercih: eski kodu DAHA YÜKSEK sürüm numarasıyla yeniden derleyip normal imzalamak.
+
+30. **Site Oluştururken Ticari/Kurumsal Seçeneklerin (İş Merkezi, Kooperatif, Alışveriş Merkezi) Gizlenmesi:**
+    - **Neden Yapıldı:**
+      - Kullanıcı kararı doğrultusunda, site oluşturma ve başvuru ekranlarında kafa karışıklığını önlemek ve sadeleştirmek amacıyla usiness_center (İş Merkezi), cooperative (Kooperatif) ve shopping_mall (Alışveriş Merkezi) yönetim türü seçenekleri gizlenmiştir.
+      - Arayüzde (ManagementTypeSelector.showAllTypes = false) yalnızca partment_site (Apartman ve Site) ile esidence (Rezidans) listelenir.
+      - Kullanıcı açıkça talep etmedikçe ("ben istersem açarsın" ilkesi) bu üç seçenek arayüzde gösterilmeyecektir.
+      - Geriye dönük uyumluluk gereği backend veri modeli, veritabanı kısıtları ve mevcut sitelerin türleri korunur.
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - Kullanıcı açıkça talep etmedikçe ManagementTypeSelector içinde İş Merkezi, Kooperatif ve Alışveriş Merkezi seçeneklerini varsayılan olarak tekrar görünür yapma (showAllTypes: false varsayılanını koru).
+      - Veritabanından veya backendden bu türleri silme; mevcut siteler ve veri modeli bozulmamalıdır.
+
+31. **Onaylanan ve Kapatılan Başvuruların (Katılım & Site Kurulum) Kalıcı Olarak Gizlenmesi:**
+    - **Neden Yapıldı:**
+      - Bir sakinin veya kullanıcının başvurusu (site kurulumu için süper kullanıcı, daire/siteye katılım için site yöneticisi/daire admini tarafından) onaylandığında ya da kullanıcı daireden ayrıldığında, eski onaylanmış başvuruların ekranda ("Katılım Başvurularım -> Onaylandı", "Site başvurunuz onaylandı") kalıcı olarak kalması kullanıcı deneyimini bozuyordu.
+      - Kullanıcı onaylandığını görüp "Anladım" dediğinde (veya reddedilen başvurusunu kapattığında) bu bildirim kalıcı olarak (SharedPreferences ve veritabanı dismissed_at ile) gizlenir ve bir daha asla ekranda çıkmaz.
+      - Ayrıca kullanıcı daireden ayrılmışsa (partment_residencies.is_current = false veya partment_memberships.is_active = false), o daireye ait eski onaylı katılım başvurusu sunucu sorgusunda otomatik olarak elenir (WHERE jr.dismissed_at IS NULL AND (jr.status != 'APPROVED' OR EXISTS (aktif sakinlik))).
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - Daireden ayrılmış kişilerin eski katılım başvurularını listelerde tekrar gösteren sorgular yazma.
+      - Katılım ve site başvurularından "Anladım" / kapatma mekanizmasını (JoinRequestTracker, SiteApplicationTracker.consumeApproval, dismissJoinRequest) kaldırma.
+      - Onaylanan veya reddedilen başvuruların ekranda asılı kalarak kullanıcıyı rahatsız etmesine izin verme.

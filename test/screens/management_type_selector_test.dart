@@ -64,7 +64,7 @@ void main() {
   tearDown(() => LegalApi.debugDefaultFactory = null);
 
   group('ManagementTypeSelector', () {
-    listMatrix('5 tür: Apartman ve Site seçili, diğer dördü seçilebilir (Yakında… çipi yok)', (
+    listMatrix('varsayılan (site oluşturma): yalnız Apartman ve Site ile Rezidans gösterilir, ticari türler gizlidir', (
       t,
       w,
       h,
@@ -85,28 +85,42 @@ void main() {
       );
 
       expect(find.text('Yönetim Türü'), findsOneWidget);
+      expect(find.text('Apartman ve Site'), findsOneWidget);
+      expect(find.text('Rezidans'), findsOneWidget);
+      // Kullanıcı kararıyla gizlenen 3 tür gösterilmez:
+      expect(find.text('İş Merkezi'), findsNothing);
+      expect(find.text('Kooperatif'), findsNothing);
+      expect(find.text('Alışveriş Merkezi'), findsNothing);
+      expect(_radioOn, findsOneWidget);
+      expect(_radioOff, findsOneWidget); // Sadece Rezidans seçilmemiş durumdadır
+
+      // Rezidans'a dokunmak seçimi bildirir.
+      await t.ensureVisible(find.text('Rezidans'));
+      await t.tap(find.text('Rezidans'));
+      await t.pump();
+      expect(changes, [ManagementType.residence]);
+    });
+
+    testWidgets('showAllTypes: true iken 5 türün hepsi gösterilir', (t) async {
+      final changes = <ManagementType>[];
+      await pumpList(
+        t,
+        ManagementTypeSelector(
+          value: ManagementType.apartmentSite,
+          onChanged: changes.add,
+          showAllTypes: true,
+        ),
+        width: 400,
+        height: 800,
+        scale: 1.0,
+        dark: false,
+      );
+
       for (final type in ManagementType.values) {
         expect(find.text(type.label), findsOneWidget, reason: type.label);
       }
       expect(_radioOn, findsOneWidget);
       expect(_radioOff, findsNWidgets(4));
-      expect(find.widgetWithText(StatusChip, 'Yakında…'), findsNothing);
-
-      // Her türe dokunmak seçimi bildirir.
-      final expected = <ManagementType>[];
-      for (final type in <ManagementType>[
-        ManagementType.residence,
-        ManagementType.businessCenter,
-        ManagementType.cooperative,
-        ManagementType.shoppingMall,
-        ManagementType.apartmentSite,
-      ]) {
-        await t.ensureVisible(find.text(type.label));
-        await t.tap(find.text(type.label));
-        await t.pump();
-        expected.add(type);
-      }
-      expect(changes, expected);
     });
 
     testWidgets('anlamsal ağaç: seçili tür "seçili", diğer türler seçilebilir düğme', (t) async {
@@ -193,7 +207,7 @@ void main() {
       expect(type, lessThan(city));
     });
 
-    testWidgets('kurulum seçilen yönetim türünü (kooperatif) iletir', (t) async {
+    testWidgets('kurulum seçilen yönetim türünü (rezidans) iletir', (t) async {
       final auth = _SetupAuth();
       await openDialogAt(
         t,
@@ -205,15 +219,15 @@ void main() {
         dark: false,
       );
       await t.enterText(find.widgetWithText(TextFormField, 'Site Adı *'), 'Güneş Sitesi');
-      await scrollTo(t, find.text('Kooperatif'));
-      await t.tap(find.text('Kooperatif'));
+      await scrollTo(t, find.text('Rezidans'));
+      await t.tap(find.text('Rezidans'));
       await t.pump();
       expect(_radioOn, findsOneWidget);
 
       await scrollTo(t, find.text('Site Kurulumunu Tamamla'));
       await t.tap(find.text('Site Kurulumunu Tamamla'));
       await settleFor(t, 800);
-      expect(auth.types, <String?>['cooperative']);
+      expect(auth.types, <String?>['residence']);
     });
   });
 

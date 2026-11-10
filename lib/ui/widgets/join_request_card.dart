@@ -26,6 +26,7 @@ class JoinRequestCard extends StatelessWidget {
     required this.title,
     required this.status,
     this.details = const <Widget>[],
+    this.onDismiss,
   });
 
   /// Durum: Onaylandı (success) / Reddedildi (danger) / Onay Bekliyor (warning).
@@ -44,6 +45,9 @@ class JoinRequestCard extends StatelessWidget {
 
   /// Başlığın altındaki ayrıntı satırları (her biri kendi metnini taşır).
   final List<Widget> details;
+
+  /// Onaylanan veya reddedilen bildirimi ekrandan kalıcı olarak kapatma eylemi.
+  final VoidCallback? onDismiss;
 
   @override
   Widget build(BuildContext context) {
@@ -80,6 +84,18 @@ class JoinRequestCard extends StatelessWidget {
                 for (final detail in details) ...[
                   const SizedBox(height: AppSpace.sm),
                   detail,
+                ],
+                if (onDismiss != null) ...[
+                  const SizedBox(height: AppSpace.md),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: OutlinedButton.icon(
+                      onPressed: onDismiss,
+                      style: tonalActionStyle(context, tone: status.tone),
+                      icon: const Icon(Icons.check_circle_outline_rounded, size: 16),
+                      label: const Text('Anladım'),
+                    ),
+                  ),
                 ],
               ],
             ),

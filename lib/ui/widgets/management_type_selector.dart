@@ -21,6 +21,7 @@ class ManagementTypeSelector extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.types,
+    this.showAllTypes = false,
   });
 
   final ManagementType value;
@@ -31,6 +32,11 @@ class ManagementTypeSelector extends StatelessWidget {
   /// Sunucudan gelen tür tanımları; null ise yerleşik tanımlar.
   final List<ManagementTypeInfo>? types;
 
+  /// İş Merkezi, Kooperatif ve Alışveriş Merkezi gibi diğer seçenekler gösterilsin mi?
+  /// Kullanıcı kararıyla varsayılan olarak `false`tur (yalnızca Apartman ve Site ile Rezidans gösterilir).
+  /// İstenildiğinde `showAllTypes: true` verilerek açılabilir.
+  final bool showAllTypes;
+
   /// Seçici başlığı.
   static const String title = 'Yönetim Türü';
 
@@ -39,6 +45,19 @@ class ManagementTypeSelector extends StatelessWidget {
 
   /// Salt okunur açıklama.
   static const String lockedNote = 'Yönetim türü site kurulduktan sonra değiştirilemez.';
+
+  /// Ekranda gösterilecek türler.
+  List<ManagementType> get visibleTypes {
+    if (showAllTypes) return ManagementType.values;
+    final list = <ManagementType>[
+      ManagementType.apartmentSite,
+      ManagementType.residence,
+    ];
+    if (!list.contains(value)) {
+      list.add(value);
+    }
+    return list;
+  }
 
   ManagementTypeInfo _info(ManagementType type) {
     final list = types;
@@ -96,7 +115,7 @@ class ManagementTypeSelector extends StatelessWidget {
         children: [
           Text(title, style: th.bodySmall),
           const SizedBox(height: AppSpace.xs),
-          for (final type in ManagementType.values)
+          for (final type in visibleTypes)
             _TypeRow(
               type: type,
               info: _info(type),

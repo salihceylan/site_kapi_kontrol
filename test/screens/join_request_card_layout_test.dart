@@ -173,5 +173,24 @@ void main() {
       expect(t.binding.hasScheduledFrame, isFalse);
       expect(find.byType(IconOrb), findsNWidgets(3));
     });
+
+    testWidgets('onDismiss verildiğinde "Anladım" düğmesi görünür ve tıklandığında geri çağırır', (t) async {
+      var dismissed = false;
+      await pumpAt(
+        t,
+        JoinRequestCard(
+          title: 'Güneş Sitesi',
+          status: (label: 'Onaylandı', tone: AppTone.success),
+          onDismiss: () => dismissed = true,
+        ),
+        width: 360,
+        scale: 1.0,
+        height: 400,
+      );
+      expect(find.text('Anladım'), findsOneWidget);
+      await t.tap(find.text('Anladım'));
+      await t.pump();
+      expect(dismissed, isTrue);
+    });
   });
 }

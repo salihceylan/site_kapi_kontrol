@@ -1193,12 +1193,37 @@ export async function getMyJoinRequests(userCode) {
         jr.notes,
         jr.rejection_reason,
         jr.created_at,
-        jr.reviewed_at
+        jr.reviewed_at,
+        jr.dismissed_at
       FROM join_requests jr
       JOIN sites s ON s.site_code = jr.site_code
       LEFT JOIN site_blocks b ON b.id = jr.block_id
       LEFT JOIN apartments a ON a.id = jr.apartment_id
       WHERE jr.user_code = $1
+        AND jr.dismissed_at IS NULL
+        AND (
+          jr.status != 'APPROVED'
+          OR (
+            EXISTS (
+              SELECT 1 FROM apartment_memberships am
+              WHERE am.apartment_id = jr.apartment_id
+                AND am.user_code = jr.user_code
+                AND am.is_active = TRUE
+            )
+            OR EXISTS (
+              SELECT 1 FROM apartments apt
+              WHERE apt.id = jr.apartment_id
+                AND apt.resident_user_code = jr.user_code
+            )
+            OR EXISTS (
+              SELECT 1 FROM apartment_residencies ar
+              JOIN site_people sp ON sp.id = ar.person_id
+              WHERE ar.apartment_id = jr.apartment_id
+                AND sp.user_code = jr.user_code
+                AND ar.is_current = TRUE
+            )
+          )
+        )
       ORDER BY jr.created_at DESC
     `,
     [uCode],
@@ -1221,8 +1246,34 @@ export async function getMyJoinRequests(userCode) {
       rejectionReason: r.rejection_reason,
       createdAt: r.created_at,
       reviewedAt: r.reviewed_at,
+      dismissedAt: r.dismissed_at,
     })),
   };
+}
+
+/**
+ * Bireysel Kullanıcı: Katılım başvurusunu ekrandan kaldır (dismiss)
+ */
+export async function dismissJoinRequest(userCode, requestId) {
+  const uCode = parseUserCode(userCode);
+  const rId = Number(requestId);
+  if (!uCode || !rId) {
+    throw httpError(400, 'Geçersiz parametreler.');
+  }
+  const result = await pool.query(
+    `
+      UPDATE join_requests
+      SET dismissed_at = NOW(),
+          updated_at = NOW()
+      WHERE id = $1 AND user_code = $2
+      RETURNING id
+    `,
+    [rId, uCode],
+  );
+  if (result.rowCount === 0) {
+    throw httpError(404, 'Başvuru bulunamadı.');
+  }
+  return { ok: true, id: rId };
 }
 
 /**

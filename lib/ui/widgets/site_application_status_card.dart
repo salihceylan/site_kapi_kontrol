@@ -395,6 +395,11 @@ class _SiteApplicationStatusCardState extends State<SiteApplicationStatusCard> {
     announcePolite(context, 'Bildirim kapatıldı.');
   }
 
+  void _dismissApproved(SiteApplication a) {
+    widget.tracker.consumeApproval(a.id);
+    announcePolite(context, 'Bildirim kapatıldı.');
+  }
+
   Widget _buildApproved(BuildContext context, SiteApplication a) {
     final th = Theme.of(context).textTheme;
     final canRefresh = widget.onRefreshAccount != null;
@@ -411,26 +416,37 @@ class _SiteApplicationStatusCardState extends State<SiteApplicationStatusCard> {
           'Siteniz kuruldu. Hesabınız site yöneticisi olarak güncelleniyor; ekran kendiliğinden yenilenir.',
           style: th.bodyMedium,
         ),
-        if (canRefresh) ...[
-          const SizedBox(height: AppSpace.md),
-          OutlinedButton.icon(
-            key: const ValueKey<String>('site_application_refresh_account'),
-            onPressed: _busy ? null : () => unawaited(_refreshAccount()),
-            style: tonalActionStyle(context, tone: AppTone.success),
-            icon: _busy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh_rounded, size: 18),
-            // Meşgulken etiket değişir ve canlı bölge olarak duyurulur (spinner tek başına anlam taşımaz).
-            label: Semantics(
-              liveRegion: _busy,
-              child: Text(_busy ? 'Hesap yenileniyor...' : 'Hesabı yenile'),
+        const SizedBox(height: AppSpace.md),
+        Wrap(
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.xs,
+          children: [
+            if (canRefresh)
+              OutlinedButton.icon(
+                key: const ValueKey<String>('site_application_refresh_account'),
+                onPressed: _busy ? null : () => unawaited(_refreshAccount()),
+                style: tonalActionStyle(context, tone: AppTone.success),
+                icon: _busy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh_rounded, size: 18),
+                label: Semantics(
+                  liveRegion: _busy,
+                  child: Text(_busy ? 'Hesap yenileniyor...' : 'Hesabı yenile'),
+                ),
+              ),
+            OutlinedButton.icon(
+              key: const ValueKey<String>('site_application_dismiss_approved'),
+              onPressed: () => _dismissApproved(a),
+              style: tonalActionStyle(context, tone: AppTone.success),
+              icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+              label: const Text('Anladım'),
             ),
-          ),
-        ],
+          ],
+        ),
       ],
     );
   }

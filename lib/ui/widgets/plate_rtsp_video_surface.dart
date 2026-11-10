@@ -175,14 +175,11 @@ class _PlateRtspVideoSurfaceState extends State<PlateRtspVideoSurface> {
         await p.setProperty('cache', 'no');
         await p.setProperty('cache-pause', 'no');
         await p.setProperty('untimed', 'yes');
+        await p.setProperty(
+          'demuxer-lavf-o',
+          'rtsp_transport=tcp,fflags=nobuffer,flags=low_delay,strict=experimental,allowed_extensions=ALL,protocol_whitelist=[${_rtspWhitelist.join(',')}]',
+        );
       } catch (_) {}
-    }
-  }
-      await _trySetProperty(
-        platform,
-        'demuxer-lavf-o',
-        'rtsp_transport=tcp,fflags=nobuffer,flags=low_delay,strict=experimental,allowed_extensions=ALL,protocol_whitelist=[${_rtspWhitelist.join(',')}]',
-      );
     }
   }
 

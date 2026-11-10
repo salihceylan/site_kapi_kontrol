@@ -13,6 +13,7 @@ import {
   setupSiteWithClaimedDevice,
   createJoinRequest,
   getMyJoinRequests,
+  dismissJoinRequest,
   getMyApartments,
   removeApartmentMember,
   toggleApartmentMemberStatus,
@@ -188,6 +189,19 @@ membershipRouter.get('/membership/my-join-requests', authRequired, async (req, r
     return res.status(200).json(result);
   } catch (error) {
     return respondError(res, 'my_join_requests', error, 'Katılım başvuruları listelenemedi.');
+  }
+});
+
+/**
+ * POST /membership/my-join-requests/:id/dismiss
+ * Bireysel Kullanıcı: Onaylanan veya reddedilen katılım başvurusunu ekrandan kaldır (dismiss)
+ */
+membershipRouter.post('/membership/my-join-requests/:id/dismiss', authRequired, async (req, res) => {
+  try {
+    const result = await dismissJoinRequest(sessionUserCode(req), req.params.id);
+    return res.status(200).json(result);
+  } catch (error) {
+    return respondError(res, 'dismiss_join_request', error, 'Başvuru kapatılamadı.');
   }
 });
 

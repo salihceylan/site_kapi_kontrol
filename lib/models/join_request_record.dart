@@ -19,6 +19,7 @@ class JoinRequestRecord {
     this.createdAt,
     this.reviewedAt,
     this.reviewedByName,
+    this.dismissedAt,
   });
 
   final int id;
@@ -42,10 +43,12 @@ class JoinRequestRecord {
   final DateTime? createdAt;
   final DateTime? reviewedAt;
   final String? reviewedByName;
+  final DateTime? dismissedAt;
 
   bool get isPending => status == 'PENDING';
   bool get isApproved => status == 'APPROVED';
   bool get isRejected => status == 'REJECTED';
+  bool get isDismissed => dismissedAt != null;
 
   factory JoinRequestRecord.fromJson(Map<String, dynamic> json) {
     return JoinRequestRecord(
@@ -81,6 +84,9 @@ class JoinRequestRecord {
           ''),
       reviewedByName: json['reviewedByName'] as String? ??
           json['reviewed_by_name'] as String?,
+      dismissedAt: DateTime.tryParse(json['dismissedAt'] as String? ??
+          json['dismissed_at'] as String? ??
+          ''),
     );
   }
 
@@ -105,6 +111,7 @@ class JoinRequestRecord {
       'createdAt': createdAt?.toIso8601String(),
       'reviewedAt': reviewedAt?.toIso8601String(),
       'reviewedByName': reviewedByName,
+      'dismissedAt': dismissedAt?.toIso8601String(),
     };
   }
 }

@@ -198,3 +198,23 @@ Bu kurallar projede geliştirme yapılırken MUTLAKA ve İSTİSNASIZ olarak uygu
       - Kasa dağıtımını ikinci bir yerde yeniden hesaplama; her ekran ve rapor `allocateFunds` sonucunu kullanır. Dağıtımı değiştiren her değişiklik `server/test/finance_funds.test.js` değişmez testlerini yeşil tutmalı.
       - Kasa aktarımlarını ve defter satırlarını silme / güncelleme; düzeltme yalnız ters kayıtla.
       - Kiracı varken maliği admin yapan bir yol ekleme (tek istisna: site yöneticisinin "Daire adminini değiştir" acil durum aracı). Toplu yüklemede admin önceliği kiracı > malik > diğerleri.
+
+30. **Site Oluştururken Ticari/Kurumsal Seçeneklerin (İş Merkezi, Kooperatif, Alışveriş Merkezi) Gizlenmesi:**
+    - **Neden Yapıldı:**
+      - Kullanıcı kararı doğrultusunda, site oluşturma ve başvuru ekranlarında kafa karışıklığını önlemek ve sadeleştirmek amacıyla usiness_center (İş Merkezi), cooperative (Kooperatif) ve shopping_mall (Alışveriş Merkezi) yönetim türü seçenekleri gizlenmiştir.
+      - Arayüzde (ManagementTypeSelector.showAllTypes = false) yalnızca partment_site (Apartman ve Site) ile esidence (Rezidans) listelenir.
+      - Kullanıcı açıkça talep etmedikçe ("ben istersem açarsın" ilkesi) bu üç seçenek arayüzde gösterilmeyecektir.
+      - Geriye dönük uyumluluk gereği backend veri modeli, veritabanı kısıtları ve mevcut sitelerin türleri korunur.
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - Kullanıcı açıkça talep etmedikçe ManagementTypeSelector içinde İş Merkezi, Kooperatif ve Alışveriş Merkezi seçeneklerini varsayılan olarak tekrar görünür yapma (showAllTypes: false varsayılanını koru).
+      - Veritabanından veya backendden bu türleri silme; mevcut siteler ve veri modeli bozulmamalıdır.
+
+31. **Onaylanan ve Kapatılan Başvuruların (Katılım & Site Kurulum) Kalıcı Olarak Gizlenmesi:**
+    - **Neden Yapıldı:**
+      - Bir sakinin veya kullanıcının başvurusu (site kurulumu için süper kullanıcı, daire/siteye katılım için site yöneticisi/daire admini tarafından) onaylandığında ya da kullanıcı daireden ayrıldığında, eski onaylanmış başvuruların ekranda ("Katılım Başvurularım -> Onaylandı", "Site başvurunuz onaylandı") kalıcı olarak kalması kullanıcı deneyimini bozuyordu.
+      - Kullanıcı onaylandığını görüp "Anladım" dediğinde (veya reddedilen başvurusunu kapattığında) bu bildirim kalıcı olarak (SharedPreferences ve veritabanı dismissed_at ile) gizlenir ve bir daha asla ekranda çıkmaz.
+      - Ayrıca kullanıcı daireden ayrılmışsa (partment_residencies.is_current = false veya partment_memberships.is_active = false), o daireye ait eski onaylı katılım başvurusu sunucu sorgusunda otomatik olarak elenir (WHERE jr.dismissed_at IS NULL AND (jr.status != 'APPROVED' OR EXISTS (aktif sakinlik))).
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - Daireden ayrılmış kişilerin eski katılım başvurularını listelerde tekrar gösteren sorgular yazma.
+      - Katılım ve site başvurularından "Anladım" / kapatma mekanizmasını (JoinRequestTracker, SiteApplicationTracker.consumeApproval, dismissJoinRequest) kaldırma.
+      - Onaylanan veya reddedilen başvuruların ekranda asılı kalarak kullanıcıyı rahatsız etmesine izin verme.

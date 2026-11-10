@@ -22,6 +22,7 @@ import 'package:site_kapi_kontrol/ui/dialogs/submit_join_request_dialog.dart';
 import 'package:site_kapi_kontrol/models/join_request_record.dart';
 import 'package:site_kapi_kontrol/models/apartment_member_record.dart';
 import 'package:site_kapi_kontrol/models/site_application.dart';
+import 'package:site_kapi_kontrol/services/join_request_tracker.dart';
 import 'package:site_kapi_kontrol/services/site_application_tracker.dart';
 import 'package:site_kapi_kontrol/ui/helpers/site_application_flow.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_application_parts.dart';
@@ -212,11 +213,22 @@ class IndividualHomeViewState extends State<IndividualHomeView>
   }
 
   Future<void> _loadRequests() async {
+    await JoinRequestTracker.loadConsumed();
     final (list, _) = await widget.authService.getMyJoinRequests();
     if (!mounted) return;
     if (list != null) {
-      setState(() => _myRequests = list);
+      setState(() => _myRequests = JoinRequestTracker.filterVisible(list));
     }
+  }
+
+  Future<void> _dismissRequest(JoinRequestRecord req) async {
+    setState(() {
+      _myRequests.removeWhere((r) => r.id == req.id);
+    });
+    await JoinRequestTracker.consume(req.id);
+    try {
+      await widget.authService.dismissJoinRequest(req.id);
+    } catch (_) {}
   }
 
   Future<void> _loadApartments() async {
@@ -862,6 +874,9 @@ class IndividualHomeViewState extends State<IndividualHomeView>
                   child: JoinRequestCard(
                     title: req.siteName ?? 'Site #${req.siteCode}',
                     status: JoinRequestCard.statusOf(req),
+                    onDismiss: (req.isApproved || req.isRejected)
+                        ? () => _dismissRequest(req)
+                        : null,
                     details: [
                       Wrap(
                         spacing: AppSpace.sm,
