@@ -160,24 +160,24 @@ class _PlateRtspVideoSurfaceState extends State<PlateRtspVideoSurface> {
     }
   }
 
-  Future<void> _trySetProperty(NativePlayer native, String key, String value) async {
-    try {
-      await native.setProperty(key, value);
-    } catch (_) {}
-  }
-
   Future<void> _configureLowLatency(Player player) async {
+    if (kIsWeb) return;
     final platform = player.platform;
     if (platform is NativePlayer) {
-      await _trySetProperty(platform, 'hwdec', 'auto-safe');
-      await _trySetProperty(platform, 'ao', 'null');
-      await _trySetProperty(platform, 'aid', 'no');
-      await _trySetProperty(platform, 'sid', 'no');
-      await _trySetProperty(platform, 'rtsp-transport', 'tcp');
-      await _trySetProperty(platform, 'profile', 'low-latency');
-      await _trySetProperty(platform, 'cache', 'no');
-      await _trySetProperty(platform, 'cache-pause', 'no');
-      await _trySetProperty(platform, 'untimed', 'yes');
+      try {
+        final dynamic p = platform;
+        await p.setProperty('hwdec', 'auto-safe');
+        await p.setProperty('ao', 'null');
+        await p.setProperty('aid', 'no');
+        await p.setProperty('sid', 'no');
+        await p.setProperty('rtsp-transport', 'tcp');
+        await p.setProperty('profile', 'low-latency');
+        await p.setProperty('cache', 'no');
+        await p.setProperty('cache-pause', 'no');
+        await p.setProperty('untimed', 'yes');
+      } catch (_) {}
+    }
+  }
       await _trySetProperty(
         platform,
         'demuxer-lavf-o',
