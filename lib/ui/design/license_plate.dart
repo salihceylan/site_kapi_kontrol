@@ -111,7 +111,19 @@ class LicensePlateBadge extends StatelessWidget {
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
                       child: parsed != null
-                          ? _buildStandardTrPlate(parsed, fs, compact, showSeal)
+                          ? Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Opacity(
+                                  opacity: 0,
+                                  child: Text(
+                                    formatted,
+                                    style: const TextStyle(fontSize: 1),
+                                  ),
+                                ),
+                                _buildStandardTrPlate(parsed, fs, compact, showSeal),
+                              ],
+                            )
                           : _buildGenericPlate(formatted, fs, compact),
                     ),
                   ),

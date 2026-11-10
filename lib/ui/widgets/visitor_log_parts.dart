@@ -139,12 +139,52 @@ class VisitorManagedCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Wrap(
-                        spacing: AppSpace.sm,
-                        runSpacing: AppSpace.xs,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          VisitorStatusChip(e.status),
-                          InfoChip(e.kind.label),
+                          Expanded(
+                            child: Wrap(
+                              spacing: AppSpace.sm,
+                              runSpacing: AppSpace.xs,
+                              children: [
+                                VisitorStatusChip(e.status),
+                                InfoChip(e.kind.label),
+                              ],
+                            ),
+                          ),
+                          if (actions.isNotEmpty)
+                            PopupMenuButton<VisitorStatus>(
+                              key: ValueKey<String>('visitor_menu_${e.id}'),
+                              icon: const Icon(Icons.more_vert_rounded, size: 20),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                              tooltip: 'Ziyaretçi İşlemleri',
+                              onSelected: (val) {
+                                if (!busy) onAction(val);
+                              },
+                              itemBuilder: (context) => <PopupMenuEntry<VisitorStatus>>[
+                                for (final next in actions)
+                                  PopupMenuItem<VisitorStatus>(
+                                    value: next,
+                                    child: Row(
+                                      children: <Widget>[
+                                        Icon(
+                                          visitorStatusIcon(next),
+                                          size: 18,
+                                          color: next == VisitorStatus.iptal ? Colors.red : null,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          next.actionLabel,
+                                          style: next == VisitorStatus.iptal
+                                              ? const TextStyle(color: Colors.red)
+                                              : null,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
                         ],
                       ),
                       const SizedBox(height: AppSpace.sm),
@@ -274,12 +314,41 @@ class VisitorResidentCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Wrap(
-                    spacing: AppSpace.sm,
-                    runSpacing: AppSpace.xs,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      VisitorStatusChip(e.status),
-                      if (e.unread) const VisitorUnreadChip(),
+                      Expanded(
+                        child: Wrap(
+                          spacing: AppSpace.sm,
+                          runSpacing: AppSpace.xs,
+                          children: [
+                            VisitorStatusChip(e.status),
+                            if (e.unread) const VisitorUnreadChip(),
+                          ],
+                        ),
+                      ),
+                      PopupMenuButton<String>(
+                        key: ValueKey<String>('visitor_resident_menu_${e.id}'),
+                        icon: const Icon(Icons.more_vert_rounded, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                        tooltip: 'Ziyaretçi İşlemleri',
+                        onSelected: (val) {
+                          if (val == 'open') onTap();
+                        },
+                        itemBuilder: (context) => <PopupMenuEntry<String>>[
+                          const PopupMenuItem<String>(
+                            value: 'open',
+                            child: Row(
+                              children: <Widget>[
+                                Icon(Icons.info_outline_rounded, size: 18),
+                                SizedBox(width: 8),
+                                Text('Görüldü Olarak İşaretle'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                   const SizedBox(height: AppSpace.sm),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/apartment_crm.dart';
 import 'package:site_kapi_kontrol/models/residency_relation.dart';
+import 'package:site_kapi_kontrol/ui/design/app_action_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
@@ -16,6 +17,7 @@ import 'package:site_kapi_kontrol/ui/dialogs/apartment_owner_dialogs.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/history_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/residency_termination_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
@@ -247,6 +249,23 @@ class _ApartmentCardDialogState extends State<ApartmentCardDialog> {
     );
   }
 
+  Future<void> _terminateResidency(ApartmentResident resident) async {
+    final detail = _detail;
+    if (detail == null) return;
+    final done = await ResidencyTerminationDialog.show(
+      context,
+      scope: widget.scope,
+      apartmentId: detail.id,
+      residencyId: resident.residencyId,
+      personName: resident.fullName,
+      apartmentLabel: detail.fullLabel,
+    );
+    if (done == true && mounted) {
+      widget.onChanged?.call();
+      await _load();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final detail = _detail;
@@ -431,59 +450,104 @@ class _ApartmentCardDialogState extends State<ApartmentCardDialog> {
     required bool past,
     ApartmentDetail? detail,
   }) {
-    final th = Theme.of(context).textTheme;
     final name = crmPersonName(resident.fullName);
-    // Çoklu malik (104): yalnız birden çok malik varken muhatap rozeti ve (yazma yetkisiyle) malik işlemleri gösterilir.
     ApartmentOwner? owner;
     if (!past && detail != null && detail.hasMultipleOwners && resident.relation == ResidencyRelation.owner) {
       for (final o in detail.owners) {
         if (o.residencyId == resident.residencyId) owner = o;
       }
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(name, style: th.titleSmall),
-        const SizedBox(height: AppSpace.xs),
-        Wrap(
-          spacing: AppSpace.sm,
-          runSpacing: AppSpace.xs,
-          children: [
-            RelationChip(resident.relation),
-            if (owner != null && owner.isAccountHolder)
-              const StatusChip(
-                label: 'Hesap muhatabı',
-                tone: AppTone.primary,
-                icon: Icons.verified_user_rounded,
-              ),
-            InfoChip('Giriş: ${formatCrmDate(resident.moveInDate)}'),
-            if (past) InfoChip('Çıkış: ${formatCrmDate(resident.moveOutDate)}'),
-            if (resident.hasAccount && !past)
-              const StatusChip(
-                label: 'Hesabı var',
-                tone: AppTone.success,
-                icon: Icons.verified_user_rounded,
-              ),
-          ],
+
+    final menuActions = <CardActionItem>[];
+    if (!past && widget.scope.canWrite) {
+      menuActions.add(
+        CardActionItem(
+          key: ValueKey<String>('terminate_residency_${resident.residencyId}'),
+          label: 'Daireden Ayrıldı / Taşındı',
+          icon: Icons.logout_rounded,
+          tone: AppTone.warning,
+          onTap: () => _terminateResidency(resident),
         ),
-        if (owner != null && widget.scope.canWrite)
-          Wrap(
-            spacing: AppSpace.sm,
-            children: [
-              if (!owner.isAccountHolder)
-                TextButton(
-                  key: ValueKey<String>('owner_make_holder_${owner.residencyId}'),
-                  onPressed: _ownerBusy ? null : () => _makeHolder(owner!),
-                  child: const Text('Muhatap yap'),
-                ),
-              TextButton(
-                key: ValueKey<String>('owner_remove_${owner.residencyId}'),
-                onPressed: _ownerBusy ? null : () => _removeOwner(owner!),
-                child: const Text('Maliki çıkar'),
-              ),
-            ],
+      );
+      if (owner != null && !owner.isAccountHolder) {
+        menuActions.add(
+          CardActionItem(
+            key: ValueKey<String>('owner_make_holder_menu_${owner.residencyId}'),
+            label: 'Muhatap yap',
+            icon: Icons.verified_user_rounded,
+            tone: AppTone.primary,
+            enabled: !_ownerBusy,
+            onTap: () => _makeHolder(owner!),
+          ),
+        );
+      }
+      if (owner != null) {
+        menuActions.add(
+          CardActionItem(
+            key: ValueKey<String>('owner_remove_menu_${owner.residencyId}'),
+            label: 'Maliki çıkar',
+            icon: Icons.person_remove_rounded,
+            isDestructive: true,
+            enabled: !_ownerBusy,
+            onTap: () => _removeOwner(owner!),
+          ),
+        );
+      }
+    }
+
+    final inline = <Widget>[];
+    if (!past && widget.scope.canWrite) {
+      if (owner != null && !owner.isAccountHolder) {
+        inline.add(
+          TextButton(
+            key: ValueKey<String>('owner_make_holder_${owner.residencyId}'),
+            onPressed: _ownerBusy ? null : () => _makeHolder(owner!),
+            child: const Text('Muhatap yap'),
+          ),
+        );
+      }
+      if (owner != null) {
+        inline.add(
+          TextButton(
+            key: ValueKey<String>('owner_remove_${owner.residencyId}'),
+            onPressed: _ownerBusy ? null : () => _removeOwner(owner!),
+            child: const Text('Maliki çıkar'),
+          ),
+        );
+      }
+    }
+
+    return AppActionCard(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.sm),
+      leading: CardAvatarIcon(
+        icon: Icons.person_rounded,
+        tone: past
+            ? AppTone.neutral
+            : (resident.hasAccount ? AppTone.primary : AppTone.neutral),
+      ),
+      title: name,
+      subtitle: past
+          ? 'Giriş: ${formatCrmDate(resident.moveInDate)} • Çıkış: ${formatCrmDate(resident.moveOutDate)}'
+          : 'Giriş: ${formatCrmDate(resident.moveInDate)}',
+      badges: [
+        RelationChip(resident.relation),
+        if (owner != null && owner.isAccountHolder)
+          const StatusChip(
+            label: 'Hesap muhatabı',
+            tone: AppTone.primary,
+            icon: Icons.verified_user_rounded,
+          ),
+        InfoChip('Giriş: ${formatCrmDate(resident.moveInDate)}'),
+        if (past) InfoChip('Çıkış: ${formatCrmDate(resident.moveOutDate)}'),
+        if (resident.hasAccount && !past)
+          const StatusChip(
+            label: 'Hesabı var',
+            tone: AppTone.success,
+            icon: Icons.verified_user_rounded,
           ),
       ],
+      actions: menuActions.isNotEmpty ? menuActions : null,
+      inlineActions: inline.isNotEmpty ? inline : null,
     );
   }
 }

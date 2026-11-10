@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/apartment_vehicles.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart';
 import 'package:site_kapi_kontrol/services/apartment_management_api.dart';
+import 'package:site_kapi_kontrol/ui/design/app_action_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
@@ -169,44 +170,62 @@ class ApartmentVehiclesSectionState extends State<ApartmentVehiclesSection> {
   Widget _vehicleTile(ApartmentVehicles data, VehicleRecord v, TextTheme th, TextStyle? secondary) {
     final owner = v.personName ?? '';
     final note = v.note ?? '';
+
+    final actions = <CardActionItem>[
+      if (data.canManage) ...[
+        CardActionItem(
+          label: 'Notu düzenle',
+          icon: Icons.edit_note_rounded,
+          enabled: !_busy,
+          onTap: () => unawaited(_editNote(data, v)),
+        ),
+        CardActionItem(
+          label: 'Aracı çıkar',
+          icon: Icons.delete_outline_rounded,
+          isDestructive: true,
+          enabled: !_busy,
+          onTap: () => unawaited(_remove(v)),
+        ),
+      ],
+    ];
+
+    final inline = <Widget>[
+      if (data.canManage) ...[
+        TextButton(onPressed: _busy ? null : () => unawaited(_editNote(data, v)), child: const Text('Notu düzenle')),
+        TextButton(onPressed: _busy ? null : () => unawaited(_remove(v)), child: const Text('Aracı çıkar')),
+      ],
+    ];
+
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.sm),
-      child: DecoratedBox(
+      child: KeyedSubtree(
         key: ValueKey<String>('apt_vehicle_${v.id}'),
-        decoration: BoxDecoration(
-          border: Border.all(color: context.palette.border),
-          borderRadius: BorderRadius.circular(AppRadius.md),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpace.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: AppActionCard(
+          leading: const CardAvatarIcon(
+            icon: Icons.directions_car_rounded,
+            tone: AppTone.primary,
+          ),
+          title: 'Kayıtlı Araç',
+          badges: [
+            LicensePlateBadge(plate: v.displayPlate, compact: true),
+            if (v.source == kVehicleSourceApartmentAdmin)
+              const StatusChip(label: 'Daire yöneticisi ekledi', tone: AppTone.info),
+          ],
+          subtitle: owner.isNotEmpty ? 'Sahibi: $owner' : null,
+          content: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Wrap(
-                spacing: AppSpace.sm,
-                runSpacing: AppSpace.xs,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  LicensePlateBadge(plate: v.displayPlate, compact: true),
-                  if (v.source == kVehicleSourceApartmentAdmin) const StatusChip(label: 'Daire yöneticisi ekledi', tone: AppTone.info),
-                ],
-              ),
-              if (owner.isNotEmpty) Text('Sahibi: $owner', style: secondary),
               if (note.isNotEmpty) Text(note, style: th.bodyMedium),
-              if (v.source != kVehicleSourceApartmentAdmin) Text('Ekleyen: ${v.sourceLabel}', style: th.bodySmall?.copyWith(color: context.palette.textSecondary)),
-              if (data.canManage)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Wrap(
-                    spacing: AppSpace.xs,
-                    children: [
-                      TextButton(onPressed: _busy ? null : () => unawaited(_editNote(data, v)), child: const Text('Notu düzenle')),
-                      TextButton(onPressed: _busy ? null : () => unawaited(_remove(v)), child: const Text('Aracı çıkar')),
-                    ],
-                  ),
+              if (v.source != kVehicleSourceApartmentAdmin)
+                Text(
+                  'Ekleyen: ${v.sourceLabel}',
+                  style: th.bodySmall?.copyWith(color: context.palette.textSecondary),
                 ),
             ],
           ),
+          actions: actions.isNotEmpty ? actions : null,
+          inlineActions: inline.isNotEmpty ? inline : null,
         ),
       ),
     );

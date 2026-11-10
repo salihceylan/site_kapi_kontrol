@@ -36,6 +36,7 @@ class EndResidencyDialog extends StatefulWidget {
     required Residency residency,
     required String personName,
     required bool hasAccount,
+    int? personId,
   }) {
     return showDialog<PersonDetail>(
       context: context,

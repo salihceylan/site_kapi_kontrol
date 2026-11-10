@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/person_record.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart';
+import 'package:site_kapi_kontrol/ui/design/app_action_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
@@ -262,6 +263,7 @@ class _PersonCardDialogState extends State<PersonCardDialog> {
       residency: residency,
       personName: detail.fullName,
       hasAccount: detail.hasAccount,
+      personId: detail.id,
     );
     if (result == null || !mounted) return;
     _apply(result, 'Taşınma kaydedildi.');
@@ -545,23 +547,28 @@ class _PersonCardDialogState extends State<PersonCardDialog> {
               ),
               const SizedBox(height: AppSpace.md),
               if (detail.vehicles.isEmpty) Text('Kayıtlı araç yok.', style: secondary),
-              for (final vehicle in detail.vehicles)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          LicensePlateBadge(plate: vehicle.displayPlate, compact: true),
-                          const SizedBox(height: AppSpace.xs),
-                          if (_canWrite && (vehicle.note ?? '').isNotEmpty)
-                            Text(vehicle.note!, style: th.bodySmall),
-                        ],
-                      ),
-                    ),
+              for (final vehicle in detail.vehicles) ...[
+                AppActionCard(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.sm),
+                  leading: const CardAvatarIcon(
+                    icon: Icons.directions_car_rounded,
+                    tone: AppTone.primary,
+                  ),
+                  title: 'Kayıtlı Araç',
+                  content: LicensePlateBadge(plate: vehicle.displayPlate, compact: true),
+                  subtitle: (_canWrite && (vehicle.note ?? '').isNotEmpty) ? vehicle.note : null,
+                  actions: [
                     if (_canWrite)
-                      _busyVehicles.contains(vehicle.id)
+                      CardActionItem(
+                        label: 'Aracı Kaldır',
+                        icon: Icons.delete_outline_rounded,
+                        isDestructive: true,
+                        enabled: !_busyVehicles.contains(vehicle.id),
+                        onTap: () => _removeVehicle(vehicle),
+                      ),
+                  ],
+                  trailing: _canWrite
+                      ? (_busyVehicles.contains(vehicle.id)
                           ? const Padding(
                               padding: EdgeInsets.all(AppSpace.md),
                               child: SizedBox(
@@ -575,9 +582,11 @@ class _PersonCardDialogState extends State<PersonCardDialog> {
                               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                               icon: const Icon(Icons.delete_outline_rounded),
                               onPressed: () => _removeVehicle(vehicle),
-                            ),
-                  ],
+                            ))
+                      : null,
                 ),
+                const SizedBox(height: AppSpace.xs),
+              ],
               if (_canWrite) ...[
                 const SizedBox(height: AppSpace.sm),
                 PrimaryActionButton(
@@ -606,56 +615,70 @@ class _PersonCardDialogState extends State<PersonCardDialog> {
     Residency residency, {
     required bool isCurrent,
   }) {
-    final th = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(residency.fullLabel, style: th.titleSmall),
-        const SizedBox(height: AppSpace.xs),
-        Wrap(
-          spacing: AppSpace.sm,
-          runSpacing: AppSpace.xs,
-          children: [
-            RelationChip(residency.relation),
-            InfoChip('Giriş: ${formatCrmDate(residency.moveInDate)}'),
-            if (!isCurrent) InfoChip('Çıkış: ${formatCrmDate(residency.moveOutDate)}'),
-          ],
+    final actions = <CardActionItem>[
+      CardActionItem(
+        label: 'Daire Bilgileri',
+        icon: Icons.home_work_rounded,
+        onTap: () => _openApartment(residency),
+      ),
+      if (_canWrite && isCurrent) ...[
+        CardActionItem(
+          label: 'İlişkiyi Düzenle',
+          icon: Icons.edit_rounded,
+          onTap: () => _editResidency(residency),
         ),
-        if (isCurrent) ...[
-          const SizedBox(height: AppSpace.sm),
-          Wrap(
-            spacing: AppSpace.sm,
-            runSpacing: AppSpace.sm,
-            children: [
-              // Dairenin kat, tip, m², arsa payı ve borç sorumlusu bilgileri (kurul üyesi de salt okunur görür).
-              PrimaryActionButton(
-                label: 'Daire Bilgileri',
-                icon: Icons.home_work_rounded,
-                variant: AppButtonVariant.outline,
-                expand: false,
-                onPressed: () => _openApartment(residency),
-              ),
-              if (_canWrite) ...[
-                PrimaryActionButton(
-                  label: 'İlişkiyi Düzenle',
-                  icon: Icons.edit_rounded,
-                  variant: AppButtonVariant.outline,
-                  expand: false,
-                  onPressed: () => _editResidency(residency),
-                ),
-                PrimaryActionButton(
-                  label: 'Taşındı',
-                  icon: Icons.logout_rounded,
-                  variant: AppButtonVariant.tonal,
-                  tone: AppTone.warning,
-                  expand: false,
-                  onPressed: () => _endResidency(residency),
-                ),
-              ],
-            ],
+        CardActionItem(
+          label: 'Taşındı',
+          icon: Icons.logout_rounded,
+          tone: AppTone.warning,
+          onTap: () => _endResidency(residency),
+        ),
+      ],
+    ];
+
+    final inline = <Widget>[
+      if (isCurrent) ...[
+        PrimaryActionButton(
+          label: 'Daire Bilgileri',
+          icon: Icons.home_work_rounded,
+          variant: AppButtonVariant.outline,
+          expand: false,
+          onPressed: () => _openApartment(residency),
+        ),
+        if (_canWrite) ...[
+          PrimaryActionButton(
+            label: 'İlişkiyi Düzenle',
+            icon: Icons.edit_rounded,
+            variant: AppButtonVariant.outline,
+            expand: false,
+            onPressed: () => _editResidency(residency),
+          ),
+          PrimaryActionButton(
+            label: 'Taşındı',
+            icon: Icons.logout_rounded,
+            variant: AppButtonVariant.tonal,
+            tone: AppTone.warning,
+            expand: false,
+            onPressed: () => _endResidency(residency),
           ),
         ],
       ],
+    ];
+
+    return AppActionCard(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.sm),
+      leading: CardAvatarIcon(
+        icon: Icons.apartment_rounded,
+        tone: isCurrent ? AppTone.primary : AppTone.neutral,
+      ),
+      title: residency.fullLabel,
+      badges: [
+        RelationChip(residency.relation),
+        InfoChip('Giriş: ${formatCrmDate(residency.moveInDate)}'),
+        if (!isCurrent) InfoChip('Çıkış: ${formatCrmDate(residency.moveOutDate)}'),
+      ],
+      actions: actions,
+      inlineActions: inline.isNotEmpty ? inline : null,
     );
   }
 }

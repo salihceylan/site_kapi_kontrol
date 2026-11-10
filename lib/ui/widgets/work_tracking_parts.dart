@@ -159,17 +159,46 @@ class WorkResidentCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Wrap(
-                    spacing: AppSpace.sm,
-                    runSpacing: AppSpace.xs,
-                    children: [
-                      WorkStatusChip(i.status),
-                      if (i.unread) const WorkUpdateChip(),
-                      if (i.urgent) const WorkUrgentChip(),
-                      if (i.attachmentCount > 0)
-                        WorkPhotoCountChip(i.attachmentCount),
-                    ],
-                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Wrap(
+                        spacing: AppSpace.sm,
+                        runSpacing: AppSpace.xs,
+                        children: [
+                          WorkStatusChip(i.status),
+                          if (i.unread) const WorkUpdateChip(),
+                          if (i.urgent) const WorkUrgentChip(),
+                          if (i.attachmentCount > 0)
+                            WorkPhotoCountChip(i.attachmentCount),
+                        ],
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      key: ValueKey<String>('work_resident_menu_${i.id}'),
+                      icon: const Icon(Icons.more_vert_rounded, size: 20),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                      tooltip: 'Talep İşlemleri',
+                      onSelected: (val) {
+                        if (val == 'open') onTap();
+                      },
+                      itemBuilder: (context) => <PopupMenuEntry<String>>[
+                        const PopupMenuItem<String>(
+                          value: 'open',
+                          child: Row(
+                            children: <Widget>[
+                              Icon(Icons.open_in_new_rounded, size: 18),
+                              SizedBox(width: 8),
+                              Text('Talebi Aç / Detay'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
                   const SizedBox(height: AppSpace.sm),
                   Text(
                     title,
@@ -254,19 +283,48 @@ class WorkManagedCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Wrap(
-                    spacing: AppSpace.sm,
-                    runSpacing: AppSpace.xs,
-                    children: [
-                      WorkStatusChip(i.status),
-                      if (i.priority != WorkPriority.normal)
-                        WorkPriorityChip(i.priority),
-                      if (i.residentUrgent)
-                        const WorkUrgentChip(label: 'Sakin: acil'),
-                      if (i.attachmentCount > 0)
-                        WorkPhotoCountChip(i.attachmentCount),
-                    ],
-                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Wrap(
+                        spacing: AppSpace.sm,
+                        runSpacing: AppSpace.xs,
+                        children: [
+                          WorkStatusChip(i.status),
+                          if (i.priority != WorkPriority.normal)
+                            WorkPriorityChip(i.priority),
+                          if (i.residentUrgent)
+                            const WorkUrgentChip(label: 'Sakin: acil'),
+                          if (i.attachmentCount > 0)
+                            WorkPhotoCountChip(i.attachmentCount),
+                        ],
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      key: ValueKey<String>('work_managed_menu_${i.id}'),
+                      icon: const Icon(Icons.more_vert_rounded, size: 20),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                      tooltip: 'Talep İşlemleri',
+                      onSelected: (val) {
+                        if (val == 'open') onTap();
+                      },
+                      itemBuilder: (context) => <PopupMenuEntry<String>>[
+                        const PopupMenuItem<String>(
+                          value: 'open',
+                          child: Row(
+                            children: <Widget>[
+                              Icon(Icons.edit_note_rounded, size: 18),
+                              SizedBox(width: 8),
+                              Text('Talebi İncele / Yönet'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
                   const SizedBox(height: AppSpace.sm),
                   Text(
                     title,

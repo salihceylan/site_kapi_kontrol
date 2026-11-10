@@ -40,6 +40,7 @@ class AdminDoorStatusCard extends StatefulWidget {
     required this.onCreateGuestPass,
     this.onDownloadCredentialsPdf,
     this.onDownloadLogsPdf,
+    this.onOpenAddDoor,
     this.voiceDoorService,
     this.authService,
     this.successTick = 0,
@@ -64,6 +65,7 @@ class AdminDoorStatusCard extends StatefulWidget {
   final VoidCallback onCreateGuestPass;
   final VoidCallback? onDownloadCredentialsPdf;
   final VoidCallback? onDownloadLogsPdf;
+  final VoidCallback? onOpenAddDoor;
   final VoiceDoorService? voiceDoorService;
   final AuthService? authService;
 
@@ -138,6 +140,32 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
                     },
             ),
             const SizedBox(height: AppSpace.md),
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.xs,
+              children: [
+                Text(
+                  'Site Kapısı',
+                  style: th.labelLarge?.copyWith(
+                    color: p.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (widget.onOpenAddDoor != null)
+                  TextButton.icon(
+                    onPressed: widget.onOpenAddDoor,
+                    icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
+                    label: const Text('Yeni Kapı Ekle'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpace.xs),
             // Kapı Seçimi Dropdown
             DropdownButtonFormField<int>(
               isExpanded: true,

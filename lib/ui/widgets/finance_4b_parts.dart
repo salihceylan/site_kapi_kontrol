@@ -178,12 +178,41 @@ class ReceiptTile extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Wrap(
-              spacing: AppSpace.sm,
-              runSpacing: AppSpace.xs,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                DialogMetaPill(statusText, tone: tone, icon: icon),
-                if (r.apartmentLabel.isNotEmpty) DialogMetaPill(r.apartmentLabel),
+                Expanded(
+                  child: Wrap(
+                    spacing: AppSpace.sm,
+                    runSpacing: AppSpace.xs,
+                    children: [
+                      DialogMetaPill(statusText, tone: tone, icon: icon),
+                      if (r.apartmentLabel.isNotEmpty) DialogMetaPill(r.apartmentLabel),
+                    ],
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  key: ValueKey<String>('receipt_menu_${r.id}'),
+                  icon: const Icon(Icons.more_vert_rounded, size: 20),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                  tooltip: 'Makbuz İşlemleri',
+                  onSelected: (val) {
+                    if (val == 'open') onTap();
+                  },
+                  itemBuilder: (context) => <PopupMenuEntry<String>>[
+                    const PopupMenuItem<String>(
+                      value: 'open',
+                      child: Row(
+                        children: <Widget>[
+                          Icon(Icons.receipt_long_rounded, size: 18),
+                          SizedBox(width: 8),
+                          Text('Makbuzu Görüntüle / Detay'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: AppSpace.sm),
@@ -255,18 +284,95 @@ class CashAccountCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Wrap(
-                    spacing: AppSpace.sm,
-                    runSpacing: AppSpace.xs,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      DialogMetaPill(a.kind.label, tone: AppTone.info, icon: cashKindIcon(a.kind)),
-                      DialogMetaPill(
-                        a.isActive ? 'Aktif' : 'Pasif',
-                        tone: a.isActive ? AppTone.success : AppTone.neutral,
-                        icon: a.isActive ? Icons.check_circle_rounded : Icons.pause_circle_rounded,
+                      Expanded(
+                        child: Wrap(
+                          spacing: AppSpace.sm,
+                          runSpacing: AppSpace.xs,
+                          children: [
+                            DialogMetaPill(a.kind.label, tone: AppTone.info, icon: cashKindIcon(a.kind)),
+                            DialogMetaPill(
+                              a.isActive ? 'Aktif' : 'Pasif',
+                              tone: a.isActive ? AppTone.success : AppTone.neutral,
+                              icon: a.isActive ? Icons.check_circle_rounded : Icons.pause_circle_rounded,
+                            ),
+                            if (a.isNegative)
+                              const DialogMetaPill('Bakiye eksi', tone: AppTone.danger, icon: Icons.warning_amber_rounded),
+                          ],
+                        ),
                       ),
-                      if (a.isNegative)
-                        const DialogMetaPill('Bakiye eksi', tone: AppTone.danger, icon: Icons.warning_amber_rounded),
+                      if (hasActions)
+                        PopupMenuButton<String>(
+                          key: ValueKey<String>('cash_menu_${a.id}'),
+                          icon: const Icon(Icons.more_vert_rounded, size: 20),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                          tooltip: 'Hesap İşlemleri',
+                          onSelected: (val) {
+                            switch (val) {
+                              case 'open':
+                                if (onOpen != null && !busy) onOpen!();
+                                break;
+                              case 'adjust':
+                                if (onAdjust != null && !busy && a.isActive) onAdjust!();
+                                break;
+                              case 'reconcile':
+                                if (onReconcile != null && !busy) onReconcile!();
+                                break;
+                              case 'edit':
+                                if (onEdit != null && !busy) onEdit!();
+                                break;
+                            }
+                          },
+                          itemBuilder: (context) => <PopupMenuEntry<String>>[
+                            if (onOpen != null)
+                              const PopupMenuItem<String>(
+                                value: 'open',
+                                child: Row(
+                                  children: <Widget>[
+                                    Icon(Icons.list_alt_rounded, size: 18),
+                                    SizedBox(width: 8),
+                                    Text('Hareketler'),
+                                  ],
+                                ),
+                              ),
+                            if (onAdjust != null && a.isActive)
+                              const PopupMenuItem<String>(
+                                value: 'adjust',
+                                child: Row(
+                                  children: <Widget>[
+                                    Icon(Icons.tune_rounded, size: 18),
+                                    SizedBox(width: 8),
+                                    Text('Düzeltme'),
+                                  ],
+                                ),
+                              ),
+                            if (onReconcile != null)
+                              const PopupMenuItem<String>(
+                                value: 'reconcile',
+                                child: Row(
+                                  children: <Widget>[
+                                    Icon(Icons.fact_check_rounded, size: 18),
+                                    SizedBox(width: 8),
+                                    Text('Banka / kasa kontrolü'),
+                                  ],
+                                ),
+                              ),
+                            if (onEdit != null)
+                              const PopupMenuItem<String>(
+                                value: 'edit',
+                                child: Row(
+                                  children: <Widget>[
+                                    Icon(Icons.edit_rounded, size: 18),
+                                    SizedBox(width: 8),
+                                    Text('Düzenle'),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
                     ],
                   ),
                   const SizedBox(height: AppSpace.sm),

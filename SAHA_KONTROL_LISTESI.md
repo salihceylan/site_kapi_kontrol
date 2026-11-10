@@ -4745,3 +4745,106 @@ Güvenlik kulübesindeki kenar PC uygulaması artık sunucunun gerçek kenar sö
        - Sol üst **Menüler & Diğer Bilgiler** kartında kapı/site seçimi, sistem AI motor durumu (tıklanınca kapı ve motor tanı ayrıntıları açılır) ve hızlı operatör menüleri yer alır.
        - Sol alt **Canlı Otopark Durum Bilgisi** kartında içerideki araç sayısı, sakin/misafir dağılımı ve içerideki araç listesi anlık akar; karta veya araca tıklandığında aranabilir otopark ve daire kontenjan ayrıntı penceresi açılır.
        - Sağ üst **Giriş Olayları** ve sağ alt **Çıkış Olayları** kartlarında giriş ve çıkış tespitleri gerçek zamanlı akar; herhangi bir olaya tıklandığında anlık kamera karesi, güven yüzdesi, daire/kişi bilgisi ve hızlı izin/kara liste aksiyonlarını içeren ayrıntı penceresi açılır.
+
+- [ ] **165.23. Kapı Geçiş Süre Ayarlarının Cihaz Durumundan Bağımsız Kaydedilmesi ve Kapıya Atanmış Cihaz Site Kodu Eşitlemesi:**
+  - **Nasıl Test Edilir:** Tam ekran Canlı Akış Komuta Merkezi (veya Geçiş Noktaları sekmesi) üzerinden **"Kapı Geçiş Süre Ayarları"** penceresini açın. Sonraki araç bekleme süresi veya arka plaka engelleme sürelerini değiştirip **Kaydet** butonuna basın (cihaz çevrimiçi/çevrimdışı veya `site_doors` üzerinden atanmışken).
+  - **Beklenen Sonuç:**
+    1. **Cihazdan Bağımsız Süre Kaydı:** Kapı geçiş süreleri kaydedilirken yalnızca süre alanları (`consecutive_vehicle_delay_seconds`, `entry_rear_suppress_seconds`, `exit_rear_suppress_seconds`) güncellenir; cihazın online olması veya kapıya fiziksel cihaz bağlı olması şartı aranmaz ve `"SmartKeyPass cihazı bulunamadı ya da erişiminiz yok."` hatası oluşmaz.
+    2. **Kapı Üzerinden Atanan Cihazların Otomatik Tanınması:** `site_doors.assigned_device_id` ile kapıya bağlı olan SmartKeyPass cihazları (`devices.site_code` boş kalmış olsa dahi) otomatik olarak ilgili siteyle eşitlenir ve kapı durumunda çevrimiçi/çevrimdışı durumu doğru gösterilir.
+
+---
+
+## 166. 🍓 Raspberry Pi 5 Desteği, Custom-Device Entegrasyonu ve Linux ARM64 Çalışma Ortamı
+*Mevcut Windows, mobil ve ESP32 mimarisini bozmadan Raspberry Pi 5'in Flutter cihaz seçicisine eklenmesi, tek tıklama kurulum betikleri ve ARM64 çalışma ortamı doğrulaması.*
+
+- [ ] **166.1. Flutter Cihaz Seçicide Raspberry Pi 5 Görünürlüğü:**
+  - **Nasıl Test Edilir:** Windows terminalinde `flutter devices` komutunu çalıştırın veya VS Code sağ altındaki cihaz seçici menüsünü açın.
+  - **Beklenen Sonuç:** Listede `Raspberry Pi 5 (mobile) • raspberry-pi-5 • linux-arm64 • Raspberry Pi OS (Bookworm ARM64)` cihazı aktif ve bağlı olarak görünmeli; seçim yapıldığında VS Code alt çubuğunda hedef cihaz olarak Raspberry Pi 5 seçilebilmelidir.
+- [ ] **166.2. Tek Tıklamayla Kurulum Betiği (`enable_rpi5_device.ps1`):**
+  - **Nasıl Test Edilir:** PowerShell'de `.\tools\rpi\enable_rpi5_device.ps1` betiğini çalıştırın.
+  - **Beklenen Sonuç:** Betik `flutter config --enable-custom-devices` ayarını açmalı, `.flutter_custom_devices.json` dosyasını oluşturup doğrulamalı ve yeşil renkli başarı bildirimi vermelidir.
+- [ ] **166.3. Raspberry Pi 5 OS Hazırlık Betiği (`setup_rpi5.sh`):**
+  - **Nasıl Test Edilir:** Raspberry Pi 5 üzerinde `tools/rpi/setup_rpi5.sh` betiğini çalıştırın.
+  - **Beklenen Sonuç:** Gerekli GTK3, EGL, Mesa, DRM ve libgpiod kütüphaneleri eksiksiz kurulmalı, kullanıcı izinleri ayarlanmalı ve cihaz IP adresi terminalde gösterilmelidir.
+- [ ] **166.4. Geriye Dönük Uyumluluk ve Sıfır Regresyon:**
+  - **Nasıl Test Edilir:** Windows üzerinde mevcut plaka komuta merkezi testlerini (`flutter test test/plate_live_command_center_test.dart`) çalıştırın.
+  - **Beklenen Sonuç:** Tüm 60 test pürüzsüz geçmeli; Windows Win32 API, D3D11VA GPU akışı ve ESP32 haberleşmesi hiçbir aksama yaşamamalıdır.
+
+---
+
+## 167. 📲 Sahadaki Eski AHBU Cihazlarının Bluetooth (BLE) ile Keşfi, Wi-Fi Bağlantısı ve Kapı Anahtarlaması
+*Sahada aktif çalışan eski AHBU ve yeni SmartKeyPass donanımlarının Bluetooth üzerinden kesintisiz bulunabilmesi, Wi-Fi ve MQTT kimliğiyle internete bağlanması ve röle anahtarlama görevini eksiksiz yürütmesi.*
+
+- [ ] **167.1. BLE Taramasında AHBU Donanımlarının Görünmesi (Donanım Filtresi Engeli Kaldırıldı):**
+  - **Nasıl Test Edilir:** Sahada üzerinde eski firmware bulunan veya adı `AHBU...` ile başlayan bir kapı kontrol kartını açın (veya butona 3 saniye basarak BLE kurulum moduna geçirin). Mobil uygulamada "Bluetooth ile Wi-Fi Kurulumu" sayfasına girip taramayı başlatın.
+  - **Beklenen Sonuç:** 128-bit servis UUID'si donanım tarama filtresinden kaynaklı paket kaybı yaşamadan `AHBUxxxxxxxxxxxx` cihazı BLE listesinde anında listelenmeli; sinyal gücü rozeti ve cihaz adı doğru görüntülenmelidir.
+- [ ] **167.2. Otomatik UID Çıkarımı ve Bağlantı (Fallback UID Desteği):**
+  - **Nasıl Test Edilir:** Listeden AHBU cihazına dokunarak bağlanın.
+  - **Beklenen Sonuç:** Cihaz durumu JSON'unda `device_uid` boş kalsa veya eski formatta (`uid`/`id`) olsa bile cihaz adından veya Bluetooth MAC adresinden 12 karakterlik benzersiz donanım UID'si (`240AC4E2E001`) otomatik olarak çözümlenmeli; `"Cihaz unique id okunamadı"` hatası oluşmadan cihazla bağlantı kurulmalıdır.
+- [ ] **167.3. Wi-Fi ve MQTT Kimlik Aktarımı ile İnternete Bağlanma:**
+  - **Nasıl Test Edilir:** Listeden Wi-Fi ağını seçip şifreyi girin (veya modemin Wi-Fi karekodunu okutun) ve "Wi-Fi Bilgilerini Cihaza Kaydet" butonuna dokunun.
+  - **Beklenen Sonuç:** Şirket/site hesabı üzerinden cihazın MQTT kimliği (`mqtt_host`, `mqtt_username`, `mqtt_password`) sunucudan çekilerek BLE üzerinden cihaza yazılmalı; cihaz başarıyla Wi-Fi'a ve MQTT broker'a bağlanarak online duruma geçmelidir.
+- [ ] **167.4. Kapı Anahtarlama (Röle Tetikleme) Görevi Doğrulaması:**
+  - **Nasıl Test Edilir:** İnternete bağlanan AHBU cihazı kapıya atandıktan sonra mobil uygulamadan "Kapıyı Aç" butonuna basın veya tanımlı bir plaka/QR ile geçiş yapın.
+  - **Beklenen Sonuç:** Hem yerel UDP (port 8765) hem de bulut MQTT (`device/<UID>/cmd`) üzerinden gelen kapı açma komutu AHBU kartı tarafından anında işlenmeli; röle kontağı çekip kapı motorunu/kilidini tetiklemeli (anahtarlama görevini eksiksiz yapmalı) ve durum güncellenmelidir.
+
+---
+
+## 168. 🚪 360° Daireden Ayrılma, Otopark/Plaka, Borç Devri ve Site Yönetim Görevi Devir Sistemi
+*Sakin veya daire yöneticisi ayrıldığında kapı, araç plakası PTS beyaz listesi, ileri tarihli rezervasyonlar, geçici misafir linkleri, finansal borçlar ve site görevlerinin tek bir atomik işlemde güvenle yönetilmesi.*
+
+- [ ] **168.1. Ayrılma Önizlemesi (360° Termination Preview):**
+  - **Nasıl Test Edilir:** Yönetici olarak `GET /manager/sites/:siteCode/apartments/:apartmentId/residencies/:residencyId/termination-preview` uç noktasına istek atın.
+  - **Beklenen Sonuç:** Ayrılacak kişinin bağlı olduğu tüm aktif araç plakaları, bekleyen tesis rezervasyonları, aktif misafir linkleri, vadesi geçmiş aidat borcu, dairede kalan diğer sakinler ve site yönetim görevleri (`site_team_duties` / `site_manager_sites`) eksiksiz listelenmelidir.
+- [ ] **168.2. Otopark & Araç Plakalarının Otomatik Pasifleştirilmesi:**
+  - **Nasıl Test Edilir:** Daireden ayrılma işlemi tamamlandığında ayrılan kişiye ait araçların `vehicles.is_active` durumunu kontrol edin ve plaka tanıma kamerasıyla geçiş deneyin.
+  - **Beklenen Sonuç:** Kişiye (ve hane tamamen boşalıyorsa daireye) ait tüm araçlar `is_active = FALSE` durumuna geçmeli, PTS beyaz listesinden çıkarılmalı ve bariyer geçişi engellenmelidir. Dairenin otopark kotası serbest kalmalıdır.
+- [ ] **168.3. İleri Tarihli Rezervasyonlar ve Misafir Linklerinin İptali:**
+  - **Nasıl Test Edilir:** Ayrılan kişinin daha önce oluşturduğu aktif misafir linkini (`guest_passes`) ve ileri tarihli rezervasyonunu kontrol edin.
+  - **Beklenen Sonuç:** Misafir linki geçersiz kılınmalı (`is_active = FALSE`), rezervasyon takvimde iptal edilerek (`status = 'iptal'`) saatler diğer komşular için boşa çıkarılmalıdır.
+- [ ] **168.4. Daire Adminliği ve Site Yönetim Görevi Devri:**
+  - **Nasıl Test Edilir:** Daire admini olan bir kiracı veya malik ayrılırken yeni admin adayı seçilerek veya boş bırakılarak işlem icra edilsin. Kişinin yönetim kurulu üyeliği sonlandırılsın.
+  - **Beklenen Sonuç:** Seçilen aday (veya yoksa kurala göre malik) yeni `APARTMENT_ADMIN` olarak atanmalı; `terminateSiteRoles = true` seçildiyse `site_team_duties` ve `site_manager_sites` yetkileri tek seferde sonlandırılmalıdır.
+- [ ] **168.5. Finansal Mutabakat ve Kiracı Borcunun Malike Devri (KMK m.20):**
+  - **Nasıl Test Edilir:** Vadesi geçmiş aidat borcu olan bir kiracı daireden ayrılırken borç çözüm modunu `TRANSFER_TO_OWNER` seçin ve varsa sayaç son endeksini girin.
+  - **Beklenen Sonuç:** Kiracının açık borç bakiyesi ev sahibi hesabına aktarılmalı, finans defterine yansıtılmalı (`liability_transfer`), sayaç son okuma endeksi `meter_readings` tablosuna kaydedilmeli ve denetim kütüğüne işlenmelidir.
+- [ ] **168.6. Flutter Mobil ve Web UI Daireden Ayrılma Sihirbazı (ResidencyTerminationDialog):**
+  - **Nasıl Test Edilir:** Daire Detay kartından (`ApartmentCardDialog`) veya Kişi Detay kartından (`PersonCardDialog`) bir sakinin yanındaki "Daireden Ayrıldı / Taşındı" düğmesine tıklayın.
+  - **Beklenen Sonuç:** Açılan 360° sihirbazda araçlar, rezervasyonlar, vadesi geçmiş borçlar, sayaçlar, daire admini halef seçimi ve yönetim kurulu görevleri net kartlar halinde listelenmeli; onaylandığında tüm işlemler tek seferde icra edilip sayfa anında otomatik yenilenmelidir. Taşma (overflow) hatası yaşanmamalıdır.
+- [ ] **168.7. Sakin Tarafı 'Bu Daireden Ayrıl' ve 'Daireyi Devret / Çıkış' 360° Temizliği (ResidentLeaveDialog):**
+  - **Nasıl Test Edilir:** Sakin olarak oturum açıp "Dairem" (`MyApartmentView`) ekranından "Bu daireden ayrıl" veya "Daireyi devret / çıkış" butonuna tıklayın.
+  - **Beklenen Sonuç:** Açılan onay kartında sakinin kapı erişiminin sona ereceği, kayıtlı araçlarının PTS bariyer geçiş izinlerinin iptal edileceği, bekleyen misafir linkleri ve tesis rezervasyonlarının temizleneceği, aidat borcu varsa uyarılacağı ve hesabının silinmeyeceği net maddeler halinde gösterilmeli; onaylandığında tüm bağlı varlıklar temizlenerek daireden ayrılma tamamlanmalıdır.
+
+---
+
+## 169. 🎴 Proje Geneli Evrensel Menülü Kart Mimarisi (AppActionCard, Sadelik & Hızlı Erişim)
+*Tüm ekranlarda açık buton kalabalığını kaldıran, Fitts ve Hick-Hyman yasalarına uygun, her kartın sağında ergonomik 3-nokta (⋮) taşma menüsü ve sıfır taşma (Rule 6) garantili evrensel kart dönüşümü.*
+
+- [ ] **169.1. Daire Kartında Menülü Sakin Listesi (ApartmentCardDialog):**
+  - **Nasıl Test Edilir:** Daireler listesinden bir daireye dokunarak detay kartını açın. Sakinler bölümündeki sakin ve malik kartlarını inceleyin.
+  - **Beklenen Sonuç:** Sakin satırlarındaki açık ve dar alanda sıkışan butonlar yerine her sakinin sağında ergonomik `⋮` 3-nokta menüsü bulunmalı; menü tıklandığında "Daireden Ayrıldı / Taşındı", "Hesap Muhatabı Yap", "Maliki Çıkar" ve "PIN Sıfırla" eylemleri açılmalıdır. Kartlarda sıfır taşma olmalıdır.
+- [ ] **169.2. Kişi Kartında Daire İlişkileri ve Araçlar Menülü Kartı (PersonCardDialog):**
+  - **Nasıl Test Edilir:** Kişiler listesinden bir kişiye tıklayarak kişi detay penceresini açın. Daire ilişkileri ve kayıtlı araçlar kartlarını inceleyin.
+  - **Beklenen Sonuç:** Her daire ilişkisi ve her kayıtlı araç `AppActionCard` formatında listelenmeli; sağ üstteki `⋮` menüden araç çıkarma, düzenleme veya pasife alma işlemleri yapılabilmelidir.
+- [ ] **169.3. Sakin Portalı Dairem Ekranı Hane & Araçlar (MyApartmentView & MyApartmentVehicles):**
+  - **Nasıl Test Edilir:** Sakin olarak giriş yapıp "Dairem" sekmesine geçin. Hane halkı ve araçlarım listelerini kontrol edin.
+  - **Beklenen Sonuç:** Aile üyeleri ve araçlar derli toplu `AppActionCard` yapısıyla görünmeli; sağdaki `⋮` menüsünden silme veya pasife alma işlemleri kolayca yönetilebilmelidir.
+- [ ] **169.4. Geçiş Kontrol & Kapı Kartları (AdminDoorStatusCard):**
+  - **Nasıl Test Edilir:** Yönetici olarak Kapı Kontrolü & Telemetri kartını 320px dar ekranda ve 2.0x büyük yazı tipinde inceleyin.
+  - **Beklenen Sonuç:** Kapı başlığı ve eylemleri esnek `Wrap` yapısıyla kırılmadan yerleşmeli, hiçbir taşma (RenderFlex overflow) oluşmamalıdır.
+- [ ] **169.5. PTS Plaka Tanıma & Canlı Kamera Kartları (PlateGatesPanel):**
+  - **Nasıl Test Edilir:** Plaka Tanıma modülünde Geçiş Noktaları sekmesine gidin. Kapı başlığını ve bağlı kameraları inceleyin.
+  - **Beklenen Sonuç:** Her kapının ve her kameranın sağında `⋮` 3-nokta menüsü yer almalı; "Süreleri Ayarla", "Canlı Akış", "Kamera Ekle", "Sına", "Düzenle", "Kapıdan Ayır", "Durdur/Başlat" ve "Sil" seçenekleri güvenle ve tek tıkla çalışmalıdır. İçerideki araçlar `AppActionCard` ile listelenmelidir.
+- [ ] **169.6. Finans, Kasa/Banka ve Makbuz Kartları (Finance 4b):**
+  - **Nasıl Test Edilir:** Finans sekmesinden Kasa / Banka hesaplarını ve Makbuzlar listesini açın.
+  - **Beklenen Sonuç:** Kasa kartlarında ve makbuzlarda sağ üst `⋮` menüsüyle "Hareketler", "Düzeltme", "Banka/Kasa Kontrolü", "Düzenle" ve "Makbuzu Görüntüle" seçeneklerine doğrudan erişilebilmelidir.
+- [ ] **169.7. İş Takibi & Görevler ve Ziyaretçi/Kargo Kartları:**
+  - **Nasıl Test Edilir:** İş Takibi ve Ziyaretçi & Kargo listelerini açın.
+  - **Beklenen Sonuç:** Görevler (`WorkResidentCard`, `WorkManagedCard`) ve ziyaretçi kartları (`VisitorManagedCard`, `VisitorResidentCard`) sağdaki `⋮` 3-nokta menüsüyle durum değiştirme ve detay işlemlerini sade, anlaşılır ve parmak dostu olarak sunmalıdır.
+
+
+
+
+
+
+
